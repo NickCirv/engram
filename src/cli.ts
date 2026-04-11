@@ -25,6 +25,7 @@ import {
 import { install as installHooks, uninstall as uninstallHooks, status as hooksStatus } from "./hooks.js";
 import { autogen } from "./autogen.js";
 import { dispatchHook } from "./intercept/dispatch.js";
+import { handleCursorBeforeReadFile } from "./intercept/cursor-adapter.js";
 import {
   installEngramHooks,
   uninstallEngramHooks,
@@ -34,6 +35,11 @@ import {
 import { summarizeHookLog, formatStatsSummary } from "./intercept/stats.js";
 import { readHookLog } from "./intelligence/hook-log.js";
 import { findProjectRoot } from "./intercept/context.js";
+import {
+  buildEngramSection,
+  writeEngramSectionToMemoryMd,
+} from "./intercept/memory-md.js";
+import { basename } from "node:path";
 
 const program = new Command();
 
@@ -347,6 +353,70 @@ program
       }
     } catch {
       // Never block Claude Code on engram bugs.
+    }
+
+    process.exit(0);
+  });
+
+/**
+ * engram cursor-intercept — the entry point Cursor 1.7+ calls for
+ * `beforeReadFile` hook invocations. Same stdin→stdout JSON contract as
+ * `intercept`, but wraps the Cursor adapter so the response shape
+ * matches Cursor's `{ permission, user_message }` protocol.
+ *
+ * EXPERIMENTAL — scaffolded in v0.3.1, full Cursor integration lands
+ * in v0.3.2. Safe to use today, but the Cursor port sprint will pin
+ * the wire format and add integration tests against Cursor itself.
+ *
+ * Contract: ALWAYS exits 0 and ALWAYS writes a Cursor response. On
+ * any failure we write `{"permission":"allow"}` so Cursor proceeds
+ * normally (fail-open, matching Cursor's default).
+ */
+program
+  .command("cursor-intercept")
+  .description(
+    "Cursor beforeReadFile hook entry point (experimental). Reads JSON from stdin, writes Cursor-shaped response JSON to stdout."
+  )
+  .action(async () => {
+    const ALLOW_JSON = '{"permission":"allow"}';
+
+    const stdinTimeout = setTimeout(() => {
+      process.stdout.write(ALLOW_JSON);
+      process.exit(0);
+    }, 3000);
+
+    let input = "";
+    try {
+      for await (const chunk of process.stdin) {
+        input += chunk;
+        if (input.length > 1_000_000) break;
+      }
+    } catch {
+      clearTimeout(stdinTimeout);
+      process.stdout.write(ALLOW_JSON);
+      process.exit(0);
+    }
+    clearTimeout(stdinTimeout);
+
+    if (!input.trim()) {
+      process.stdout.write(ALLOW_JSON);
+      process.exit(0);
+    }
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(input);
+    } catch {
+      process.stdout.write(ALLOW_JSON);
+      process.exit(0);
+    }
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await handleCursorBeforeReadFile(payload as any);
+      process.stdout.write(JSON.stringify(result));
+    } catch {
+      process.stdout.write(ALLOW_JSON);
     }
 
     process.exit(0);
@@ -713,5 +783,116 @@ program
       process.exit(1);
     }
   });
+
+/**
+ * engram memory-sync — v0.3.1
+ *
+ * Write engram's top-k structural facts into MEMORY.md between
+ * marker blocks. Complements Anthropic's native Auto-Dream memory
+ * system (which owns prose) by contributing structural code graph
+ * facts (god nodes, landmines, hot files, current branch).
+ */
+program
+  .command("memory-sync")
+  .description(
+    "Write engram's structural facts into MEMORY.md (complementary to Anthropic Auto-Dream)"
+  )
+  .option("-p, --project <path>", "Project directory", ".")
+  .option("--dry-run", "Print what would be written without writing", false)
+  .action(
+    async (opts: { project: string; dryRun: boolean }) => {
+      const absProject = pathResolve(opts.project);
+      const projectRoot = findProjectRoot(absProject);
+      if (!projectRoot) {
+        console.error(
+          chalk.red(`Not an engram project: ${absProject}`)
+        );
+        console.error(chalk.dim("Run 'engram init' first."));
+        process.exit(1);
+      }
+
+      // Gather facts from core APIs
+      const [gods, mistakeList, graphStats] = await Promise.all([
+        godNodes(projectRoot, 10).catch(() => []),
+        mistakes(projectRoot, { limit: 5 }).catch(() => []),
+        stats(projectRoot).catch(() => null),
+      ]);
+
+      if (!graphStats) {
+        console.error(chalk.red("Failed to read graph stats."));
+        process.exit(1);
+      }
+
+      // Read git branch from .git/HEAD (reuses the logic pattern
+      // from the SessionStart handler)
+      let branch: string | null = null;
+      try {
+        const headPath = join(projectRoot, ".git", "HEAD");
+        if (existsSync(headPath)) {
+          const content = readFileSync(headPath, "utf-8").trim();
+          const m = content.match(/^ref:\s+refs\/heads\/(.+)$/);
+          if (m) branch = m[1];
+        }
+      } catch {
+        /* branch stays null */
+      }
+
+      const section = buildEngramSection({
+        projectName: basename(projectRoot),
+        branch,
+        stats: {
+          nodes: graphStats.nodes,
+          edges: graphStats.edges,
+          extractedPct: graphStats.extractedPct,
+        },
+        godNodes: gods,
+        landmines: mistakeList.map((m) => ({
+          label: m.label,
+          sourceFile: m.sourceFile,
+        })),
+        lastMined: graphStats.lastMined,
+      });
+
+      console.log(
+        chalk.bold(`\n📝 engram memory-sync`)
+      );
+      console.log(
+        chalk.dim(`   Target: ${join(projectRoot, "MEMORY.md")}`)
+      );
+
+      if (opts.dryRun) {
+        console.log(chalk.cyan("\n   Section to write (dry-run):\n"));
+        console.log(
+          section
+            .split("\n")
+            .map((l) => "     " + l)
+            .join("\n")
+        );
+        console.log(chalk.dim("\n   (dry-run — no changes written)"));
+        return;
+      }
+
+      const ok = writeEngramSectionToMemoryMd(projectRoot, section);
+      if (!ok) {
+        console.error(
+          chalk.red(
+            "\n   ❌ Write failed. MEMORY.md may be too large, or the engram section exceeded its size cap."
+          )
+        );
+        process.exit(1);
+      }
+
+      console.log(
+        chalk.green(
+          `\n   ✅ Synced ${gods.length} god nodes${mistakeList.length > 0 ? ` and ${mistakeList.length} landmines` : ""} to MEMORY.md`
+        )
+      );
+      console.log(
+        chalk.dim(
+          `\n   Next: Anthropic's Auto-Dream will consolidate this alongside its prose entries.\n`
+        )
+      );
+    }
+  );
 
 program.parse();

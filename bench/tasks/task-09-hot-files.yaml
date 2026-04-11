@@ -1,0 +1,30 @@
+id: task-09-hot-files
+category: git-integration
+difficulty: medium
+description: |
+  Identify the files that have changed most frequently in the recent
+  commit history. Tests engram's git-miner integration vs. the agent
+  shelling out to git log itself.
+
+prompt: |
+  Which files have changed most often in the last month?
+
+reference_answer_pattern: |
+  A ranked list of file paths with change counts. Top 5 is enough.
+
+scoring_rubric:
+  - Top 3 correct files: +3
+  - Top 5 correct files: +1 bonus
+  - Includes change counts: +1
+  - Hallucinated file: -2
+
+expected_tokens:
+  baseline: 3800
+  cursor-memory: 3200
+  anthropic-memorymd: 2900
+  engram: 550
+
+notes: |
+  Baseline runs git log --name-only and parses output — this is the
+  closest to parity between setups because git is fast. engram wins
+  because it pre-caches the hot-file rankings from the git miner.

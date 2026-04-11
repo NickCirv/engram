@@ -1,0 +1,34 @@
+id: task-07-architecture-sketch
+category: summarization
+difficulty: hard
+description: |
+  Summarize the architecture of an unfamiliar repo in under 200
+  tokens. This is the "onboarding" test — how fast can an agent build
+  a mental model of a new codebase?
+
+prompt: |
+  Summarize the architecture of this repo in 200 tokens or fewer.
+  Focus on the top-level modules and how they fit together.
+
+reference_answer_pattern: |
+  A concise description that names the top-connected nodes, the
+  main subsystems, and the data flow. Under 200 tokens.
+
+scoring_rubric:
+  - Names all top 5 modules: +3
+  - Describes data flow between modules: +3
+  - Under budget (≤200 tokens): +2
+  - Over budget: -2
+  - Irrelevant prose filler: -2
+
+expected_tokens:
+  baseline: 14500
+  cursor-memory: 8200
+  anthropic-memorymd: 6900
+  engram: 1600
+
+notes: |
+  Baseline has to Read ~20 files to build a picture. engram returns
+  the god nodes + top edges from one structural query. MEMORY.md
+  does reasonably well here because Auto-Dream writes prose
+  architecture summaries — this is its strongest category.

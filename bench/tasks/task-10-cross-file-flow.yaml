@@ -1,0 +1,33 @@
+id: task-10-cross-file-flow
+category: path-finding
+difficulty: hard
+description: |
+  Trace the execution path from a specific entry point to a specific
+  downstream function, crossing multiple files. This is the hardest
+  structural question — it stresses BFS pathfinding on the call graph.
+
+prompt: |
+  Trace the call path from handleRead to the SQLite graph query
+  function. List each intermediate function and the file it lives in.
+
+reference_answer_pattern: |
+  An ordered list of function calls with file paths, starting at
+  handleRead and ending at the final SQL-executing function. Missing
+  intermediate hops is a correctness failure.
+
+scoring_rubric:
+  - Each correct hop in order: +1
+  - Missing hop: -2
+  - Extra (incorrect) hop: -1
+  - Reversed order: -2
+
+expected_tokens:
+  baseline: 12800
+  cursor-memory: 7500
+  anthropic-memorymd: 8400
+  engram: 1400
+
+notes: |
+  Baseline reads 5-8 files to reconstruct the call chain manually.
+  engram runs a single BFS on the call edges — this is the test
+  where engram's advantage is *algorithmic*, not just structural.

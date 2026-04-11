@@ -1,0 +1,32 @@
+id: task-08-refactor-scope
+category: refactor-impact
+difficulty: hard
+description: |
+  Given a planned rename, find every file that would need to change.
+  This is a 2-hop reverse dependency query: call sites + import sites.
+  Primary safety check before any rename refactor.
+
+prompt: |
+  If I rename the queryGraph function to runGraphQuery, what files
+  would I need to update?
+
+reference_answer_pattern: |
+  A complete list of files that reference queryGraph — direct callers,
+  importers, and re-exporters. Incomplete lists are unsafe refactors.
+
+scoring_rubric:
+  - Each correct file: +1
+  - Missing file (unsafe): -3
+  - False positive file: -1
+  - Correct confidence statement ("complete list"): +1
+
+expected_tokens:
+  baseline: 9200
+  cursor-memory: 5400
+  anthropic-memorymd: 6100
+  engram: 1100
+
+notes: |
+  Baseline runs Grep("queryGraph") and Reads each hit to filter out
+  string matches from real call sites. engram walks the call graph
+  edges, avoiding false positives from comments or strings.

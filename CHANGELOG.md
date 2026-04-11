@@ -4,6 +4,58 @@ All notable changes to engram are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] — 2026-04-12 — "Structural"
+
+### Added
+
+- **TF-IDF keyword filter on `UserPromptSubmit` hook.** The pre-query
+  path now computes inverse document frequency against graph node
+  labels and requires at least one keyword with IDF ≥ 1.386 (25%
+  cutoff) before injecting context. Kills the "76-node noise bug"
+  where common-term prompts poisoned sessions on mature graphs.
+  New `computeKeywordIDF` helper in `src/core.ts`. Falls back to
+  raw keywords if IDF computation returns empty. 3 new tests.
+- **`engram memory-sync` CLI command.** Writes engram's structural
+  facts (god nodes, landmines, graph stats, branch) into a
+  marker-bounded block inside Anthropic's native `MEMORY.md` file.
+  Uses `<!-- engram:structural-facts:start/end -->` markers so
+  Auto-Dream owns prose memory and engram owns structure —
+  complementary, not competitive. New `src/intercept/memory-md.ts`
+  module (pure builder + upsert + atomic write). 16 new tests.
+  Supports `--dry-run` and `--project`.
+- **Cursor adapter scaffold** (`src/intercept/cursor-adapter.ts`).
+  New `engram cursor-intercept` CLI command wraps the existing
+  `handleRead` logic in Cursor 1.7's `beforeReadFile` response
+  shape (`{ permission, user_message }`). Experimental — full
+  Cursor wire-up lands in v0.3.2. 8 new tests.
+- **EngramBench v0.1** — reproducible benchmark scaffold in
+  `bench/`. Ten structural tasks (find caller, parent class,
+  import graph, refactor scope, cross-file flow, etc.) defined as
+  YAML files with prompts, scoring rubrics, and expected tokens
+  per setup (baseline / cursor-memory / anthropic-memorymd /
+  engram). `bench/run.sh` runner + `bench/results/TEMPLATE.csv`.
+  v0.2 will automate the runner and publish a leaderboard.
+- **Rebrand to "the structural code graph"** — package description,
+  keywords, and README hero rewritten to lead with structural
+  memory rather than the generic "memory" framing.
+
+### Fixed
+
+- False-positive context injections on large graphs where prompts
+  contained common graph terms (the "76-node noise bug" from
+  v0.3.0 real-session data).
+
+### Tests
+
+- 466 tests passing (up from 442 in v0.3.0).
+- 27 new tests across 3 files (TF-IDF, MEMORY.md, Cursor adapter).
+
+### Notes
+
+- Zero new runtime dependencies.
+- Schema unchanged from v0.3.0.
+- No breaking changes. v0.3.0 users upgrade cleanly.
+
 ## [0.3.0] — 2026-04-11 — "Sentinel"
 
 ### Added — The Claude Code Hook Interception Layer

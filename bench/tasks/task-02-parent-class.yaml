@@ -1,0 +1,30 @@
+id: task-02-parent-class
+category: graph-traversal
+difficulty: easy
+description: |
+  Given a class name, find its direct parent class. Tests that the
+  graph captures inheritance edges and can answer them without the
+  agent reading the file where the class is declared.
+
+prompt: |
+  What does SessionStore extend?
+
+reference_answer_pattern: |
+  Should name the parent class exactly, or say "no parent" if the
+  class extends nothing. File path of the declaration is a bonus.
+
+scoring_rubric:
+  - Correct parent class: +2
+  - Wrong parent class: -2
+  - "Unknown" when parent exists: -1
+  - "No parent" when correct: +2
+
+expected_tokens:
+  baseline: 2800
+  cursor-memory: 1900
+  anthropic-memorymd: 2100
+  engram: 400
+
+notes: |
+  Baseline must Read the declaring file (usually src/auth.ts or
+  similar). engram answers from the inheritance edge with one lookup.

@@ -1,7 +1,7 @@
 {
   "name": "engramx",
-  "version": "0.3.0",
-  "description": "Context as infra for AI coding tools — a Claude Code hook layer that intercepts Read/Edit/Grep and replaces file reads with structural graph summaries. Persistent, local, zero LLM cost.",
+  "version": "0.3.1",
+  "description": "The structural code graph your AI agent can't forget to use. A Claude Code hook layer that intercepts Read/Edit/Write/Bash and replaces file contents with ~300-token structural graph summaries. 82% measured token reduction. Context rot is empirically solved — cite Chroma. Local SQLite, zero LLM cost, zero cloud, zero native deps.",
   "type": "module",
   "bin": {
     "engram": "dist/cli.js",
@@ -17,16 +17,20 @@
     "prepublishOnly": "npm run build"
   },
   "keywords": [
-    "ai",
-    "coding",
-    "memory",
-    "context",
-    "tree-sitter",
+    "structural-code-graph",
+    "claude-code-hooks",
+    "ai-coding",
+    "context-engineering",
     "knowledge-graph",
+    "ast",
     "mcp",
-    "claude",
+    "claude-code",
     "cursor",
-    "token-savings"
+    "token-reduction",
+    "context-rot",
+    "local-first",
+    "agent-memory",
+    "hook-interception"
   ],
   "author": "Nicholas Ashkar",
   "license": "Apache-2.0",

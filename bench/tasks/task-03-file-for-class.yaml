@@ -1,0 +1,30 @@
+id: task-03-file-for-class
+category: label-resolution
+difficulty: easy
+description: |
+  Given a class or function name, find the file that declares it.
+  The simplest possible structural question — a 1-hop label → file
+  lookup in the graph.
+
+prompt: |
+  Which file defines the AuthService class?
+
+reference_answer_pattern: |
+  A single absolute or repo-relative file path. Extra output beyond
+  the path is fine but not required.
+
+scoring_rubric:
+  - Correct path: +2
+  - Path with wrong extension: +1
+  - Wrong path: -2
+  - Vague answer ("somewhere in src"): 0
+
+expected_tokens:
+  baseline: 3200
+  cursor-memory: 2100
+  anthropic-memorymd: 2400
+  engram: 300
+
+notes: |
+  Baseline agents usually Grep("class AuthService") and then Read the
+  first hit. engram hits the file node directly.

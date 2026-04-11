@@ -108,6 +108,28 @@ export function verifyToken() { return true; }
 export function hashPassword() { return "h"; }
 `
     );
+    // v0.3.1: additional fixture files so the graph has enough nodes
+    // for TF-IDF scoring to produce discriminative keywords. A graph
+    // with only auth.ts produces too-concentrated term frequencies for
+    // the IDF filter (authservice would be ~30% of 7 nodes, just below
+    // threshold) and would fail the UserPromptSubmit routing test.
+    writeFileSync(
+      join(projectRoot, "src", "db.ts"),
+      `export class Database { connect() {} }
+export class QueryBuilder { select() { return this; } }
+export function runQuery() { return []; }
+export function closeConnection() {}
+export function openTransaction() {}
+`
+    );
+    writeFileSync(
+      join(projectRoot, "src", "http.ts"),
+      `export class HttpClient { get() {} post() {} }
+export class HttpServer { listen() {} }
+export function parseUrl() {}
+export function formatResponse() {}
+`
+    );
     await init(projectRoot);
   });
 

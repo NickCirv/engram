@@ -344,6 +344,82 @@ export async function getFileContext(
   }
 }
 
+export interface KeywordIDFResult {
+  readonly keyword: string;
+  readonly documentFrequency: number;
+  readonly idf: number;
+}
+
+/**
+ * v0.3.1: TF-IDF filter for UserPromptSubmit pre-query keywords.
+ *
+ * The problem this solves: substring matching in UserPromptSubmit was
+ * producing massive false-positive injections. A prompt containing the
+ * word "engram" would match every node whose label contained "engram"
+ * (hundreds of them in the engram repo itself), injecting 70+ nodes of
+ * noise before Claude started reasoning.
+ *
+ * The fix: compute inverse document frequency for each keyword against
+ * the graph, drop keywords that appear in >15% of node labels. These
+ * "common graph terms" have no discriminative value and should never
+ * be used as query seeds.
+ *
+ * Returns a scored list sorted by IDF descending. Callers typically
+ * filter this further (e.g., keep only entries with idf > 0) and take
+ * the top N.
+ *
+ * Never throws. Returns an empty array on any internal error so the
+ * handler falls back to its passthrough path.
+ */
+export async function computeKeywordIDF(
+  projectRoot: string,
+  keywords: readonly string[]
+): Promise<KeywordIDFResult[]> {
+  if (keywords.length === 0) return [];
+  try {
+    const root = resolve(projectRoot);
+    const dbPath = getDbPath(root);
+    if (!existsSync(dbPath)) return [];
+
+    const store = await getStore(root);
+    try {
+      const allNodes = store.getAllNodes();
+      const total = allNodes.length;
+      if (total === 0) return [];
+
+      // Pre-lowercase all node labels once to avoid repeated case-folding
+      // inside the O(keywords * nodes) match loop.
+      const labels = allNodes.map((n) => n.label.toLowerCase());
+
+      const results: KeywordIDFResult[] = [];
+      for (const kw of keywords) {
+        const kwLower = kw.toLowerCase();
+        let df = 0;
+        for (const label of labels) {
+          if (label.includes(kwLower)) df += 1;
+        }
+        // IDF = log(total / df). If df === 0, the keyword doesn't
+        // appear in the graph at all — it's meaningless for this query.
+        const idf = df === 0 ? 0 : Math.log(total / df);
+        results.push({
+          keyword: kw,
+          documentFrequency: df,
+          idf,
+        });
+      }
+
+      // Sort by IDF descending so callers can take the top-N most
+      // discriminative keywords.
+      results.sort((a, b) => b.idf - a.idf);
+      return results;
+    } finally {
+      store.close();
+    }
+  } catch {
+    return [];
+  }
+}
+
 export async function learn(
   projectRoot: string,
   text: string,

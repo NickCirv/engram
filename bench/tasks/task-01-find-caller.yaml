@@ -1,0 +1,32 @@
+id: task-01-find-caller
+category: graph-traversal
+difficulty: easy
+description: |
+  Given a function name, find all functions that call it. This is the
+  single most common structural question an agent asks before editing
+  code, and it is the easiest case for engram because it maps 1:1 to
+  a graph edge lookup.
+
+prompt: |
+  What functions call validateToken?
+
+reference_answer_pattern: |
+  Should name the 2-3 functions that invoke validateToken directly.
+  Correct answers include the file path for each caller.
+
+scoring_rubric:
+  - Correct caller names: +1 per caller (max 3)
+  - False positive caller: -1
+  - Missing direct caller: -1
+  - Includes file paths: +1
+
+expected_tokens:
+  baseline: 4500
+  cursor-memory: 2800
+  anthropic-memorymd: 3100
+  engram: 650
+
+notes: |
+  Baseline cost comes from the agent running Grep("validateToken"),
+  Reading each hit file, and scanning for call sites. engram returns
+  this as a single graph query in <10ms.

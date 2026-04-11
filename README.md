@@ -18,17 +18,33 @@
   <img src="https://img.shields.io/badge/tests-439%20passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
+  <img src="https://img.shields.io/badge/token%20reduction-82%25-orange" alt="82% token reduction">
 </p>
 
 ---
 
-**Context as infra for your AI coding tools.**
+# The structural code graph your AI agent can't forget to use.
 
-engram installs a Claude Code hook layer that intercepts every `Read`, `Edit`, `Write`, and `Bash cat` — replacing full file reads with ~300-token structural graph summaries *before the agent even sees them*. No more re-exploring the codebase every session. No more agents forgetting to use the tool you gave them.
+**Context rot is empirically solved.** Chroma's July 2025 research proved that even Claude Opus 4.6 scores only 76% on MRCR v2 8-needle at 1M tokens. Long context windows don't save you — they drown you. engram is the answer: a **structural graph** of your codebase that replaces file reads with ~300-token summaries *before the agent sees them*.
 
-**v0.3 "Sentinel":** the agent can't forget to use engram because engram sits between the agent and the filesystem.
+engram installs a Claude Code hook layer at the tool-call boundary. Every `Read`, `Edit`, `Write`, and `Bash cat` gets intercepted. When the graph has confident coverage of a file, the raw read never happens — the agent sees a structural summary instead.
 
-Zero LLM cost. Zero cloud. Zero native deps. Works today in Claude Code.
+Not a memory tool. Not a RAG layer. Not a context manager. **A structural code graph with a Claude Code hook layer that turns it into the memory your agent can't forget to exist.**
+
+| What it is | What it isn't |
+|---|---|
+| Structural code graph (AST + git + session miners) | Prose memory like Anthropic's MEMORY.md |
+| Local SQLite, zero cloud, zero native deps | Vector RAG that phones home |
+| Hook-based interception at the tool boundary | A tool the agent has to remember to call |
+| 82% measured token reduction on real code | Another LongMemEval chatbot benchmark |
+| Complements native Claude memory | Competes with native Claude memory |
+
+```bash
+npm install -g engramx
+cd ~/my-project
+engram init             # scan codebase → .engram/graph.db (~40 ms, 0 tokens)
+engram install-hook     # wire the Sentinel into Claude Code
+```
 
 ```bash
 npm install -g engramx

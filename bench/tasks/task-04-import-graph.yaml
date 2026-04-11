@@ -1,0 +1,30 @@
+id: task-04-import-graph
+category: reverse-dependency
+difficulty: medium
+description: |
+  Given a file, find every file in the repo that imports from it.
+  Tests incoming-edge traversal across the full graph rather than
+  local file inspection.
+
+prompt: |
+  What files import from src/auth.ts?
+
+reference_answer_pattern: |
+  A list of file paths. Correct answers should be exhaustive — missing
+  importers is worse than including extras here, because the primary
+  use case (refactoring safety) depends on completeness.
+
+scoring_rubric:
+  - Each correct importer: +1
+  - False positive importer: -1
+  - Missing importer: -2 (completeness weighted)
+
+expected_tokens:
+  baseline: 6800
+  cursor-memory: 4200
+  anthropic-memorymd: 4800
+  engram: 900
+
+notes: |
+  Baseline burns tokens running Grep("from './auth'") and similar
+  patterns across the repo. engram walks the incoming import edges.

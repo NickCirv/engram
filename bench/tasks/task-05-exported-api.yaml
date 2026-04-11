@@ -1,0 +1,30 @@
+id: task-05-exported-api
+category: file-summary
+difficulty: easy
+description: |
+  Given a file, list everything it exports. This is the task engram's
+  Read interception optimises for — returning the export list as a
+  ~300-token summary instead of the full file.
+
+prompt: |
+  What does src/cli.ts export?
+
+reference_answer_pattern: |
+  A list of exported symbols (functions, classes, constants). Order
+  does not matter. Types can be grouped (e.g., "function" / "class").
+
+scoring_rubric:
+  - Each correct export: +0.5
+  - False positive export: -1
+  - Missing export: -0.5
+  - Bonus for correct groupings: +1
+
+expected_tokens:
+  baseline: 5500
+  cursor-memory: 3400
+  anthropic-memorymd: 3800
+  engram: 700
+
+notes: |
+  This is the canonical engram win. Baseline reads the whole file
+  (often 400+ lines). engram returns the structural summary.

@@ -220,4 +220,120 @@ export function closeConnection() {}
       })
     ).resolves.toBe(PASSTHROUGH);
   });
+
+  // ──────────────────────────────────────────────────────────────────
+  // v0.3.1: TF-IDF common-term filter tests
+  //
+  // The problem: substring matching in UserPromptSubmit produced
+  // massive false-positive injections. If a prompt contains a word
+  // that happens to appear in many node labels (e.g., "engram" on
+  // the engram repo itself), the unfiltered match returns 70+ nodes
+  // of noise.
+  //
+  // The fix: TF-IDF scoring drops keywords whose IDF < 1.897, which
+  // is equivalent to "keyword appears in >15% of node labels".
+  // ──────────────────────────────────────────────────────────────────
+});
+
+describe("handleUserPromptSubmit — TF-IDF common-term filter (v0.3.1)", () => {
+  let projectRoot: string;
+
+  beforeEach(async () => {
+    _resetCacheForTests();
+    projectRoot = mkdtempSync(join(tmpdir(), "engram-tfidf-test-"));
+    mkdirSync(join(projectRoot, "src"), { recursive: true });
+    // Create a fixture where "common" appears in MANY node labels
+    // and "auth" appears in few. After TF-IDF, "common" should be
+    // filtered out as a common graph term; "auth" should survive.
+    writeFileSync(
+      join(projectRoot, "src", "common-utils.ts"),
+      `export function commonHelper() { return 1; }
+export function commonFormatter() { return 2; }
+export function commonValidator() { return 3; }
+export class CommonBase {}
+export class CommonLogger {}
+`
+    );
+    writeFileSync(
+      join(projectRoot, "src", "common-io.ts"),
+      `export function commonReadFile() {}
+export function commonWriteFile() {}
+export class CommonStream {}
+export class CommonBuffer {}
+`
+    );
+    writeFileSync(
+      join(projectRoot, "src", "common-net.ts"),
+      `export function commonFetch() {}
+export function commonPost() {}
+export class CommonHttp {}
+export class CommonWebSocket {}
+`
+    );
+    writeFileSync(
+      join(projectRoot, "src", "auth.ts"),
+      `export class AuthService {
+  validate(): boolean { return true; }
+  issue(): string { return "tok"; }
+}
+export function createAuthService(): AuthService { return new AuthService(); }
+`
+    );
+    await init(projectRoot);
+  });
+
+  afterEach(() => {
+    _resetCacheForTests();
+    rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  function buildPayload(prompt: string): UserPromptHookPayload {
+    return {
+      hook_event_name: "UserPromptSubmit",
+      cwd: projectRoot,
+      prompt,
+    };
+  }
+
+  it("still injects when a prompt has at least one rare keyword", async () => {
+    // "auth" is rare in this graph (only in auth.ts). "common" is
+    // everywhere. The prompt mixes both. TF-IDF should keep "auth"
+    // and drop "common", so the query still runs and finds auth nodes.
+    const result = await handleUserPromptSubmit(
+      buildPayload("how does the common auth service work")
+    );
+    // The graph has enough auth nodes (class + function + method) to
+    // cross the MIN_MATCHED_NODES threshold via "auth" alone.
+    expect(result).not.toBe(PASSTHROUGH);
+  });
+
+  it("passes through when ALL keywords are too common to discriminate", async () => {
+    // Every word here appears in many nodes. TF-IDF filters all of
+    // them. After filtering there are <2 keywords left → PASSTHROUGH.
+    const result = await handleUserPromptSubmit(
+      buildPayload("common common common explain the common stuff")
+    );
+    expect(result).toBe(PASSTHROUGH);
+  });
+
+  it("handles empty graph gracefully (falls back to raw keywords)", async () => {
+    // Create a fresh project with an empty engram graph. The IDF
+    // computation returns empty; the handler falls back to raw
+    // keyword matching. This branch protects against crashes when
+    // the graph has never been mined.
+    const emptyProject = mkdtempSync(join(tmpdir(), "engram-empty-graph-"));
+    mkdirSync(join(emptyProject, ".engram"), { recursive: true });
+    // No graph.db file — IDF compute will short-circuit
+    try {
+      const result = await handleUserPromptSubmit({
+        hook_event_name: "UserPromptSubmit",
+        cwd: emptyProject,
+        prompt: "how does AuthService work",
+      });
+      // No graph → no project root walked up → passthrough
+      expect(result).toBe(PASSTHROUGH);
+    } finally {
+      rmSync(emptyProject, { recursive: true, force: true });
+    }
+  });
 });

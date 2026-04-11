@@ -1,0 +1,34 @@
+id: task-06-landmine-check
+category: mistake-memory
+difficulty: medium
+description: |
+  Check whether a file has any known mistakes (past bugs, regressions,
+  landmines) recorded in engram's mistake node store. This tests the
+  "warn before edit" path which other memory tools don't implement.
+
+prompt: |
+  Have we fixed any bugs in src/graph/query.ts recently? If so, what
+  was the mistake?
+
+reference_answer_pattern: |
+  Either (a) a description of a known past mistake with context, or
+  (b) a clear "no recorded mistakes" answer. Hallucinated mistakes
+  are disqualifying.
+
+scoring_rubric:
+  - Correct past mistake surfaced: +3
+  - Correct "no mistakes" when none exist: +2
+  - Hallucinated mistake: -5 (disqualifying)
+  - Missed recorded mistake: -3
+
+expected_tokens:
+  baseline: 8200
+  cursor-memory: 5100
+  anthropic-memorymd: 5800
+  engram: 850
+
+notes: |
+  Baseline has to search git log + git blame + read commit messages.
+  engram returns the mistake node directly from the ⚠️ warning block.
+  Only setup where engram's advantage is *qualitative*, not just
+  token-reductive.
