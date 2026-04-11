@@ -43,6 +43,8 @@ import {
   handlePostTool,
   type PostToolHookPayload,
 } from "./handlers/post-tool.js";
+import { findProjectRoot, isValidCwd } from "./context.js";
+import { logHookEvent } from "../intelligence/hook-log.js";
 
 /**
  * Minimum validated shape of a hook payload as delivered to `dispatchHook`.
@@ -129,10 +131,14 @@ export async function dispatchHook(
 }
 
 /**
- * PreToolUse sub-router. Routes by tool_name to the appropriate handler.
- * Factored out so the top-level switch stays readable.
+ * PreToolUse sub-router. Routes by tool_name to the appropriate handler,
+ * then logs the decision (deny/allow/passthrough) so `engram hook-stats`
+ * can report savings accurately.
+ *
+ * Logging is best-effort — any failure is swallowed by logHookEvent and
+ * never affects the dispatch result.
  */
-function dispatchPreToolUse(
+async function dispatchPreToolUse(
   payload: MinimalHookPayload
 ): Promise<HandlerResult | Passthrough> {
   const tool = typeof payload.tool_name === "string" ? payload.tool_name : "";
@@ -142,24 +148,77 @@ function dispatchPreToolUse(
     readonly cwd: string;
   };
 
+  let result: HandlerResult | Passthrough;
   switch (tool) {
     case "Read":
-      return runHandler(() =>
+      result = await runHandler(() =>
         handleRead(handlerPayload as unknown as ReadHookPayload)
       );
+      break;
 
     case "Edit":
     case "Write":
-      return runHandler(() =>
+      result = await runHandler(() =>
         handleEditOrWrite(handlerPayload as unknown as EditWriteHookPayload)
       );
+      break;
 
     case "Bash":
-      return runHandler(() =>
+      result = await runHandler(() =>
         handleBash(handlerPayload as unknown as BashHookPayload)
       );
+      break;
 
     default:
-      return Promise.resolve(PASSTHROUGH);
+      return PASSTHROUGH;
   }
+
+  // Decision logging for hook-stats. Only fires for known tools above.
+  // Extracts the decision from the hookSpecificOutput.permissionDecision
+  // field (deny/allow) and falls back to "passthrough" for null results.
+  try {
+    const cwd = handlerPayload.cwd;
+    if (isValidCwd(cwd)) {
+      const projectRoot = findProjectRoot(cwd);
+      if (projectRoot) {
+        const decision = extractPreToolDecision(result);
+        const filePath =
+          typeof handlerPayload.tool_input?.file_path === "string"
+            ? handlerPayload.tool_input.file_path
+            : undefined;
+        logHookEvent(projectRoot, {
+          event: "PreToolUse",
+          tool,
+          path: filePath,
+          decision,
+        });
+      }
+    }
+  } catch {
+    // Logging failure is never surfaced.
+  }
+
+  return result;
+}
+
+/**
+ * Extract the PreToolUse decision from a handler result. Returns
+ * "passthrough" for null (handler opted out), "deny" or "allow" based
+ * on the hookSpecificOutput.permissionDecision field.
+ */
+function extractPreToolDecision(
+  result: HandlerResult | Passthrough
+): "deny" | "allow" | "passthrough" {
+  if (result === null || result === undefined) return "passthrough";
+  try {
+    const r = result as {
+      hookSpecificOutput?: { permissionDecision?: string };
+    };
+    const d = r.hookSpecificOutput?.permissionDecision;
+    if (d === "deny") return "deny";
+    if (d === "allow") return "allow";
+  } catch {
+    // Defensive — never throw from a pure accessor.
+  }
+  return "passthrough";
 }
