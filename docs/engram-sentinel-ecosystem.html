@@ -3,540 +3,790 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>How engram v0.3 Sentinel fits into your ecosystem</title>
+<title>How engram v0.3 Sentinel works</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,700;9..144,900&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:ital,opsz,wght@0,9..40,300..900&display=swap" rel="stylesheet">
 <style>
-/* ─────────────────────────────────────────────────────────────── */
-/* Design tokens — Ink & Paper palette with teal accent            */
-/* ─────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   engram brand palette — extracted verbatim from assets/banner.html
+   ══════════════════════════════════════════════════════════════ */
 :root{
-  --ink:#09090b;
-  --ink-2:#18181b;
-  --ink-3:#27272a;
-  --ink-4:#3f3f46;
-  --paper:#fafafa;
-  --paper-2:#f4f4f5;
-  --paper-3:#e4e4e7;
-  --accent:#0d9488;
-  --accent-2:#14b8a6;
-  --accent-3:#99f6e4;
-  --accent-ink:#042f2e;
-  --warn:#b45309;
-  --danger:#b91c1c;
-  --muted:#71717a;
-  --muted-2:#a1a1aa;
-  --border:#27272a;
-  --border-2:#3f3f46;
+  /* surfaces — warm near-black, not cool */
+  --bg:             #0a0a0c;
+  --bg-2:           #0f0f11;
+  --bg-3:           #121214;
+  --surface-1:      rgba(255,255,255,0.03);
+  --surface-2:      rgba(255,255,255,0.05);
+  --border:         rgba(255,255,255,0.06);
+  --border-2:       rgba(255,255,255,0.10);
+  --border-grid:    rgba(255,255,255,0.015);
+
+  /* text — warm off-white, progressively dimmer */
+  --ivory:          #f5f5f0;   /* headings */
+  --text-1:         rgba(255,255,255,0.85);  /* body emphasis */
+  --text-2:         rgba(255,255,255,0.65);  /* body */
+  --text-3:         rgba(255,255,255,0.50);  /* tagline */
+  --text-4:         rgba(255,255,255,0.35);  /* dim */
+  --text-5:         rgba(255,255,255,0.25);  /* ghost */
+  --text-6:         rgba(255,255,255,0.08);  /* barely there */
+
+  /* engram amber — rgb(217, 119, 6), the signature color */
+  --amber:          rgb(217, 119, 6);
+  --amber-90:       rgba(217, 119, 6, 0.9);
+  --amber-60:       rgba(217, 119, 6, 0.6);
+  --amber-40:       rgba(217, 119, 6, 0.4);
+  --amber-30:       rgba(217, 119, 6, 0.3);
+  --amber-15:       rgba(217, 119, 6, 0.15);
+  --amber-08:       rgba(217, 119, 6, 0.08);
+  --amber-05:       rgba(217, 119, 6, 0.05);
+
+  /* highlight green — ONLY used for success markers (banner convention) */
+  --highlight:      rgba(74, 222, 128, 0.8);
+
+  /* atmospheric accent — faint purple, banner bottom-left wash */
+  --wash-purple:    rgba(168, 85, 247, 0.04);
+  --wash-amber:     rgba(217, 119, 6, 0.08);
 
   /* easing */
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in:  cubic-bezier(0.7, 0, 0.84, 0);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out:       cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in:        cubic-bezier(0.7, 0, 0.84, 0);
+  --spring:         cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  /* type scale — modular, Fraunces-heavy headings */
-  --font-display: "Fraunces", Georgia, serif;
-  --font-body: "Space Grotesk", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
-
-  --radius: 3px;
-  --radius-lg: 6px;
+  /* type stack (banner.html imports these exact fonts) */
+  --sans: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --display: "DM Sans", "Space Grotesk", sans-serif;
 
   --max: 1400px;
-  --gutter: clamp(1.25rem, 3vw, 3rem);
+  --gutter: clamp(1.25rem, 3vw, 4rem);
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth;background:var(--ink)}
+html{scroll-behavior:smooth;background:var(--bg)}
 body{
-  font-family:var(--font-body);
+  font-family:var(--sans);
   font-weight:400;
   font-size:16px;
   line-height:1.55;
-  color:var(--paper);
-  background:var(--ink);
+  color:var(--text-1);
+  background:var(--bg);
   -webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility;
   overflow-x:hidden;
+  position:relative;
 }
-::selection{background:var(--accent);color:var(--ink)}
+::selection{background:var(--amber);color:var(--bg)}
 
-/* ─────────────────────────────────────────────────────────────── */
-/* Grain — subtle noise texture via CSS gradient                   */
-/* ─────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   Atmospheric backdrop — exact recreation of banner.html
+   ══════════════════════════════════════════════════════════════ */
+
+/* Subtle 40px grid — identical to banner.html */
 body::before{
   content:"";
-  position:fixed;inset:0;
+  position:fixed;
+  inset:0;
   pointer-events:none;
-  z-index:100;
+  z-index:0;
   background-image:
-    radial-gradient(circle at 50% 50%, rgba(255,255,255,0.012) 0.5px, transparent 0.5px);
-  background-size:3px 3px;
-  mix-blend-mode:overlay;
-  opacity:.6;
+    linear-gradient(var(--border-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-grid) 1px, transparent 1px);
+  background-size: 40px 40px;
 }
 
-/* ─────────────────────────────────────────────────────────────── */
-/* Layout                                                          */
-/* ─────────────────────────────────────────────────────────────── */
+/* Warm amber gradient wash — top right (banner convention) */
+body::after{
+  content:"";
+  position:fixed;
+  top:-240px;
+  right:-160px;
+  width:1100px;
+  height:1100px;
+  background: radial-gradient(circle, var(--wash-amber) 0%, transparent 70%);
+  filter: blur(80px);
+  pointer-events:none;
+  z-index:0;
+}
+
+main, header, footer, .topbar{position:relative;z-index:2}
+
 .wrap{
   max-width:var(--max);
   margin-inline:auto;
   padding-inline:var(--gutter);
 }
 
-/* ─────────────────────────────────────────────────────────────── */
-/* Hero                                                            */
-/* ─────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   Top bar — thin header with version/state badge
+   ══════════════════════════════════════════════════════════════ */
+.topbar{
+  position:sticky;
+  top:0;
+  z-index:50;
+  background:rgba(10,10,12,0.85);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:0.04em;
+}
+.topbar-inner{
+  display:flex;
+  align-items:center;
+  gap:1.2rem;
+  height:46px;
+  padding-inline:var(--gutter);
+  max-width:var(--max);
+  margin-inline:auto;
+}
+.topbar .wordmark{
+  font-family:var(--sans);
+  font-size:14px;
+  font-weight:700;
+  letter-spacing:-0.5px;
+  color:var(--ivory);
+}
+.topbar .wordmark .a{color:var(--amber)}
+.topbar .crumbs{
+  color:var(--text-4);
+  display:flex;
+  gap:0.6em;
+  align-items:center;
+}
+.topbar .crumbs .sep{color:var(--text-5)}
+.topbar .status{
+  margin-left:auto;
+  display:flex;
+  align-items:center;
+  gap:0.7em;
+  color:var(--text-4);
+}
+.topbar .status .pulse{
+  width:7px;height:7px;
+  border-radius:50%;
+  background:var(--amber);
+  box-shadow:0 0 10px var(--amber-60);
+}
+.topbar .status .sep{color:var(--text-6);margin-inline:0.1em}
+.topbar .brand-link{
+  color:var(--text-3);
+  text-decoration:none;
+  letter-spacing:0.02em;
+  transition:color .3s var(--ease-out);
+}
+.topbar .brand-link strong{
+  color:var(--amber);
+  font-weight:600;
+}
+.topbar .brand-link:hover{color:var(--text-1)}
+.topbar .brand-link:hover strong{color:var(--amber)}
+
+/* ═══════════════════════════════════════════════════════════════
+   Universal badge (banner convention: amber border + dot + bg tint)
+   ══════════════════════════════════════════════════════════════ */
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 16px;
+  border:1px solid var(--amber-30);
+  border-radius:100px;
+  font-family:var(--mono);
+  font-size:11px;
+  font-weight:400;
+  color:var(--amber-90);
+  letter-spacing:0.6px;
+  background:var(--amber-05);
+  text-transform:uppercase;
+}
+.badge-dot{
+  width:6px;height:6px;
+  border-radius:50%;
+  background:var(--amber);
+  box-shadow:0 0 8px var(--amber-60);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HERO — mirrors banner.html layout: content-left / graph-right
+   ══════════════════════════════════════════════════════════════ */
 .hero{
   position:relative;
-  padding-block:clamp(5rem, 12vh, 10rem) clamp(3rem, 8vh, 6rem);
-  border-bottom:1px solid var(--border);
+  padding-block: 3.5rem 2.5rem;
+  border-bottom:1px solid var(--border-2);
   overflow:hidden;
-}
-.hero::before{
-  content:"";
-  position:absolute;
-  inset:0;
-  background:
-    radial-gradient(ellipse 60% 40% at 80% 20%, rgba(13,148,136,0.12), transparent 70%),
-    radial-gradient(ellipse 40% 60% at 20% 90%, rgba(13,148,136,0.08), transparent 70%);
-  pointer-events:none;
 }
 .hero-grid{
   display:grid;
-  grid-template-columns: 7fr 5fr;
-  gap:clamp(2rem,5vw,5rem);
-  align-items:end;
+  grid-template-columns: 1.2fr 1fr;
+  gap:clamp(2rem,5vw,4rem);
+  align-items:center;
   position:relative;
 }
-@media (max-width:900px){.hero-grid{grid-template-columns:1fr}}
+@media (max-width:960px){.hero-grid{grid-template-columns:1fr}}
 
-.eyebrow{
-  font-family:var(--font-mono);
-  font-size:11px;
-  font-weight:500;
-  letter-spacing:0.16em;
-  text-transform:uppercase;
-  color:var(--accent);
-  display:inline-flex;
-  align-items:center;
-  gap:0.6em;
-  margin-bottom:1.2rem;
-}
-.eyebrow::before{
-  content:"";
-  width:28px;height:1px;
-  background:var(--accent);
-}
 .hero h1{
-  font-family:var(--font-display);
-  font-weight:300;
-  font-size:clamp(2.4rem, 6.5vw, 6rem);
-  line-height:0.95;
-  letter-spacing:-0.035em;
-  font-variation-settings:"opsz" 144;
-  margin-bottom:1.5rem;
-  color:var(--paper);
-}
-.hero h1 em{
-  font-style:italic;
-  font-weight:500;
-  color:var(--accent-3);
-}
-.hero h1 .mark{
+  font-family:var(--sans);
   font-weight:700;
-  color:var(--accent);
+  font-size:clamp(2.8rem, 7.5vw, 6.4rem);
+  line-height:0.92;
+  letter-spacing:-0.05em;
+  color:var(--ivory);
+  margin:1.6rem 0 1.6rem;
 }
-.hero .lede{
-  font-size:clamp(1rem, 1.4vw, 1.2rem);
-  color:var(--muted-2);
-  max-width:58ch;
-  line-height:1.6;
+.hero h1 .a{color:var(--amber)}
+.hero h1 .soft{color:var(--text-3);font-weight:300}
+
+.hero .tagline{
+  font-size:clamp(1.05rem, 1.35vw, 1.25rem);
+  font-weight:300;
+  line-height:1.55;
+  color:var(--text-3);
+  max-width:52ch;
   margin-bottom:2rem;
 }
-.hero .lede strong{color:var(--paper);font-weight:500}
+.hero .tagline strong{
+  color:var(--text-1);
+  font-weight:500;
+}
 
+.hero .terminal{
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:16px 20px;
+  font-family:var(--mono);
+  font-size:13px;
+  line-height:1.7;
+  max-width:460px;
+  margin-bottom:2rem;
+}
+.hero .terminal .prompt{color:var(--amber-90)}
+.hero .terminal .cmd{color:var(--text-1)}
+.hero .terminal .output{color:var(--text-4)}
+.hero .terminal .highlight{color:var(--highlight)}
+
+/* Hero stats strip — at bottom of hero */
 .stats{
   display:grid;
   grid-template-columns:repeat(4, 1fr);
-  gap:clamp(0.5rem,1.5vw,1.5rem);
+  gap:clamp(0.75rem,1.5vw,1.5rem);
   padding-top:2rem;
   border-top:1px solid var(--border);
 }
 .stat dt{
-  font-family:var(--font-mono);
+  font-family:var(--mono);
   font-size:10px;
-  font-weight:500;
-  letter-spacing:0.1em;
+  font-weight:400;
+  letter-spacing:0.08em;
   text-transform:uppercase;
-  color:var(--muted);
-  margin-bottom:0.35rem;
+  color:var(--text-4);
+  margin-bottom:0.5rem;
 }
 .stat dd{
-  font-family:var(--font-display);
-  font-size:clamp(1.6rem, 3.5vw, 2.4rem);
-  font-weight:300;
-  font-variation-settings:"opsz" 144;
+  font-family:var(--sans);
+  font-size:clamp(1.8rem, 3.8vw, 2.8rem);
+  font-weight:700;
   line-height:1;
-  letter-spacing:-0.03em;
-  color:var(--paper);
+  letter-spacing:-0.035em;
+  color:var(--ivory);
 }
-.stat dd .unit{font-size:0.5em;color:var(--accent);margin-left:0.1em}
+.stat dd .unit{
+  font-size:0.42em;
+  color:var(--amber);
+  margin-left:0.12em;
+  font-weight:500;
+  letter-spacing:0.02em;
+}
 @media (max-width:640px){
   .stats{grid-template-columns:repeat(2,1fr);gap:1.25rem}
 }
 
-/* ─────────────────────────────────────────────────────────────── */
-/* Section headers                                                 */
-/* ─────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   Hero knowledge graph — SVG node-edge viz, amber, directly from banner
+   ══════════════════════════════════════════════════════════════ */
+.graph-viz{
+  position:relative;
+  aspect-ratio: 1;
+  max-height:480px;
+  justify-self:center;
+  width:100%;
+}
+.graph-viz svg{
+  width:100%;
+  height:100%;
+  overflow:visible;
+}
+.graph-viz .edge{stroke:var(--amber-15);stroke-width:1;fill:none}
+.graph-viz .edge.hi{stroke:var(--amber-40);stroke-width:1.5}
+.graph-viz .node{fill:var(--amber-60)}
+.graph-viz .node.hi{fill:var(--amber-90)}
+.graph-viz .node.dim{fill:var(--text-6)}
+.graph-viz .label{
+  fill:var(--text-3);
+  font-family:var(--mono);
+  font-size:9px;
+  font-weight:300;
+}
+.graph-viz .label.hi{
+  fill:var(--text-2);
+  font-size:10px;
+  font-weight:400;
+}
+
+/* gentle pulse on the central "Sentinel" node */
+@media (prefers-reduced-motion: no-preference){
+  .graph-viz .pulse{
+    transform-origin:center;
+    animation: pulse 3.2s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{opacity:0.9}
+    50%{opacity:0.4}
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Section shell — tight rhythm, no dead space on print
+   ══════════════════════════════════════════════════════════════ */
 .section{
-  padding-block:clamp(4rem, 10vh, 8rem);
-  border-bottom:1px solid var(--border);
+  padding-block: 3rem;
+  border-bottom:1px solid var(--border-2);
   position:relative;
 }
+/* Subtle amber accent threading through the top-left of every section — visual continuity */
+.section::before{
+  content:"";
+  position:absolute;
+  top:0;
+  left:var(--gutter);
+  width:2.4rem;
+  height:1px;
+  background:var(--amber);
+}
+
+/* Section head stacks vertically — no dead left column */
 .section-head{
-  display:grid;
-  grid-template-columns: 1fr 2fr;
-  gap:clamp(2rem,5vw,5rem);
-  margin-bottom:clamp(3rem,6vh,5rem);
+  max-width:900px;
+  margin-bottom: 2.2rem;
 }
-@media (max-width:900px){.section-head{grid-template-columns:1fr;gap:1rem}}
-
 .section-num{
-  font-family:var(--font-mono);
-  font-size:11px;
-  font-weight:500;
-  letter-spacing:0.16em;
+  display:flex;
+  align-items:center;
+  gap:1rem;
+  margin-bottom:1.2rem;
+  flex-wrap:wrap;
+}
+.section-num .count{
+  font-family:var(--mono);
+  font-size:10px;
+  color:var(--text-5);
+  letter-spacing:0.08em;
   text-transform:uppercase;
-  color:var(--accent);
-}
-.section-num span{color:var(--muted)}
-.section h2{
-  font-family:var(--font-display);
-  font-weight:300;
-  font-size:clamp(1.8rem, 4vw, 3rem);
-  line-height:1.05;
-  letter-spacing:-0.03em;
-  font-variation-settings:"opsz" 144;
-  color:var(--paper);
-  margin-bottom:0.5em;
-}
-.section h2 em{font-style:italic;font-weight:500;color:var(--accent-3)}
-.section-blurb{
-  color:var(--muted-2);
-  max-width:56ch;
-  font-size:clamp(0.96rem,1.2vw,1.08rem);
 }
 
-/* ─────────────────────────────────────────────────────────────── */
-/* The 4 hook events — timeline                                    */
-/* ─────────────────────────────────────────────────────────────── */
-.timeline{
+.section h2{
+  font-family:var(--sans);
+  font-weight:700;
+  font-size:clamp(1.9rem, 3.8vw, 2.8rem);
+  line-height:1.06;
+  letter-spacing:-0.035em;
+  color:var(--ivory);
+  margin-bottom:0.55em;
+}
+.section h2 em{
+  font-style:normal;
+  color:var(--amber);
+  font-weight:700;
+}
+.section h2 .soft{color:var(--text-3);font-weight:300}
+.section-blurb{
+  color:var(--text-3);
+  max-width:62ch;
+  font-size:clamp(0.98rem,1.2vw,1.12rem);
+  font-weight:300;
+  line-height:1.6;
+}
+.section-blurb strong{color:var(--text-1);font-weight:500}
+.section-blurb code{
+  font-family:var(--mono);
+  font-size:0.86em;
+  color:var(--amber-90);
+  background:var(--amber-05);
+  padding:0.1em 0.42em;
+  border-radius:2px;
+  border:1px solid var(--amber-15);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   §01 Lifecycle — four event cards
+   ══════════════════════════════════════════════════════════════ */
+.lifecycle{
   display:grid;
   grid-template-columns:repeat(4, 1fr);
-  position:relative;
-}
-@media (max-width:1100px){.timeline{grid-template-columns:repeat(2,1fr)}}
-@media (max-width:640px){.timeline{grid-template-columns:1fr}}
-
-.event{
-  position:relative;
-  padding:2rem 1.5rem 2.5rem;
-  border-right:1px solid var(--border);
-  transition:background-color .4s var(--ease-out);
-}
-.event:last-child{border-right:0}
-.event:hover{background:rgba(13,148,136,0.04)}
-@media (max-width:1100px){
-  .event:nth-child(2){border-right:0}
-  .event:nth-child(1),.event:nth-child(2){border-bottom:1px solid var(--border)}
-}
-@media (max-width:640px){
-  .event{border-right:0;border-bottom:1px solid var(--border)}
-  .event:last-child{border-bottom:0}
-}
-
-.event-num{
-  position:absolute;
-  top:1rem;right:1rem;
-  font-family:var(--font-mono);
-  font-size:10px;
-  letter-spacing:0.1em;
-  color:var(--muted);
-}
-.event-order{
-  font-family:var(--font-display);
-  font-weight:300;
-  font-variation-settings:"opsz" 144;
-  font-size:4.5rem;
-  line-height:0.8;
-  letter-spacing:-0.04em;
-  color:var(--accent);
-  margin-bottom:1.2rem;
-  display:block;
-}
-.event h3{
-  font-family:var(--font-mono);
-  font-size:11px;
-  font-weight:500;
-  letter-spacing:0.12em;
-  text-transform:uppercase;
-  color:var(--accent);
-  margin-bottom:0.5rem;
-}
-.event h4{
-  font-family:var(--font-display);
-  font-weight:400;
-  font-size:1.5rem;
-  line-height:1.15;
-  letter-spacing:-0.02em;
-  color:var(--paper);
-  margin-bottom:0.9rem;
-}
-.event p{
-  font-size:0.88rem;
-  line-height:1.6;
-  color:var(--muted-2);
-  margin-bottom:0.9rem;
-}
-.event p strong{color:var(--paper);font-weight:500}
-.event .impact{
-  font-family:var(--font-mono);
-  font-size:11px;
-  padding-top:0.9rem;
-  margin-top:0.9rem;
-  border-top:1px dashed var(--border-2);
-  color:var(--accent-2);
-  display:block;
-}
-.event .impact::before{
-  content:"↓ ";
-  color:var(--muted);
-}
-
-/* ─────────────────────────────────────────────────────────────── */
-/* The money path — PreToolUse:Read decision tree                 */
-/* ─────────────────────────────────────────────────────────────── */
-.money-grid{
-  display:grid;
-  grid-template-columns: 8fr 5fr;
-  gap:clamp(2rem,4vw,4rem);
-  align-items:start;
-}
-@media (max-width:1000px){.money-grid{grid-template-columns:1fr}}
-
-.decision{
-  display:flex;
-  flex-direction:column;
-}
-.step{
-  display:grid;
-  grid-template-columns: 80px 1fr;
-  gap:1.5rem;
-  padding:1.4rem 0;
-  border-bottom:1px solid var(--border);
-  align-items:start;
-}
-.step:first-child{padding-top:0}
-.step:last-child{border-bottom:0}
-
-.step-marker{
-  font-family:var(--font-mono);
-  font-size:10px;
-  font-weight:500;
-  letter-spacing:0.1em;
-  text-transform:uppercase;
-  color:var(--muted);
-  padding-top:0.35em;
-}
-.step-marker strong{
-  display:block;
-  font-family:var(--font-display);
-  font-size:1.8rem;
-  font-weight:300;
-  font-variation-settings:"opsz" 144;
-  line-height:1;
-  color:var(--accent);
-  margin-top:0.2em;
-}
-.step-body h5{
-  font-family:var(--font-display);
-  font-weight:500;
-  font-size:1.15rem;
-  letter-spacing:-0.01em;
-  color:var(--paper);
-  margin-bottom:0.4rem;
-}
-.step-body p{
-  font-size:0.88rem;
-  color:var(--muted-2);
-  line-height:1.55;
-}
-.step-body .check{
-  display:inline-block;
-  font-family:var(--font-mono);
-  font-size:10px;
-  padding:0.18em 0.55em;
-  border:1px solid var(--border-2);
-  border-radius:2px;
-  color:var(--muted-2);
-  margin-right:0.35em;
-  margin-top:0.5em;
-  letter-spacing:0.04em;
-}
-.step-body .check.pass{color:var(--accent-2);border-color:var(--accent)}
-.step-body .check.fail{color:var(--warn);border-color:var(--warn)}
-
-.step.outcome{
-  background:linear-gradient(90deg, rgba(13,148,136,0.08), transparent 60%);
-  border-left:2px solid var(--accent);
-  padding-left:1.4rem;
-  margin-left:-1.4rem;
-}
-.step.outcome .step-marker strong{color:var(--paper)}
-.step.outcome .step-body h5{color:var(--accent-3)}
-
-/* Side: example response box */
-.example-card{
-  position:sticky;
-  top:2rem;
-  background:var(--ink-2);
+  gap:1px;
+  background:var(--border);
   border:1px solid var(--border);
-  border-radius:var(--radius-lg);
+  border-radius:12px;
   overflow:hidden;
 }
-.example-card header{
+@media (max-width:1100px){.lifecycle{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:640px){.lifecycle{grid-template-columns:1fr}}
+
+.event{
+  background:var(--bg);
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  transition:background-color .4s var(--ease-out);
+  position:relative;
+}
+.event:hover{background:var(--bg-2)}
+.event::before{
+  content:"";
+  position:absolute;
+  top:0;left:0;right:0;
+  height:2px;
+  background:var(--amber);
+  transform:scaleX(0);
+  transform-origin:left;
+  transition:transform .5s var(--ease-out);
+}
+.event:hover::before{transform:scaleX(1)}
+
+.event-head{
+  padding:1rem 1.4rem;
+  border-bottom:1px solid var(--border);
   display:flex;
   align-items:center;
   justify-content:space-between;
-  padding:0.9rem 1.2rem;
-  border-bottom:1px solid var(--border);
-  background:var(--ink);
-}
-.example-card header span{
-  font-family:var(--font-mono);
+  font-family:var(--mono);
   font-size:10px;
-  letter-spacing:0.1em;
+  color:var(--text-5);
+  letter-spacing:0.06em;
   text-transform:uppercase;
-  color:var(--muted);
 }
-.example-card header .dot{
+.event-head .seq{color:var(--amber-90);font-weight:500}
+.event-body{
+  padding:1.4rem 1.3rem 1.3rem;
+  flex:1;
+  display:flex;
+  flex-direction:column;
+}
+.event .kind{
+  font-family:var(--mono);
+  font-size:11px;
+  font-weight:500;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--amber);
+  margin-bottom:0.6rem;
+}
+.event h3{
+  font-family:var(--sans);
+  font-weight:600;
+  font-size:1.32rem;
+  line-height:1.18;
+  letter-spacing:-0.02em;
+  color:var(--ivory);
+  margin-bottom:1rem;
+}
+.event p{
+  font-size:0.9rem;
+  font-weight:300;
+  line-height:1.62;
+  color:var(--text-3);
+  margin-bottom:0.9rem;
+}
+.event p strong{color:var(--text-1);font-weight:500}
+.event p code{
+  font-family:var(--mono);
+  font-size:0.82em;
+  color:var(--amber-90);
+  background:var(--amber-05);
+  padding:0.1em 0.38em;
+  border-radius:2px;
+  white-space:nowrap;
+  border:1px solid var(--amber-15);
+}
+.event .impact{
+  margin-top:auto;
+  padding-top:1rem;
+  border-top:1px dashed var(--border-2);
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--highlight);
+  letter-spacing:0.02em;
+}
+.event .impact::before{
+  content:"→ ";
+  color:var(--text-5);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   §02 Decision tree + stdout card
+   ══════════════════════════════════════════════════════════════ */
+.money-grid{
+  display:grid;
+  grid-template-columns: 7fr 5fr;
+  gap:clamp(2rem,4vw,3.5rem);
+  align-items:start;
+}
+@media (max-width:1100px){.money-grid{grid-template-columns:1fr}}
+
+.tree{
+  background:var(--bg-2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+}
+.tree-head{
+  padding:1rem 1.4rem;
+  background:var(--bg-3);
+  border-bottom:1px solid var(--border);
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--text-4);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.tree-head .path{color:var(--amber-90)}
+.tree-head .path strong{color:var(--text-4);font-weight:400}
+.tree-head .dots{display:flex;gap:5px}
+.tree-head .dots span{width:8px;height:8px;border-radius:50%;background:var(--text-6)}
+.tree-head .dots span.live{background:var(--amber);box-shadow:0 0 6px var(--amber-60)}
+
+.step{
+  display:grid;
+  grid-template-columns: 3.6rem 1fr;
+  padding:1.2rem 1.4rem;
+  border-bottom:1px solid var(--border);
+  align-items:start;
+}
+.step:last-child{border-bottom:0}
+.step-n{
+  font-family:var(--mono);
+  font-size:10px;
+  color:var(--text-5);
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  padding-top:0.35em;
+}
+.step-n strong{
+  display:block;
+  font-family:var(--sans);
+  font-size:1.5rem;
+  font-weight:700;
+  color:var(--amber);
+  line-height:1;
+  margin-top:0.25em;
+  letter-spacing:-0.02em;
+}
+.step-body h5{
+  font-family:var(--sans);
+  font-weight:600;
+  font-size:1.02rem;
+  color:var(--ivory);
+  margin-bottom:0.4rem;
+  letter-spacing:-0.01em;
+}
+.step-body p{
+  font-size:0.86rem;
+  font-weight:300;
+  color:var(--text-3);
+  line-height:1.6;
+}
+.step-body code{
+  font-family:var(--mono);
+  font-size:0.82em;
+  color:var(--amber-90);
+  background:var(--amber-05);
+  padding:0.08em 0.38em;
+  border-radius:2px;
+  border:1px solid var(--amber-15);
+}
+.checks{display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.65rem}
+.check{
   display:inline-block;
-  width:8px;height:8px;
-  border-radius:50%;
-  background:var(--accent);
-  box-shadow:0 0 0 3px rgba(13,148,136,0.2);
-  margin-right:0.4em;
+  font-family:var(--mono);
+  font-size:9.5px;
+  padding:0.22em 0.6em;
+  border-radius:100px;
+  letter-spacing:0.04em;
+  border:1px solid var(--border-2);
+  color:var(--text-4);
 }
-.example-card pre{
-  padding:1.25rem;
-  font-family:var(--font-mono);
-  font-size:11.5px;
+.check.pass{color:var(--highlight);border-color:rgba(74,222,128,0.3)}
+.check.fail{color:var(--amber-90);border-color:var(--amber-30)}
+
+.step.outcome{
+  background:linear-gradient(90deg, var(--amber-08), transparent 70%);
+  border-left:2px solid var(--amber);
+  padding-left:calc(1.4rem - 2px);
+}
+.step.outcome .step-body h5{color:var(--amber)}
+
+/* stdout card — mirrors banner's terminal block styling */
+.stdout{
+  position:sticky;
+  top:5rem;
+  background:var(--bg-2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+}
+.stdout-head{
+  padding:1rem 1.3rem;
+  background:var(--bg-3);
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  font-family:var(--mono);
+  font-size:10px;
+  color:var(--text-4);
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+}
+.stdout-head .lbl{display:flex;align-items:center;gap:0.6em}
+.stdout-head .lbl .dot{
+  width:7px;height:7px;
+  border-radius:50%;
+  background:var(--amber);
+  box-shadow:0 0 8px var(--amber-60);
+}
+.stdout-head .code{color:var(--highlight);font-weight:500}
+.stdout pre{
+  padding:1.3rem 1.3rem;
+  font-family:var(--mono);
+  font-size:11px;
   line-height:1.65;
-  color:var(--paper-2);
+  color:var(--text-2);
   overflow-x:auto;
   white-space:pre;
 }
-.example-card pre .k{color:var(--accent-2)}
-.example-card pre .c{color:var(--muted)}
-.example-card pre .s{color:var(--accent-3)}
-.example-card pre .n{color:var(--paper)}
-.example-card .tokens{
-  padding:0.9rem 1.2rem;
-  background:var(--ink);
+.stdout pre .k{color:var(--amber-90)}
+.stdout pre .s{color:var(--highlight)}
+.stdout pre .n{color:var(--text-1)}
+.stdout pre .c{color:var(--text-5)}
+.stdout-foot{
+  padding:0.9rem 1.3rem;
+  background:var(--bg-3);
   border-top:1px solid var(--border);
   display:flex;
   align-items:center;
   justify-content:space-between;
-  font-family:var(--font-mono);
+  font-family:var(--mono);
   font-size:10px;
-  letter-spacing:0.06em;
-  text-transform:uppercase;
-}
-.example-card .tokens .before{color:var(--muted)}
-.example-card .tokens .after{color:var(--accent)}
-.example-card .tokens .arrow{color:var(--muted-2)}
-
-/* ─────────────────────────────────────────────────────────────── */
-/* Ecosystem substrate — layers                                    */
-/* ─────────────────────────────────────────────────────────────── */
-.substrate{
-  display:grid;
-  grid-template-columns:repeat(6, 1fr);
-  gap:1px;
-  background:var(--border);
-  border:1px solid var(--border);
-  border-radius:var(--radius-lg);
-  overflow:hidden;
-}
-@media (max-width:1100px){.substrate{grid-template-columns:repeat(3,1fr)}}
-@media (max-width:640px){.substrate{grid-template-columns:repeat(2,1fr)}}
-
-.layer{
-  background:var(--ink);
-  padding:1.6rem 1.4rem;
-  display:flex;
-  flex-direction:column;
-  min-height:220px;
-  transition:background-color .3s var(--ease-out);
-}
-.layer:hover{background:var(--ink-2)}
-
-.layer .tag{
-  font-family:var(--font-mono);
-  font-size:10px;
-  font-weight:500;
-  letter-spacing:0.1em;
-  text-transform:uppercase;
-  color:var(--accent);
-  margin-bottom:1.4rem;
-}
-.layer h4{
-  font-family:var(--font-display);
-  font-weight:500;
-  font-size:1.25rem;
-  letter-spacing:-0.01em;
-  color:var(--paper);
-  margin-bottom:0.5rem;
-  line-height:1.15;
-}
-.layer .meta{
-  font-family:var(--font-mono);
-  font-size:10.5px;
-  color:var(--accent-2);
-  margin-bottom:0.9rem;
-  letter-spacing:0.03em;
-}
-.layer p{
-  font-size:0.82rem;
-  line-height:1.55;
-  color:var(--muted-2);
-  margin-top:auto;
-}
-.layer .badge{
-  display:inline-block;
-  font-family:var(--font-mono);
-  font-size:9px;
-  padding:0.2em 0.55em;
-  background:rgba(13,148,136,0.15);
-  color:var(--accent-2);
-  border-radius:2px;
   letter-spacing:0.05em;
   text-transform:uppercase;
 }
+.stdout-foot .before{color:var(--text-4)}
+.stdout-foot .arrow{color:var(--text-5)}
+.stdout-foot .after{color:var(--highlight)}
 
-/* ─────────────────────────────────────────────────────────────── */
-/* Real dogfood measurements                                       */
-/* ─────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   §03 Substrate — GENERIC ecosystem (no personal references)
+   ══════════════════════════════════════════════════════════════ */
+.substrate{
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:1px;
+  background:var(--border);
+  border:1px solid var(--border);
+  border-radius:12px;
+  overflow:hidden;
+}
+@media (max-width:1000px){.substrate{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:640px){.substrate{grid-template-columns:1fr}}
+
+.layer{
+  background:var(--bg);
+  padding:1.75rem 1.5rem 1.5rem;
+  display:flex;
+  flex-direction:column;
+  transition:background-color .4s var(--ease-out);
+  position:relative;
+}
+.layer:hover{background:var(--bg-2)}
+.layer .path-label{
+  font-family:var(--mono);
+  font-size:10px;
+  color:var(--text-5);
+  letter-spacing:0.04em;
+  margin-bottom:1.2rem;
+}
+.layer .mode{
+  display:inline-block;
+  font-family:var(--mono);
+  font-size:9.5px;
+  font-weight:500;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  padding:0.22em 0.65em;
+  border-radius:100px;
+  margin-bottom:0.85rem;
+}
+.layer .mode.owned{background:var(--amber-15);color:var(--amber);border:1px solid var(--amber-30)}
+.layer .mode.read{background:rgba(255,255,255,0.04);color:var(--text-2);border:1px solid var(--border-2)}
+.layer .mode.write{background:rgba(74,222,128,0.08);color:var(--highlight);border:1px solid rgba(74,222,128,0.25)}
+.layer .mode.peer{background:var(--surface-1);color:var(--text-3);border:1px solid var(--border-2)}
+.layer h4{
+  font-family:var(--sans);
+  font-weight:600;
+  font-size:1.25rem;
+  color:var(--ivory);
+  margin-bottom:1rem;
+  letter-spacing:-0.02em;
+  line-height:1.18;
+}
+.layer p{
+  font-size:0.88rem;
+  font-weight:300;
+  line-height:1.6;
+  color:var(--text-3);
+  margin-top:auto;
+}
+.layer p code{
+  font-family:var(--mono);
+  font-size:0.84em;
+  color:var(--amber-90);
+  background:var(--amber-05);
+  padding:0.1em 0.38em;
+  border-radius:2px;
+  border:1px solid var(--amber-15);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   §04 Measurements — table + metrics aside
+   ══════════════════════════════════════════════════════════════ */
 .measure{
   display:grid;
   grid-template-columns:3fr 2fr;
   gap:clamp(2rem,4vw,4rem);
+  align-items:start;
 }
-@media (max-width:900px){.measure{grid-template-columns:1fr}}
+@media (max-width:960px){.measure{grid-template-columns:1fr}}
 
+.table-wrap{
+  background:var(--bg-2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+}
+.table-head{
+  padding:1rem 1.4rem;
+  background:var(--bg-3);
+  border-bottom:1px solid var(--border);
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--text-4);
+  display:flex;
+  justify-content:space-between;
+}
+.table-head .title{color:var(--amber-90)}
 .table{
   width:100%;
   border-collapse:collapse;
@@ -544,389 +794,629 @@ body::before{
 }
 .table thead th{
   text-align:left;
-  font-family:var(--font-mono);
+  font-family:var(--mono);
   font-size:10px;
   font-weight:500;
-  letter-spacing:0.1em;
+  letter-spacing:0.08em;
   text-transform:uppercase;
-  color:var(--muted);
-  padding:0.85rem 0.6rem;
+  color:var(--text-5);
+  padding:0.95rem 1.1rem;
   border-bottom:1px solid var(--border);
 }
+.table thead th.num{text-align:right}
 .table tbody td{
-  padding:1rem 0.6rem;
+  padding:1.05rem 1.1rem;
   border-bottom:1px solid var(--border);
-  color:var(--muted-2);
-  vertical-align:top;
+  color:var(--text-2);
+  font-family:var(--mono);
+  font-size:11.5px;
+  vertical-align:middle;
 }
-.table tbody td:first-child{color:var(--paper)}
+.table tbody td:first-child{color:var(--ivory);font-size:12px}
 .table tbody td.num{
-  font-family:var(--font-mono);
   text-align:right;
-  color:var(--paper);
+  color:var(--text-1);
 }
-.table .deny{color:var(--accent-2);font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.04em}
-.table .pass{color:var(--muted);font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.04em}
-.table .win{color:var(--accent);font-weight:600}
+.table td.deny{
+  color:var(--amber);
+  font-weight:500;
+  font-size:10.5px;
+  letter-spacing:0.05em;
+  text-transform:uppercase;
+}
+.table td.pass{
+  color:var(--text-4);
+  font-size:10.5px;
+  letter-spacing:0.05em;
+  text-transform:uppercase;
+}
+.table td.win{color:var(--highlight)}
 .table tfoot td{
-  padding:1.2rem 0.6rem;
+  padding:1.15rem 1.1rem;
   font-weight:600;
-  color:var(--paper);
+  color:var(--ivory);
   font-size:0.92rem;
-  border-top:2px solid var(--accent);
+  border-top:2px solid var(--amber);
+  background:var(--bg-3);
 }
+.table tfoot td.win{color:var(--amber)}
 
 .measure-aside{
-  padding:2rem;
-  background:var(--ink-2);
+  padding:2rem 1.8rem;
+  background:var(--bg-2);
   border:1px solid var(--border);
-  border-radius:var(--radius-lg);
-  display:flex;
-  flex-direction:column;
+  border-radius:10px;
 }
 .measure-aside h4{
-  font-family:var(--font-display);
-  font-weight:400;
-  font-size:1.3rem;
-  line-height:1.2;
-  color:var(--paper);
-  margin-bottom:1.2rem;
-  letter-spacing:-0.01em;
+  font-family:var(--mono);
+  font-weight:500;
+  font-size:0.88rem;
+  color:var(--amber-90);
+  margin-bottom:1.3rem;
+  letter-spacing:0.04em;
+  padding-bottom:1rem;
+  border-bottom:1px solid var(--border);
 }
+.measure-aside h4::before{content:"$ ";color:var(--text-5)}
 .measure-aside .metric{
-  padding:1rem 0;
-  border-top:1px dashed var(--border);
+  padding:1.05rem 0;
+  border-top:1px dashed var(--border-2);
 }
 .measure-aside .metric:first-of-type{border-top:0;padding-top:0}
 .measure-aside .metric dt{
-  font-family:var(--font-mono);
+  font-family:var(--mono);
   font-size:10px;
-  letter-spacing:0.1em;
+  letter-spacing:0.06em;
   text-transform:uppercase;
-  color:var(--muted);
-  margin-bottom:0.25rem;
+  color:var(--text-4);
+  margin-bottom:0.35rem;
 }
 .measure-aside .metric dd{
-  font-family:var(--font-display);
-  font-size:2.4rem;
-  font-weight:300;
-  line-height:0.9;
-  letter-spacing:-0.03em;
-  font-variation-settings:"opsz" 144;
-  color:var(--paper);
+  font-family:var(--sans);
+  font-size:2.3rem;
+  font-weight:700;
+  line-height:1;
+  letter-spacing:-0.035em;
+  color:var(--ivory);
 }
 .measure-aside .metric dd .sub{
-  font-size:0.4em;
-  color:var(--accent);
-  font-family:var(--font-mono);
+  font-size:0.35em;
+  color:var(--amber);
   font-weight:500;
-  letter-spacing:0.05em;
+  letter-spacing:0.04em;
   margin-left:0.4em;
   vertical-align:middle;
+  font-family:var(--mono);
 }
 
-/* ─────────────────────────────────────────────────────────────── */
-/* Quick reference strip                                           */
-/* ─────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   §05 Commands
+   ══════════════════════════════════════════════════════════════ */
 .commands{
   display:grid;
   grid-template-columns:repeat(4, 1fr);
   gap:1px;
   background:var(--border);
   border:1px solid var(--border);
-  border-radius:var(--radius-lg);
+  border-radius:12px;
   overflow:hidden;
 }
-@media (max-width:900px){.commands{grid-template-columns:repeat(2,1fr)}}
-@media (max-width:520px){.commands{grid-template-columns:1fr}}
+@media (max-width:1000px){.commands{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:560px){.commands{grid-template-columns:1fr}}
 
 .cmd{
-  background:var(--ink);
-  padding:1.4rem 1.2rem;
+  background:var(--bg);
+  padding:1.3rem 1.3rem;
+  transition:background-color .4s var(--ease-out);
 }
+.cmd:hover{background:var(--bg-2)}
 .cmd .label{
-  font-family:var(--font-mono);
+  font-family:var(--mono);
   font-size:9.5px;
   font-weight:500;
   letter-spacing:0.1em;
   text-transform:uppercase;
-  color:var(--muted);
-  margin-bottom:0.5rem;
+  color:var(--amber-90);
+  margin-bottom:0.8rem;
 }
-.cmd code{
-  font-family:var(--font-mono);
+.cmd .line{
+  font-family:var(--mono);
   font-size:12px;
-  color:var(--accent-2);
-  display:block;
-  margin-bottom:0.7rem;
-  word-break:break-all;
+  color:var(--text-1);
+  margin-bottom:0.9rem;
+  display:flex;
+  align-items:baseline;
+  gap:0.4em;
+  line-height:1.4;
 }
+.cmd .line::before{
+  content:"$";
+  color:var(--amber-90);
+  flex-shrink:0;
+}
+.cmd .line .c{color:var(--amber)}
 .cmd p{
-  font-size:0.78rem;
-  color:var(--muted-2);
-  line-height:1.5;
+  font-size:0.82rem;
+  font-weight:300;
+  color:var(--text-3);
+  line-height:1.55;
+}
+.cmd p code{
+  font-family:var(--mono);
+  font-size:0.86em;
+  color:var(--amber-90);
+  background:var(--amber-05);
+  padding:0.06em 0.32em;
+  border-radius:2px;
+  border:1px solid var(--amber-15);
 }
 
-/* ─────────────────────────────────────────────────────────────── */
-/* Footer                                                          */
-/* ─────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   Footer
+   ══════════════════════════════════════════════════════════════ */
 footer{
-  padding-block:clamp(3rem,6vh,5rem);
+  padding-block: 2.5rem;
   display:grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns:2fr 1fr;
   gap:2rem;
   align-items:end;
 }
 @media (max-width:720px){footer{grid-template-columns:1fr}}
-footer p{color:var(--muted);font-size:0.85rem;max-width:44ch}
 footer .version{
-  font-family:var(--font-display);
-  font-weight:400;
+  font-family:var(--sans);
+  font-weight:700;
   font-size:2rem;
-  color:var(--paper);
-  letter-spacing:-0.02em;
+  color:var(--ivory);
+  letter-spacing:-0.04em;
   line-height:1;
-  font-variation-settings:"opsz" 144;
-  margin-bottom:0.5rem;
+  margin-bottom:0.65rem;
 }
-footer .version em{color:var(--accent);font-style:italic}
+footer .version .a{color:var(--amber)}
+footer .version small{
+  display:inline-block;
+  margin-left:0.6em;
+  font-family:var(--mono);
+  font-size:12px;
+  font-weight:400;
+  color:var(--text-4);
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+}
+footer p{
+  color:var(--text-4);
+  font-size:0.85rem;
+  font-weight:300;
+  max-width:54ch;
+  line-height:1.55;
+}
+footer .attribution{
+  margin-top:1.2rem;
+  padding-top:1.2rem;
+  border-top:1px dashed var(--border-2);
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:0.02em;
+  color:var(--text-4);
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:0.6em;
+  line-height:1.8;
+}
+footer .attribution .sep{color:var(--text-6)}
+footer .credit{
+  color:var(--text-2);
+  text-decoration:none;
+  padding:0;
+  background:transparent;
+  border:0;
+  border-radius:0;
+  text-transform:none;
+  letter-spacing:0.02em;
+  font-size:11px;
+  transition:color .3s var(--ease-out);
+}
+footer .credit strong{
+  color:var(--amber);
+  font-weight:600;
+}
+footer .credit:hover{
+  color:var(--ivory);
+  background:transparent;
+  border:0;
+}
+footer .credit:hover strong{color:var(--amber)}
 footer .links{
   display:flex;
   flex-wrap:wrap;
-  gap:1.5rem;
+  gap:0.5rem;
   justify-self:end;
 }
 @media (max-width:720px){footer .links{justify-self:start}}
 footer a{
-  font-family:var(--font-mono);
-  font-size:11px;
+  font-family:var(--mono);
+  font-size:10.5px;
   letter-spacing:0.06em;
   text-transform:uppercase;
-  color:var(--muted-2);
+  color:var(--text-3);
   text-decoration:none;
-  padding-bottom:0.1em;
-  border-bottom:1px solid var(--border);
-  transition:color .3s var(--ease-out), border-color .3s var(--ease-out);
+  padding:0.55em 1em;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:100px;
+  transition:all .35s var(--ease-out);
 }
-footer a:hover{color:var(--accent);border-color:var(--accent)}
+footer a:hover{
+  color:var(--amber);
+  border-color:var(--amber-30);
+  background:var(--amber-05);
+}
+a:focus-visible{outline:2px solid var(--amber);outline-offset:3px;border-radius:3px}
 
-/* ─────────────────────────────────────────────────────────────── */
-/* Reveal animations                                               */
-/* ─────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   Scroll reveals
+   ══════════════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: no-preference){
   .reveal{
     opacity:0;
-    transform:translateY(28px);
-    transition:opacity .9s var(--ease-out), transform .9s var(--ease-out);
+    transform:translateY(24px);
+    transition:opacity .85s var(--ease-out), transform .85s var(--ease-out);
   }
   .reveal.in{opacity:1;transform:none}
-  .reveal.d1{transition-delay:0.08s}
-  .reveal.d2{transition-delay:0.16s}
-  .reveal.d3{transition-delay:0.24s}
-  .reveal.d4{transition-delay:0.32s}
-  .reveal.d5{transition-delay:0.40s}
+  .reveal.d1{transition-delay:.07s}
+  .reveal.d2{transition-delay:.14s}
+  .reveal.d3{transition-delay:.21s}
+  .reveal.d4{transition-delay:.28s}
+  .reveal.d5{transition-delay:.35s}
 }
 
-/* Focus states for accessibility */
-a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
-
-/* Print — force scroll-reveal elements visible and tighten for paper */
+/* ═══════════════════════════════════════════════════════════════
+   Print — tight rhythm, content flows across pages
+   ══════════════════════════════════════════════════════════════ */
 @media print{
-  html,body{background:var(--ink);color:var(--paper)}
-  .hero::before{display:none}
+  html,body{background:var(--bg);color:var(--text-1)}
+  body::before, body::after{display:none}
+  .topbar{position:static}
   .reveal{opacity:1 !important;transform:none !important;transition:none !important}
-  .example-card{position:static}
-  .section{page-break-inside:avoid;border-bottom:1px solid var(--border)}
-  .hero{page-break-after:always}
-  .timeline{page-break-inside:avoid}
-  .substrate{page-break-inside:avoid}
-  .measure{page-break-inside:avoid}
-  .commands{page-break-inside:avoid}
+  .stdout{position:static}
+
+  /* Tighten spacing aggressively — no more dead zones */
+  .hero{padding-block: 2rem 1.5rem; page-break-after: auto}
+  .section{padding-block: 1.8rem; page-break-inside: auto; border-bottom:1px solid var(--border-2)}
+  .section-head{margin-bottom: 1.4rem}
+  footer{padding-block: 1.6rem}
+
+  /* Only protect INDIVIDUAL cards from splitting, not whole sections */
+  .event, .layer, .cmd, .step, .stdout, .measure-aside{page-break-inside:avoid}
   h1,h2,h3,h4,h5{page-break-after:avoid}
-  .event,.layer,.cmd,.step{page-break-inside:avoid}
-  /* Force dark-background printing */
+
+  /* Kill graph animation in print */
+  .graph-viz .pulse{animation:none !important}
+
+  /* Preserve dark background and amber accents in print */
   *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
 }
 @page{
   size:A3 landscape;
-  margin:10mm;
+  margin:8mm;
 }
 </style>
 </head>
 <body>
 
+<!-- ═══════════════════════════════════════════════════════════════ TOPBAR -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <span class="wordmark">engr<span class="a">a</span>m</span>
+    <div class="crumbs">
+      <span class="sep">·</span>
+      <span>docs</span>
+      <span class="sep">/</span>
+      <span>architecture</span>
+    </div>
+    <div class="status">
+      <span class="pulse"></span>
+      <span>v0.3.0 — live on npm</span>
+      <span class="sep">·</span>
+      <a class="brand-link" href="https://cirvgreen.com">a <strong>cirvgreen</strong> venture</a>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════════════════════════════════ HERO -->
 <header class="hero">
   <div class="wrap hero-grid">
     <div>
-      <div class="eyebrow">engram v0.3.0 · Sentinel</div>
-      <h1 class="reveal in">When you give Claude Code a task,<br><em>seven hooks</em> decide what your agent <span class="mark">actually reads</span>.</h1>
-    </div>
-    <div>
-      <p class="lede reveal d1">The old ceiling was that your agent had to <em>remember</em> to use engram. The Sentinel removes that contract. It sits at the tool-call boundary and intercepts every Read, Edit, Write, and Bash — replacing full file reads with <strong>~300-token structural graph summaries</strong> before your agent ever sees the content.</p>
-      <dl class="stats reveal d2">
-        <div class="stat"><dt>Token reduction</dt><dd>82<span class="unit">%</span></dd></div>
-        <div class="stat"><dt>Read hit rate</dt><dd>75<span class="unit">%</span></dd></div>
-        <div class="stat"><dt>Hook handlers</dt><dd>7</dd></div>
-        <div class="stat"><dt>Tests passing</dt><dd>439</dd></div>
+      <div class="badge reveal in"><span class="badge-dot"></span>v0.3.0 — "Sentinel"</div>
+
+      <h1 class="reveal d1">
+        How the <span class="a">a</span>gent<br>
+        stops re‑re<span class="a">a</span>ding<br>
+        your c<span class="a">a</span>seb<span class="a">a</span>se<span class="soft">.</span>
+      </h1>
+
+      <p class="tagline reveal d2">
+        engram v0.3 installs a Claude Code hook layer that fires on every <strong>Read</strong>, <strong>Edit</strong>, <strong>Write</strong>, and <strong>Bash cat</strong>. When the graph has high-confidence coverage of a file, it denies the raw read and delivers a <strong>~300-token structural summary</strong> as the block reason — and your agent sees it as system context, not an error.
+      </p>
+
+      <div class="terminal reveal d3">
+        <span class="prompt">$</span> <span class="cmd">engram install-hook</span><br>
+        <span class="output">📌 PreToolUse · PostToolUse · SessionStart · UserPromptSubmit</span><br>
+        <span class="output">   4 hook events wired · settings.local.json backed up</span><br>
+        <span class="highlight">✅ Installed. The next session intercepts automatically.</span>
+      </div>
+
+      <dl class="stats reveal d4">
+        <div class="stat"><dt>token reduction</dt><dd>82<span class="unit">%</span></dd></div>
+        <div class="stat"><dt>read hit rate</dt><dd>75<span class="unit">%</span></dd></div>
+        <div class="stat"><dt>hook handlers</dt><dd>7</dd></div>
+        <div class="stat"><dt>tests passing</dt><dd>439</dd></div>
       </dl>
+    </div>
+
+    <!-- The engram graph visualization — amber nodes, amber edges -->
+    <div class="graph-viz reveal d2" aria-hidden="true">
+      <svg viewBox="0 0 500 500">
+        <!-- edges -->
+        <line class="edge hi" x1="250" y1="250" x2="160" y2="140"/>
+        <line class="edge hi" x1="250" y1="250" x2="340" y2="160"/>
+        <line class="edge hi" x1="250" y1="250" x2="120" y2="260"/>
+        <line class="edge hi" x1="250" y1="250" x2="380" y2="310"/>
+        <line class="edge hi" x1="250" y1="250" x2="200" y2="380"/>
+        <line class="edge hi" x1="250" y1="250" x2="330" y2="400"/>
+
+        <line class="edge" x1="160" y1="140" x2="90" y2="90"/>
+        <line class="edge" x1="160" y1="140" x2="220" y2="60"/>
+        <line class="edge" x1="340" y1="160" x2="420" y2="100"/>
+        <line class="edge" x1="340" y1="160" x2="430" y2="220"/>
+        <line class="edge" x1="120" y1="260" x2="50" y2="220"/>
+        <line class="edge" x1="120" y1="260" x2="60" y2="340"/>
+        <line class="edge" x1="380" y1="310" x2="450" y2="360"/>
+        <line class="edge" x1="380" y1="310" x2="430" y2="250"/>
+        <line class="edge" x1="200" y1="380" x2="140" y2="430"/>
+        <line class="edge" x1="200" y1="380" x2="260" y2="450"/>
+        <line class="edge" x1="330" y1="400" x2="400" y2="450"/>
+        <line class="edge" x1="330" y1="400" x2="260" y2="450"/>
+
+        <line class="edge" x1="160" y1="140" x2="340" y2="160"/>
+        <line class="edge" x1="340" y1="160" x2="380" y2="310"/>
+        <line class="edge" x1="380" y1="310" x2="330" y2="400"/>
+        <line class="edge" x1="200" y1="380" x2="120" y2="260"/>
+        <line class="edge" x1="120" y1="260" x2="160" y2="140"/>
+
+        <!-- dim outer nodes -->
+        <circle class="node dim" cx="90" cy="90" r="2.8"/>
+        <circle class="node dim" cx="220" cy="60" r="2.5"/>
+        <circle class="node dim" cx="420" cy="100" r="3"/>
+        <circle class="node dim" cx="430" cy="220" r="2.5"/>
+        <circle class="node dim" cx="50" cy="220" r="2.8"/>
+        <circle class="node dim" cx="60" cy="340" r="2.5"/>
+        <circle class="node dim" cx="450" cy="360" r="2.8"/>
+        <circle class="node dim" cx="430" cy="250" r="2.2"/>
+        <circle class="node dim" cx="140" cy="430" r="2.5"/>
+        <circle class="node dim" cx="260" cy="450" r="2.8"/>
+        <circle class="node dim" cx="400" cy="450" r="2.5"/>
+
+        <!-- mid ring nodes -->
+        <circle class="node" cx="160" cy="140" r="4.5"/>
+        <circle class="node hi" cx="340" cy="160" r="5"/>
+        <circle class="node" cx="120" cy="260" r="4"/>
+        <circle class="node hi" cx="380" cy="310" r="5"/>
+        <circle class="node" cx="200" cy="380" r="4"/>
+        <circle class="node hi" cx="330" cy="400" r="4.5"/>
+
+        <!-- central "Sentinel" -->
+        <circle class="node hi pulse" cx="250" cy="250" r="8"/>
+
+        <!-- labels -->
+        <text class="label hi" x="250" y="232" text-anchor="middle">Sentinel</text>
+        <text class="label" x="160" y="128" text-anchor="middle">Read()</text>
+        <text class="label hi" x="340" y="148" text-anchor="middle">Edit()</text>
+        <text class="label" x="120" y="248" text-anchor="middle">Bash()</text>
+        <text class="label hi" x="380" y="298" text-anchor="middle">Write()</text>
+        <text class="label" x="200" y="368" text-anchor="middle">Session</text>
+        <text class="label hi" x="330" y="388" text-anchor="middle">Prompt</text>
+      </svg>
     </div>
   </div>
 </header>
 
-<!-- ═══════════════════════════════════════════════════════════════ THE LIFECYCLE -->
+<!-- ═══════════════════════════════════════════════════════════════ §01 LIFECYCLE -->
 <section class="section">
   <div class="wrap">
     <div class="section-head">
-      <p class="section-num reveal">01 · <span>The lifecycle</span></p>
+      <div class="section-num reveal">
+        <span class="badge"><span class="badge-dot"></span>01 · lifecycle</span>
+        <span class="count">four hook events · fire order deterministic</span>
+      </div>
       <div>
-        <h2 class="reveal d1">Four events fire in order.<br>Your agent never sees the seams.</h2>
-        <p class="section-blurb reveal d2">From the moment you press Enter to the moment Claude writes back, engram is watching four Claude Code lifecycle events. Three of them inject context; one just takes notes. Read left to right.</p>
+        <h2 class="reveal d1">Four hook events.<br><em>Seven</em> handlers. <span class="soft">One dispatcher.</span></h2>
+        <p class="section-blurb reveal d2">Claude Code dispatches to each hook via <code>engram intercept</code>, piping the raw JSON payload to stdin. Handlers write a JSON response to stdout and exit <strong>0</strong>. Three of the four inject context into your session; the fourth takes notes. Nothing ever blocks the tool call.</p>
       </div>
     </div>
-  </div>
 
-  <div class="wrap">
-    <div class="timeline">
+    <div class="lifecycle">
 
       <article class="event reveal d1">
-        <span class="event-num">fires first</span>
-        <span class="event-order">01</span>
-        <h3>SessionStart</h3>
-        <h4>A project brief lands before you type a word.</h4>
-        <p>When Claude Code opens in an <strong>engram-initialized project</strong>, the Sentinel reads <code>.git/HEAD</code> and queries the graph for god nodes, stats, and top landmines. It composes a ~500-token project brief and hands it to Claude as <code>additionalContext</code>.</p>
-        <p><strong>Source guard:</strong> fires on <code>startup · clear · compact</code>. Resume is passthrough so context isn&rsquo;t double-injected.</p>
-        <span class="impact">replaces ~4 exploration reads · ≈ −5,000 tok</span>
+        <div class="event-head">
+          <span class="seq">HOOK_01</span>
+          <span>fires on session boot</span>
+        </div>
+        <div class="event-body">
+          <div class="kind">SessionStart</div>
+          <h3>Project brief injection</h3>
+          <p>engram composes a ~500-token brief — graph stats, top god nodes, recent landmines, and the current git branch from <code>.git/HEAD</code> — and delivers it to Claude as <code>additionalContext</code> before the session sees any tool calls.</p>
+          <p>Fires on <strong>startup</strong>, <strong>clear</strong>, <strong>compact</strong>. On <strong>resume</strong> it passes through so context isn&rsquo;t double-injected.</p>
+          <span class="impact">replaces ~4 exploration reads · −5,000 tok</span>
+        </div>
       </article>
 
       <article class="event reveal d2">
-        <span class="event-num">fires on every prompt</span>
-        <span class="event-order">02</span>
-        <h3>UserPromptSubmit</h3>
-        <h4>Your prompt is pre-queried against the graph.</h4>
-        <p>Keywords are extracted (≥3 chars, non-stopword). If there are ≥2 significant terms AND the graph returns ≥3 matching nodes, engram pre-loads the relevant subgraph as <code>additionalContext</code>. Claude starts reasoning with structure already in hand.</p>
-        <p><strong>Privacy invariant:</strong> raw prompt text is never written to the hook log. Only the decision (injected / skipped) is recorded. Asserted in tests.</p>
-        <span class="impact">prevents ~1.5 reads per prompt · ≈ −8,000 tok</span>
+        <div class="event-head">
+          <span class="seq">HOOK_02</span>
+          <span>fires on every prompt</span>
+        </div>
+        <div class="event-body">
+          <div class="kind">UserPromptSubmit</div>
+          <h3>Keyword-gated pre-query</h3>
+          <p>Significant terms (≥3 chars, non-stopword) are extracted from the prompt. If there are ≥2 terms and the graph returns ≥3 matches, engram injects the relevant subgraph before Claude begins reasoning.</p>
+          <p><strong>Privacy invariant:</strong> raw prompt text is never written to any log. Only the decision lands in <code>hook-log.jsonl</code>.</p>
+          <span class="impact">prevents ~1.5 reads per prompt · −8,000 tok</span>
+        </div>
       </article>
 
       <article class="event reveal d3">
-        <span class="event-num">fires on every tool call</span>
-        <span class="event-order">03</span>
-        <h3>PreToolUse</h3>
-        <h4>Read, Edit, Write, and Bash are intercepted.</h4>
-        <p><strong>Read:</strong> deny + reason with structural summary. File is never actually read — the summary arrives as a system-reminder containing the graph view. <strong>Edit/Write:</strong> allow + landmine warnings (never blocks). <strong>Bash:</strong> strict parser for <code>cat/head/tail</code> single-file invocations delegates to the Read handler.</p>
-        <p><strong>The money path.</strong> 60% hit rate on mature projects. This is where 18,000 of the 42,500 tokens come from.</p>
-        <span class="impact">replaces full reads · ≈ −18,000 tok</span>
+        <div class="event-head">
+          <span class="seq">HOOK_03</span>
+          <span>fires on every tool call</span>
+        </div>
+        <div class="event-body">
+          <div class="kind">PreToolUse</div>
+          <h3>Read · Edit · Write · Bash</h3>
+          <p><strong>Read:</strong> deny + reason with graph summary. File never actually read. <strong>Edit/Write:</strong> allow + additionalContext with landmine warnings — never blocks. <strong>Bash:</strong> strict parser for single-file <code>cat/head/tail</code> delegates to Read.</p>
+          <p>The <em>money path</em>. 60% hit rate on mature projects. Bulk of the savings.</p>
+          <span class="impact">replaces full reads · −18,000 tok</span>
+        </div>
       </article>
 
       <article class="event reveal d4">
-        <span class="event-num">fires on every completion</span>
-        <span class="event-order">04</span>
-        <h3>PostToolUse</h3>
-        <h4>Pure observer — logs, never injects.</h4>
-        <p>After the tool runs, the Sentinel records tool name, file path, output size, success flag, and the PreToolUse decision to <code>.engram/hook-log.jsonl</code>. The log is append-only with 10&thinsp;MB rotation and atomic writes on POSIX.</p>
-        <p><strong>Why observer only?</strong> v0.3.0 produces the data; v0.3.1 will use it to self-tune the confidence threshold, mistake boost, and coverage ceiling. Never modifies tool output.</p>
-        <span class="impact">no direct savings · enables self-tuning</span>
+        <div class="event-head">
+          <span class="seq">HOOK_04</span>
+          <span>fires on every completion</span>
+        </div>
+        <div class="event-body">
+          <div class="kind">PostToolUse</div>
+          <h3>Pure observer</h3>
+          <p>After the tool runs, the Sentinel logs tool name, file path, output size, success flag, and the PreToolUse decision to <code>.engram/hook-log.jsonl</code>. Append-only, atomic, 10 MB rotation.</p>
+          <p>Never injects. Never modifies tool output. Produces the data v0.3.1 will use for self-tuning.</p>
+          <span class="impact">no direct savings · enables auto-tuning</span>
+        </div>
       </article>
 
     </div>
   </div>
 </section>
 
-<!-- ═══════════════════════════════════════════════════════════════ THE DECISION TREE -->
+<!-- ═══════════════════════════════════════════════════════════════ §02 DECISION TREE -->
 <section class="section">
   <div class="wrap">
     <div class="section-head">
-      <p class="section-num reveal">02 · <span>The money path, zoomed in</span></p>
+      <div class="section-num reveal">
+        <span class="badge"><span class="badge-dot"></span>02 · the money path</span>
+        <span class="count">nine checks · one deny</span>
+      </div>
       <div>
-        <h2 class="reveal d1">Every Read goes through <em>nine checks</em> before engram decides.</h2>
-        <p class="section-blurb reveal d2">The Read handler is the highest-leverage component. Nine passthrough branches guard against false-positive interceptions. The tenth branch is the one that saves tokens.</p>
+        <h2 class="reveal d1">Every Read runs <em>seven gates</em><br>before the Sentinel decides.</h2>
+        <p class="section-blurb reveal d2">The Read handler is the highest-leverage component. Seven passthrough gates guard against false-positive interceptions. The money path at the bottom is where tokens actually get saved — and it only fires when every gate clears.</p>
       </div>
     </div>
 
     <div class="money-grid">
-      <!-- Decision tree -->
-      <div class="decision reveal d1">
+
+      <div class="tree reveal d1">
+        <div class="tree-head">
+          <span class="path"><strong>src/intercept/handlers/</strong>read.ts<strong> · handleRead()</strong></span>
+          <span class="dots"><span class="live"></span><span></span><span></span></span>
+        </div>
 
         <div class="step">
-          <div class="step-marker">path <strong>1</strong></div>
+          <div class="step-n">gate<strong>1</strong></div>
           <div class="step-body">
             <h5>Validate payload shape</h5>
-            <p>tool_name is Read, file_path is a string, offset/limit are not set.</p>
-            <span class="check pass">tool_name</span><span class="check pass">file_path</span><span class="check fail">offset&gt;0 · limit&gt;0</span>
+            <p><code>tool_name</code> is Read, <code>file_path</code> is a non-empty string, <code>offset</code> and <code>limit</code> are not set — partial reads can&rsquo;t be satisfied with structural data.</p>
+            <div class="checks">
+              <span class="check pass">tool_name</span>
+              <span class="check pass">file_path</span>
+              <span class="check fail">offset · limit</span>
+            </div>
           </div>
         </div>
 
         <div class="step">
-          <div class="step-marker">path <strong>2</strong></div>
+          <div class="step-n">gate<strong>2</strong></div>
           <div class="step-body">
             <h5>Content safety</h5>
-            <p>Reject 38 binary extensions (.png .pdf .zip .wasm ...). Reject 10 secret patterns (.env, .env.*, .pem, .key, id_rsa, credentials, secrets.json).</p>
-            <span class="check fail">binary</span><span class="check fail">secret</span>
+            <p>Reject 38 binary extensions (.png .pdf .zip .wasm .so ...) and 10 secret patterns (.env, .pem, .key, id_rsa, credentials, secrets.json, .p12, .pfx, .keystore).</p>
+            <div class="checks">
+              <span class="check fail">binary</span>
+              <span class="check fail">secret</span>
+            </div>
           </div>
         </div>
 
         <div class="step">
-          <div class="step-marker">path <strong>3</strong></div>
+          <div class="step-n">gate<strong>3</strong></div>
           <div class="step-body">
-            <h5>Resolve context</h5>
-            <p>Normalize path, walk up for <code>.engram/graph.db</code>, verify the file lives inside the project root. Exempt paths in <code>node_modules</code>, <code>.git</code>, <code>.engram/cache</code>.</p>
-            <span class="check pass">project root</span><span class="check fail">outside</span><span class="check fail">node_modules</span>
+            <h5>Resolve project context</h5>
+            <p>Normalize the path, walk up for <code>.engram/graph.db</code>, verify the file lives inside the project root. Ignored zones: <code>node_modules</code>, <code>.git</code>, <code>.engram/cache</code>.</p>
+            <div class="checks">
+              <span class="check pass">project root</span>
+              <span class="check fail">outside</span>
+              <span class="check fail">node_modules</span>
+            </div>
           </div>
         </div>
 
         <div class="step">
-          <div class="step-marker">path <strong>4</strong></div>
+          <div class="step-n">gate<strong>4</strong></div>
           <div class="step-body">
             <h5>Kill switch</h5>
-            <p>If <code>.engram/hook-disabled</code> exists, passthrough immediately. Used for debugging without uninstalling.</p>
-            <span class="check fail">hook-disabled flag</span>
+            <p>If <code>.engram/hook-disabled</code> exists, every handler falls through to passthrough. For debugging without uninstalling.</p>
+            <div class="checks">
+              <span class="check fail">hook-disabled flag</span>
+            </div>
           </div>
         </div>
 
         <div class="step">
-          <div class="step-marker">path <strong>5</strong></div>
+          <div class="step-n">gate<strong>5</strong></div>
           <div class="step-body">
-            <h5>Query graph for file context</h5>
-            <p>Opens <code>.engram/graph.db</code>, filters nodes where <code>sourceFile === relPath</code>, computes <code>codeNodeCount</code> excluding file/module metadata.</p>
-            <span class="check pass">nodes found</span><span class="check fail">empty graph</span>
+            <h5>Query graph</h5>
+            <p>Open <code>.engram/graph.db</code>, filter nodes where <code>sourceFile === relPath</code>, compute <code>codeNodeCount</code> excluding file and module metadata.</p>
+            <div class="checks">
+              <span class="check pass">nodes found</span>
+              <span class="check fail">empty graph</span>
+            </div>
           </div>
         </div>
 
         <div class="step">
-          <div class="step-marker">path <strong>6</strong></div>
+          <div class="step-n">gate<strong>6</strong></div>
           <div class="step-body">
             <h5>Staleness check</h5>
-            <p>If <code>file.mtime &gt; graph.db.mtime</code>, the graph is stale for this file. Passthrough so Claude sees current contents.</p>
-            <span class="check fail">stale</span>
+            <p>If the file mtime is newer than <code>graph.db</code>, the graph is stale for this file — passthrough so Claude sees current contents. Refresh with <code>engram init</code>.</p>
+            <div class="checks">
+              <span class="check fail">file newer than graph</span>
+            </div>
           </div>
         </div>
 
         <div class="step">
-          <div class="step-marker">path <strong>7</strong></div>
+          <div class="step-n">gate<strong>7</strong></div>
           <div class="step-body">
             <h5>Confidence threshold</h5>
-            <p><code>min(codeNodeCount / 3, 1) × avgNodeConfidence</code>. Must be ≥ 0.7. Conservative — prefer passthrough over false positive.</p>
-            <span class="check pass">≥ 0.7</span><span class="check fail">&lt; 0.7</span>
+            <p><code>confidence = min(codeNodeCount / 3, 1) × avgNodeConfidence</code>. Must be ≥ 0.7. Conservative — prefer passthrough over a sparse summary that misleads Claude.</p>
+            <div class="checks">
+              <span class="check pass">≥ 0.7</span>
+              <span class="check fail">&lt; 0.7</span>
+            </div>
           </div>
         </div>
 
         <div class="step outcome">
-          <div class="step-marker">deny <strong>→</strong></div>
+          <div class="step-n">money<strong>→</strong></div>
           <div class="step-body">
-            <h5>Deny + reason with structural summary</h5>
-            <p>Render up to 600 tokens of NODE and EDGE lines sorted by degree, with an escape-hatch footer. Claude Code delivers this as a system-reminder. The file is <strong>never actually read</strong>.</p>
+            <h5>DENY · reason = structural summary</h5>
+            <p>Render up to 600 tokens of NODE and EDGE lines sorted by degree, with an escape-hatch footer telling Claude how to Read with explicit offset/limit if full lines are needed. The file is <strong>never actually read</strong>.</p>
           </div>
         </div>
-
       </div>
 
-      <!-- Example JSON response -->
-      <aside class="example-card reveal d2">
-        <header>
-          <span><span class="dot"></span>stdout — hook response</span>
-          <span>exit 0</span>
-        </header>
+      <aside class="stdout reveal d2">
+        <div class="stdout-head">
+          <span class="lbl"><span class="dot"></span>stdout · hook response</span>
+          <span class="code">exit 0</span>
+        </div>
 <pre>{
   <span class="k">"hookSpecificOutput"</span>: {
     <span class="k">"hookEventName"</span>: <span class="s">"PreToolUse"</span>,
@@ -947,196 +1437,195 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
       NODE benchmark() [function] L418
       NODE learn() [function] L182
       NODE getDbPath() [function] L21
-      NODE getStore() [function] L25
 
       Key relationships:
       EDGE core.ts --imports--&gt; query.ts
-      EDGE core.ts --imports--&gt; store.ts
       EDGE core.ts --contains--&gt; init()
       EDGE core.ts --contains--&gt; getFileContext()
 
-      Note: engram replaced a full-file
-      read with this structural view to
-      save tokens. If you need specific
-      lines, Read this file again with
-      explicit offset/limit — engram
-      passes partial reads through
-      unchanged."</span>
+      Note: engram replaced a full
+      file read with this structural
+      view to save tokens. Read with
+      explicit offset/limit if you
+      need specific lines."</span>
   }
 }</pre>
-        <div class="tokens">
-          <span class="before">raw read: ~4,169 tok</span>
-          <span class="arrow">→</span>
-          <span class="after">summary: ~300 tok</span>
+        <div class="stdout-foot">
+          <span class="before">raw · 4,169 tok</span>
+          <span class="arrow">─→</span>
+          <span class="after">summary · 300 tok</span>
         </div>
       </aside>
+
     </div>
   </div>
 </section>
 
-<!-- ═══════════════════════════════════════════════════════════════ ECOSYSTEM SUBSTRATE -->
+<!-- ═══════════════════════════════════════════════════════════════ §03 SUBSTRATE (GENERIC) -->
 <section class="section">
   <div class="wrap">
     <div class="section-head">
-      <p class="section-num reveal">03 · <span>The substrate</span></p>
+      <div class="section-num reveal">
+        <span class="badge"><span class="badge-dot"></span>03 · what it touches</span>
+        <span class="count">six surfaces · one owned</span>
+      </div>
       <div>
-        <h2 class="reveal d1">Six parallel layers feed the <em>same</em> session.</h2>
-        <p class="section-blurb reveal d2">engram is one of six persistence layers your Claude Code session leans on. Each one fills a different gap. The Sentinel is the newest; the others have been running for months.</p>
+        <h2 class="reveal d1">Six surfaces engram reads.<br><em>One</em> it owns.</h2>
+        <p class="section-blurb reveal d2">The Sentinel is purely additive. It consumes signals from surfaces you already have — git history, existing hooks, rule files — and writes to exactly one place it owns: the local graph database. Every other tool in your stack runs untouched.</p>
       </div>
     </div>
 
     <div class="substrate">
 
       <div class="layer reveal d1">
-        <span class="tag">layer 01</span>
-        <h4>engram graph</h4>
-        <p class="meta">.engram/graph.db · SQLite</p>
-        <p>Structural code knowledge. AST miner (10 languages, zero LLM cost), git miner (co-change, hot files), session miner (decisions, mistakes). <span class="badge">v0.3 sentinel</span></p>
+        <div class="path-label">.engram/graph.db</div>
+        <span class="mode owned">owned</span>
+        <h4>The graph</h4>
+        <p>Local SQLite file, mined by engram&rsquo;s <strong>AST miner</strong> (10 languages, zero LLM cost), <strong>git miner</strong> (co-change patterns), and <strong>session miner</strong> (<code>bug:</code>/<code>fix:</code> lines). One file per project, fully portable. The only thing engram writes outside the marker blocks in your rules files.</p>
       </div>
 
       <div class="layer reveal d2">
-        <span class="tag">layer 02</span>
-        <h4>MemPalace</h4>
-        <p class="meta">~/.mempalace · ChromaDB + SQLite KG</p>
-        <p>Semantic memory across 8,646 drawers. Mined from vault, projects, rules, agent memory. Hourly miner + real-time fswatch. <span class="badge">always on</span></p>
+        <div class="path-label">CLAUDE.md · .cursorrules · AGENTS.md</div>
+        <span class="mode write">write</span>
+        <h4>Your rules files</h4>
+        <p>Hand-written project rules in your repo root are scanned by the session miner for decisions, patterns, and mistakes. <code>engram gen</code> writes a summary INTO the file between marker blocks — anything above or below is preserved verbatim.</p>
       </div>
 
       <div class="layer reveal d3">
-        <span class="tag">layer 03</span>
-        <h4>Rule files</h4>
-        <p class="meta">~/.claude/rules/ · 9 files</p>
-        <p>brain-os, coding-style, context-rules, failure-playbook, hooks, super-agents, agent-memory, mcp-cli, unified-memory. Loaded every session.</p>
+        <div class="path-label">.git/ · .git/HEAD · git log</div>
+        <span class="mode read">read</span>
+        <h4>Your git history</h4>
+        <p>The git miner reads <code>git log</code> for co-change patterns and hot files. The SessionStart hook reads <code>.git/HEAD</code> for the current branch name when composing the project brief. Pure reads — no LFS touched, no refs modified.</p>
       </div>
 
       <div class="layer reveal d4">
-        <span class="tag">layer 04</span>
-        <h4>Skills</h4>
-        <p class="meta">~/.claude/skills/ · 418 skills</p>
-        <p>Pattern-matched, lazy-loaded. Indexed into engram by the skills-miner as <code>concept</code> nodes with <code>triggered_by</code> edges to keyword concepts.</p>
+        <div class="path-label">.claude/settings.json · settings.local.json</div>
+        <span class="mode write">write</span>
+        <h4>Claude Code hook config</h4>
+        <p>The installer writes four entries (PreToolUse, PostToolUse, SessionStart, UserPromptSubmit) alongside whatever hooks you already have. <strong>Idempotent. Atomic. Timestamped backup</strong> before any write. Surgical uninstall preserves everything else.</p>
       </div>
 
       <div class="layer reveal d5">
-        <span class="tag">layer 05</span>
-        <h4>Agents</h4>
-        <p class="meta">~/.claude/agents/ · 101 agents</p>
-        <p>Custom + plugin + super commanders. Each spawn reads its own memory file in <code>~/vault/01-KNOWLEDGE/agent-memory/</code> before work begins.</p>
+        <div class="path-label">Any MCP server you run</div>
+        <span class="mode peer">peer</span>
+        <h4>Other MCP tools</h4>
+        <p>engram ships its own MCP server with six tools (<code>query_graph</code>, <code>god_nodes</code>, <code>graph_stats</code>, <code>shortest_path</code>, <code>benchmark</code>, <code>list_mistakes</code>) but never conflicts with other servers. Run it alone or alongside any stack you have.</p>
       </div>
 
       <div class="layer reveal d5">
-        <span class="tag">layer 06</span>
-        <h4>MCP servers</h4>
-        <p class="meta">mcp-cli wrappers (T1) · direct MCP (T4)</p>
-        <p>context7, mempalace, obsidian, render, sentry, playwright, engram, contextplus. CLI wrappers preferred — ~100 tok vs ~5K tok direct call.</p>
+        <div class="path-label">Claude Code · Cursor · aider · stdio JSON-RPC</div>
+        <span class="mode peer">host</span>
+        <h4>Your AI client</h4>
+        <p>The Sentinel hook protocol is Claude Code–specific. The CLI (<code>engram query</code>, <code>engram gen</code>) and MCP server work with anything that speaks stdio JSON-RPC. <strong>One graph, many clients.</strong></p>
       </div>
 
     </div>
   </div>
 </section>
 
-<!-- ═══════════════════════════════════════════════════════════════ REAL MEASUREMENTS -->
+<!-- ═══════════════════════════════════════════════════════════════ §04 MEASUREMENTS -->
 <section class="section">
   <div class="wrap">
     <div class="section-head">
-      <p class="section-num reveal">04 · <span>Real measurements</span></p>
+      <div class="section-num reveal">
+        <span class="badge"><span class="badge-dot"></span>04 · measurements</span>
+        <span class="count">four files · real dogfood</span>
+      </div>
       <div>
-        <h2 class="reveal d1">Not projected. <em>Measured on real engram code.</em></h2>
-        <p class="section-blurb reveal d2">Four representative files from this repo. Three intercepted, one passthrough (correctly — only one exported function, below threshold). 82&thinsp;% token reduction. 75&thinsp;% Read hit rate. Same numbers anyone can reproduce with <code>engram hook-preview</code>.</p>
+        <h2 class="reveal d1">Not projected.<br><em>Measured</em> on real engram code.</h2>
+        <p class="section-blurb reveal d2">Four representative files from this repo. Three intercepted, one passthrough (correctly — only one exported function, below the confidence threshold). <strong>82&thinsp;% token reduction · 75&thinsp;% hit rate.</strong> Reproducible by anyone with <code>engram hook-preview &lt;file&gt;</code>.</p>
       </div>
     </div>
 
     <div class="measure">
-      <table class="table reveal d1">
-        <thead>
-          <tr>
-            <th>File</th>
-            <th>Nodes</th>
-            <th class="num">Raw read</th>
-            <th class="num">Sentinel</th>
-            <th class="num">Savings</th>
-            <th>Decision</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>src/core.ts</td>
-            <td>13</td>
-            <td class="num">4,169</td>
-            <td class="num">~300</td>
-            <td class="num win">−3,869</td>
-            <td><span class="deny">DENY</span></td>
-          </tr>
-          <tr>
-            <td>src/graph/query.ts</td>
-            <td>10</td>
-            <td class="num">4,890</td>
-            <td class="num">~300</td>
-            <td class="num win">−4,590</td>
-            <td><span class="deny">DENY</span></td>
-          </tr>
-          <tr>
-            <td>src/intercept/dispatch.ts</td>
-            <td>5</td>
-            <td class="num">1,820</td>
-            <td class="num">~300</td>
-            <td class="num win">−1,520</td>
-            <td><span class="deny">DENY</span></td>
-          </tr>
-          <tr>
-            <td>src/intercept/handlers/read.ts</td>
-            <td>1</td>
-            <td class="num">1,310</td>
-            <td class="num">1,310</td>
-            <td class="num">0</td>
-            <td><span class="pass">passthrough</span></td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr>
-            <td>Totals</td>
-            <td>29</td>
-            <td class="num">12,189</td>
-            <td class="num">2,210</td>
-            <td class="num win">−9,979</td>
-            <td class="win">−82&thinsp;%</td>
-          </tr>
-        </tfoot>
-      </table>
+
+      <div class="table-wrap reveal d1">
+        <div class="table-head">
+          <span class="title">$ engram hook-preview · src/*.ts</span>
+          <span>dogfood</span>
+        </div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>file</th>
+              <th class="num">nodes</th>
+              <th class="num">raw read</th>
+              <th class="num">sentinel</th>
+              <th class="num">savings</th>
+              <th>decision</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>src/core.ts</td>
+              <td class="num">13</td>
+              <td class="num">4,169</td>
+              <td class="num">~300</td>
+              <td class="num win">−3,869</td>
+              <td class="deny">deny</td>
+            </tr>
+            <tr>
+              <td>src/graph/query.ts</td>
+              <td class="num">10</td>
+              <td class="num">4,890</td>
+              <td class="num">~300</td>
+              <td class="num win">−4,590</td>
+              <td class="deny">deny</td>
+            </tr>
+            <tr>
+              <td>src/intercept/dispatch.ts</td>
+              <td class="num">5</td>
+              <td class="num">1,820</td>
+              <td class="num">~300</td>
+              <td class="num win">−1,520</td>
+              <td class="deny">deny</td>
+            </tr>
+            <tr>
+              <td>src/intercept/handlers/read.ts</td>
+              <td class="num">1</td>
+              <td class="num">1,310</td>
+              <td class="num">1,310</td>
+              <td class="num">0</td>
+              <td class="pass">passthrough</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>totals</td>
+              <td class="num">29</td>
+              <td class="num">12,189</td>
+              <td class="num">2,210</td>
+              <td class="num win">−9,979</td>
+              <td class="win">−82&thinsp;%</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
 
       <aside class="measure-aside reveal d2">
-        <h4>What the numbers say</h4>
-        <div class="metric">
-          <dt>Session reduction</dt>
-          <dd>82<span class="sub">measured</span></dd>
-        </div>
-        <div class="metric">
-          <dt>Read hit rate</dt>
-          <dd>75<span class="sub">measured</span></dd>
-        </div>
-        <div class="metric">
-          <dt>Projected (Day 0)</dt>
-          <dd>80<span class="sub">estimated</span></dd>
-        </div>
-        <div class="metric">
-          <dt>Hook cold start</dt>
-          <dd>131<span class="sub">ms</span></dd>
-        </div>
-        <div class="metric">
-          <dt>Test suite</dt>
-          <dd>1.5<span class="sub">seconds</span></dd>
-        </div>
+        <h4>engram hook-stats</h4>
+        <div class="metric"><dt>session token reduction</dt><dd>82<span class="sub">measured</span></dd></div>
+        <div class="metric"><dt>read hit rate</dt><dd>75<span class="sub">measured</span></dd></div>
+        <div class="metric"><dt>hook cold start</dt><dd>131<span class="sub">ms</span></dd></div>
+        <div class="metric"><dt>test suite</dt><dd>1.5<span class="sub">s · 439 tests</span></dd></div>
+        <div class="metric"><dt>binary size</dt><dd>42.5<span class="sub">kb packed · 9 files</span></dd></div>
       </aside>
+
     </div>
   </div>
 </section>
 
-<!-- ═══════════════════════════════════════════════════════════════ QUICK REFERENCE -->
+<!-- ═══════════════════════════════════════════════════════════════ §05 COMMANDS -->
 <section class="section">
   <div class="wrap">
     <div class="section-head">
-      <p class="section-num reveal">05 · <span>Quick reference</span></p>
+      <div class="section-num reveal">
+        <span class="badge"><span class="badge-dot"></span>05 · quick reference</span>
+        <span class="count">eight commands</span>
+      </div>
       <div>
-        <h2 class="reveal d1">Seven commands <em>you&rsquo;ll actually use</em>.</h2>
-        <p class="section-blurb reveal d2">Everything else is a passthrough branch or a safety invariant. These seven are the surface you interact with.</p>
+        <h2 class="reveal d1">Eight commands.<br><em>The whole surface.</em></h2>
+        <p class="section-blurb reveal d2">Everything else in the code is a passthrough branch or a safety invariant. These eight are what you actually type.</p>
       </div>
     </div>
 
@@ -1144,49 +1633,49 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
 
       <div class="cmd reveal d1">
         <div class="label">install</div>
-        <code>engram install-hook</code>
-        <p>Adds the four hook entries to <code>.claude/settings.local.json</code>. Atomic. Idempotent. Backed up.</p>
+        <div class="line"><span class="c">engram</span> install-hook</div>
+        <p>Writes four hook entries to <code>.claude/settings.local.json</code>. Atomic. Idempotent. Backed up.</p>
       </div>
 
       <div class="cmd reveal d1">
         <div class="label">dry-run</div>
-        <code>engram hook-preview &lt;file&gt;</code>
+        <div class="line"><span class="c">engram</span> hook-preview</div>
         <p>Show what the Read handler <em>would</em> do for a file. Deny, allow, or passthrough — with the reason.</p>
       </div>
 
       <div class="cmd reveal d2">
         <div class="label">measure</div>
-        <code>engram hook-stats</code>
-        <p>Summarize <code>.engram/hook-log.jsonl</code>. Per-event, per-tool, per-decision breakdown. Estimated tokens saved.</p>
+        <div class="line"><span class="c">engram</span> hook-stats</div>
+        <p>Summarize <code>.engram/hook-log.jsonl</code>. Per-event, per-tool, per-decision. Token savings.</p>
       </div>
 
       <div class="cmd reveal d2">
         <div class="label">kill switch</div>
-        <code>engram hook-disable</code>
-        <p>Touch <code>.engram/hook-disabled</code>. Every handler checks it and passes through. Reversible with <code>hook-enable</code>.</p>
+        <div class="line"><span class="c">engram</span> hook-disable</div>
+        <p>Touch <code>.engram/hook-disabled</code>. Every handler checks it and passes through. Reverse with <code>hook-enable</code>.</p>
       </div>
 
       <div class="cmd reveal d3">
-        <div class="label">rebuild graph</div>
-        <code>engram init</code>
-        <p>Re-mine the project. ~40&thinsp;ms, zero LLM calls, zero tokens used. Run after structural changes.</p>
+        <div class="label">rebuild</div>
+        <div class="line"><span class="c">engram</span> init</div>
+        <p>Re-mine the project. ~40&thinsp;ms, zero LLM calls. Run after large structural changes to refresh confidence.</p>
       </div>
 
       <div class="cmd reveal d3">
-        <div class="label">explicit query</div>
-        <code>engram query &quot;...&quot;</code>
-        <p>Direct graph query. BFS with 2,000-token budget. For when the hook didn&rsquo;t catch what you needed.</p>
+        <div class="label">query</div>
+        <div class="line"><span class="c">engram</span> query "…"</div>
+        <p>Direct graph query via BFS with a 2,000-token budget. Use when the hook didn&rsquo;t catch what you needed.</p>
       </div>
 
       <div class="cmd reveal d4">
         <div class="label">rollback</div>
-        <code>engram uninstall-hook</code>
+        <div class="line"><span class="c">engram</span> uninstall-hook</div>
         <p>Surgical removal. Preserves every other hook in settings.json. Automatic backup before the write.</p>
       </div>
 
       <div class="cmd reveal d4">
         <div class="label">upgrade</div>
-        <code>npm i -g engramx@latest</code>
+        <div class="line">npm i -g <span class="c">engramx</span></div>
         <p>Pull the latest from npm. v0.3.1 will tune confidence thresholds from real hook-log data.</p>
       </div>
 
@@ -1197,17 +1686,22 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
 <!-- ═══════════════════════════════════════════════════════════════ FOOTER -->
 <footer class="wrap">
   <div>
-    <div class="version">engram <em>v0.3.0 &middot; Sentinel</em></div>
-    <p>Context as infra for your AI coding tools. Hook-based interception, zero LLM cost, zero cloud, zero native deps. Published 2026-04-11.</p>
+    <div class="version">engr<span class="a">a</span>m <small>v0.3.0 · Sentinel</small></div>
+    <p>Context as infra for your AI coding tools. Hook-based Read/Edit/Write/Bash interception, zero LLM cost, zero cloud, zero native deps. Published 2026-04-11. Apache-2.0.</p>
+    <p class="attribution">
+      Created by <a class="credit" href="https://github.com/NickCirv"><strong>Nicholas Ashkar</strong> · NickCirv</a>
+      <span class="sep">·</span>
+      Part of the <a class="credit" href="https://cirvgreen.com"><strong>cirvgreen</strong></a> ecosystem
+    </p>
   </div>
   <div class="links">
     <a href="https://www.npmjs.com/package/engramx">npm</a>
     <a href="https://github.com/NickCirv/engram">github</a>
-    <a href="https://github.com/NickCirv/engram/releases/tag/v0.3.0">release</a>
+    <a href="https://github.com/NickCirv/engram/releases/tag/v0.3.0">v0.3.0 release</a>
+    <a href="https://cirvgreen.com">cirvgreen.com</a>
   </div>
 </footer>
 
-<!-- ═══════════════════════════════════════════════════════════════ SCROLL REVEAL -->
 <script>
 (() => {
   const mm = window.matchMedia('(prefers-reduced-motion: reduce)');
