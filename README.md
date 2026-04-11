@@ -45,6 +45,13 @@ That's it. The next Claude Code session in that directory automatically:
 - **Injects a project brief at session start** (SessionStart additionalContext)
 - **Logs every decision for `engram hook-stats`** (PostToolUse observer)
 
+## Architecture Diagram
+
+An 11-page visual walkthrough of the full lifecycle — the four hook events, the Read handler's 9-branch decision tree (with a real JSON response), the six-layer ecosystem substrate, and measured numbers from engram's own code.
+
+- 📄 **[View the PDF](docs/engram-sentinel-ecosystem.pdf)** — A3 landscape, 11 pages, 1 MB. GitHub renders it inline when clicked.
+- 🌐 **[HTML source](docs/engram-sentinel-ecosystem.html)** — single self-contained file. Download raw and open in any browser for the interactive scroll-reveal version.
+
 ## The Problem
 
 Every Claude Code session burns ~52,500 tokens on things you already told the agent yesterday. Reading the same files, re-exploring the same modules, re-discovering the same patterns. Even with a great CLAUDE.md, the agent still falls back to `Read` because `Read` is what it knows.

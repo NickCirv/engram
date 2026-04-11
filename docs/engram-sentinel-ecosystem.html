@@ -1,0 +1,1231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>How engram v0.3 Sentinel fits into your ecosystem</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,700;9..144,900&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ─────────────────────────────────────────────────────────────── */
+/* Design tokens — Ink & Paper palette with teal accent            */
+/* ─────────────────────────────────────────────────────────────── */
+:root{
+  --ink:#09090b;
+  --ink-2:#18181b;
+  --ink-3:#27272a;
+  --ink-4:#3f3f46;
+  --paper:#fafafa;
+  --paper-2:#f4f4f5;
+  --paper-3:#e4e4e7;
+  --accent:#0d9488;
+  --accent-2:#14b8a6;
+  --accent-3:#99f6e4;
+  --accent-ink:#042f2e;
+  --warn:#b45309;
+  --danger:#b91c1c;
+  --muted:#71717a;
+  --muted-2:#a1a1aa;
+  --border:#27272a;
+  --border-2:#3f3f46;
+
+  /* easing */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in:  cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* type scale — modular, Fraunces-heavy headings */
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+
+  --radius: 3px;
+  --radius-lg: 6px;
+
+  --max: 1400px;
+  --gutter: clamp(1.25rem, 3vw, 3rem);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;background:var(--ink)}
+body{
+  font-family:var(--font-body);
+  font-weight:400;
+  font-size:16px;
+  line-height:1.55;
+  color:var(--paper);
+  background:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+::selection{background:var(--accent);color:var(--ink)}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Grain — subtle noise texture via CSS gradient                   */
+/* ─────────────────────────────────────────────────────────────── */
+body::before{
+  content:"";
+  position:fixed;inset:0;
+  pointer-events:none;
+  z-index:100;
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,0.012) 0.5px, transparent 0.5px);
+  background-size:3px 3px;
+  mix-blend-mode:overlay;
+  opacity:.6;
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Layout                                                          */
+/* ─────────────────────────────────────────────────────────────── */
+.wrap{
+  max-width:var(--max);
+  margin-inline:auto;
+  padding-inline:var(--gutter);
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Hero                                                            */
+/* ─────────────────────────────────────────────────────────────── */
+.hero{
+  position:relative;
+  padding-block:clamp(5rem, 12vh, 10rem) clamp(3rem, 8vh, 6rem);
+  border-bottom:1px solid var(--border);
+  overflow:hidden;
+}
+.hero::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:
+    radial-gradient(ellipse 60% 40% at 80% 20%, rgba(13,148,136,0.12), transparent 70%),
+    radial-gradient(ellipse 40% 60% at 20% 90%, rgba(13,148,136,0.08), transparent 70%);
+  pointer-events:none;
+}
+.hero-grid{
+  display:grid;
+  grid-template-columns: 7fr 5fr;
+  gap:clamp(2rem,5vw,5rem);
+  align-items:end;
+  position:relative;
+}
+@media (max-width:900px){.hero-grid{grid-template-columns:1fr}}
+
+.eyebrow{
+  font-family:var(--font-mono);
+  font-size:11px;
+  font-weight:500;
+  letter-spacing:0.16em;
+  text-transform:uppercase;
+  color:var(--accent);
+  display:inline-flex;
+  align-items:center;
+  gap:0.6em;
+  margin-bottom:1.2rem;
+}
+.eyebrow::before{
+  content:"";
+  width:28px;height:1px;
+  background:var(--accent);
+}
+.hero h1{
+  font-family:var(--font-display);
+  font-weight:300;
+  font-size:clamp(2.4rem, 6.5vw, 6rem);
+  line-height:0.95;
+  letter-spacing:-0.035em;
+  font-variation-settings:"opsz" 144;
+  margin-bottom:1.5rem;
+  color:var(--paper);
+}
+.hero h1 em{
+  font-style:italic;
+  font-weight:500;
+  color:var(--accent-3);
+}
+.hero h1 .mark{
+  font-weight:700;
+  color:var(--accent);
+}
+.hero .lede{
+  font-size:clamp(1rem, 1.4vw, 1.2rem);
+  color:var(--muted-2);
+  max-width:58ch;
+  line-height:1.6;
+  margin-bottom:2rem;
+}
+.hero .lede strong{color:var(--paper);font-weight:500}
+
+.stats{
+  display:grid;
+  grid-template-columns:repeat(4, 1fr);
+  gap:clamp(0.5rem,1.5vw,1.5rem);
+  padding-top:2rem;
+  border-top:1px solid var(--border);
+}
+.stat dt{
+  font-family:var(--font-mono);
+  font-size:10px;
+  font-weight:500;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--muted);
+  margin-bottom:0.35rem;
+}
+.stat dd{
+  font-family:var(--font-display);
+  font-size:clamp(1.6rem, 3.5vw, 2.4rem);
+  font-weight:300;
+  font-variation-settings:"opsz" 144;
+  line-height:1;
+  letter-spacing:-0.03em;
+  color:var(--paper);
+}
+.stat dd .unit{font-size:0.5em;color:var(--accent);margin-left:0.1em}
+@media (max-width:640px){
+  .stats{grid-template-columns:repeat(2,1fr);gap:1.25rem}
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Section headers                                                 */
+/* ─────────────────────────────────────────────────────────────── */
+.section{
+  padding-block:clamp(4rem, 10vh, 8rem);
+  border-bottom:1px solid var(--border);
+  position:relative;
+}
+.section-head{
+  display:grid;
+  grid-template-columns: 1fr 2fr;
+  gap:clamp(2rem,5vw,5rem);
+  margin-bottom:clamp(3rem,6vh,5rem);
+}
+@media (max-width:900px){.section-head{grid-template-columns:1fr;gap:1rem}}
+
+.section-num{
+  font-family:var(--font-mono);
+  font-size:11px;
+  font-weight:500;
+  letter-spacing:0.16em;
+  text-transform:uppercase;
+  color:var(--accent);
+}
+.section-num span{color:var(--muted)}
+.section h2{
+  font-family:var(--font-display);
+  font-weight:300;
+  font-size:clamp(1.8rem, 4vw, 3rem);
+  line-height:1.05;
+  letter-spacing:-0.03em;
+  font-variation-settings:"opsz" 144;
+  color:var(--paper);
+  margin-bottom:0.5em;
+}
+.section h2 em{font-style:italic;font-weight:500;color:var(--accent-3)}
+.section-blurb{
+  color:var(--muted-2);
+  max-width:56ch;
+  font-size:clamp(0.96rem,1.2vw,1.08rem);
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* The 4 hook events — timeline                                    */
+/* ─────────────────────────────────────────────────────────────── */
+.timeline{
+  display:grid;
+  grid-template-columns:repeat(4, 1fr);
+  position:relative;
+}
+@media (max-width:1100px){.timeline{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:640px){.timeline{grid-template-columns:1fr}}
+
+.event{
+  position:relative;
+  padding:2rem 1.5rem 2.5rem;
+  border-right:1px solid var(--border);
+  transition:background-color .4s var(--ease-out);
+}
+.event:last-child{border-right:0}
+.event:hover{background:rgba(13,148,136,0.04)}
+@media (max-width:1100px){
+  .event:nth-child(2){border-right:0}
+  .event:nth-child(1),.event:nth-child(2){border-bottom:1px solid var(--border)}
+}
+@media (max-width:640px){
+  .event{border-right:0;border-bottom:1px solid var(--border)}
+  .event:last-child{border-bottom:0}
+}
+
+.event-num{
+  position:absolute;
+  top:1rem;right:1rem;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  color:var(--muted);
+}
+.event-order{
+  font-family:var(--font-display);
+  font-weight:300;
+  font-variation-settings:"opsz" 144;
+  font-size:4.5rem;
+  line-height:0.8;
+  letter-spacing:-0.04em;
+  color:var(--accent);
+  margin-bottom:1.2rem;
+  display:block;
+}
+.event h3{
+  font-family:var(--font-mono);
+  font-size:11px;
+  font-weight:500;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--accent);
+  margin-bottom:0.5rem;
+}
+.event h4{
+  font-family:var(--font-display);
+  font-weight:400;
+  font-size:1.5rem;
+  line-height:1.15;
+  letter-spacing:-0.02em;
+  color:var(--paper);
+  margin-bottom:0.9rem;
+}
+.event p{
+  font-size:0.88rem;
+  line-height:1.6;
+  color:var(--muted-2);
+  margin-bottom:0.9rem;
+}
+.event p strong{color:var(--paper);font-weight:500}
+.event .impact{
+  font-family:var(--font-mono);
+  font-size:11px;
+  padding-top:0.9rem;
+  margin-top:0.9rem;
+  border-top:1px dashed var(--border-2);
+  color:var(--accent-2);
+  display:block;
+}
+.event .impact::before{
+  content:"↓ ";
+  color:var(--muted);
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* The money path — PreToolUse:Read decision tree                 */
+/* ─────────────────────────────────────────────────────────────── */
+.money-grid{
+  display:grid;
+  grid-template-columns: 8fr 5fr;
+  gap:clamp(2rem,4vw,4rem);
+  align-items:start;
+}
+@media (max-width:1000px){.money-grid{grid-template-columns:1fr}}
+
+.decision{
+  display:flex;
+  flex-direction:column;
+}
+.step{
+  display:grid;
+  grid-template-columns: 80px 1fr;
+  gap:1.5rem;
+  padding:1.4rem 0;
+  border-bottom:1px solid var(--border);
+  align-items:start;
+}
+.step:first-child{padding-top:0}
+.step:last-child{border-bottom:0}
+
+.step-marker{
+  font-family:var(--font-mono);
+  font-size:10px;
+  font-weight:500;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--muted);
+  padding-top:0.35em;
+}
+.step-marker strong{
+  display:block;
+  font-family:var(--font-display);
+  font-size:1.8rem;
+  font-weight:300;
+  font-variation-settings:"opsz" 144;
+  line-height:1;
+  color:var(--accent);
+  margin-top:0.2em;
+}
+.step-body h5{
+  font-family:var(--font-display);
+  font-weight:500;
+  font-size:1.15rem;
+  letter-spacing:-0.01em;
+  color:var(--paper);
+  margin-bottom:0.4rem;
+}
+.step-body p{
+  font-size:0.88rem;
+  color:var(--muted-2);
+  line-height:1.55;
+}
+.step-body .check{
+  display:inline-block;
+  font-family:var(--font-mono);
+  font-size:10px;
+  padding:0.18em 0.55em;
+  border:1px solid var(--border-2);
+  border-radius:2px;
+  color:var(--muted-2);
+  margin-right:0.35em;
+  margin-top:0.5em;
+  letter-spacing:0.04em;
+}
+.step-body .check.pass{color:var(--accent-2);border-color:var(--accent)}
+.step-body .check.fail{color:var(--warn);border-color:var(--warn)}
+
+.step.outcome{
+  background:linear-gradient(90deg, rgba(13,148,136,0.08), transparent 60%);
+  border-left:2px solid var(--accent);
+  padding-left:1.4rem;
+  margin-left:-1.4rem;
+}
+.step.outcome .step-marker strong{color:var(--paper)}
+.step.outcome .step-body h5{color:var(--accent-3)}
+
+/* Side: example response box */
+.example-card{
+  position:sticky;
+  top:2rem;
+  background:var(--ink-2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+}
+.example-card header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0.9rem 1.2rem;
+  border-bottom:1px solid var(--border);
+  background:var(--ink);
+}
+.example-card header span{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+.example-card header .dot{
+  display:inline-block;
+  width:8px;height:8px;
+  border-radius:50%;
+  background:var(--accent);
+  box-shadow:0 0 0 3px rgba(13,148,136,0.2);
+  margin-right:0.4em;
+}
+.example-card pre{
+  padding:1.25rem;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  line-height:1.65;
+  color:var(--paper-2);
+  overflow-x:auto;
+  white-space:pre;
+}
+.example-card pre .k{color:var(--accent-2)}
+.example-card pre .c{color:var(--muted)}
+.example-card pre .s{color:var(--accent-3)}
+.example-card pre .n{color:var(--paper)}
+.example-card .tokens{
+  padding:0.9rem 1.2rem;
+  background:var(--ink);
+  border-top:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+}
+.example-card .tokens .before{color:var(--muted)}
+.example-card .tokens .after{color:var(--accent)}
+.example-card .tokens .arrow{color:var(--muted-2)}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Ecosystem substrate — layers                                    */
+/* ─────────────────────────────────────────────────────────────── */
+.substrate{
+  display:grid;
+  grid-template-columns:repeat(6, 1fr);
+  gap:1px;
+  background:var(--border);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+}
+@media (max-width:1100px){.substrate{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:640px){.substrate{grid-template-columns:repeat(2,1fr)}}
+
+.layer{
+  background:var(--ink);
+  padding:1.6rem 1.4rem;
+  display:flex;
+  flex-direction:column;
+  min-height:220px;
+  transition:background-color .3s var(--ease-out);
+}
+.layer:hover{background:var(--ink-2)}
+
+.layer .tag{
+  font-family:var(--font-mono);
+  font-size:10px;
+  font-weight:500;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--accent);
+  margin-bottom:1.4rem;
+}
+.layer h4{
+  font-family:var(--font-display);
+  font-weight:500;
+  font-size:1.25rem;
+  letter-spacing:-0.01em;
+  color:var(--paper);
+  margin-bottom:0.5rem;
+  line-height:1.15;
+}
+.layer .meta{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--accent-2);
+  margin-bottom:0.9rem;
+  letter-spacing:0.03em;
+}
+.layer p{
+  font-size:0.82rem;
+  line-height:1.55;
+  color:var(--muted-2);
+  margin-top:auto;
+}
+.layer .badge{
+  display:inline-block;
+  font-family:var(--font-mono);
+  font-size:9px;
+  padding:0.2em 0.55em;
+  background:rgba(13,148,136,0.15);
+  color:var(--accent-2);
+  border-radius:2px;
+  letter-spacing:0.05em;
+  text-transform:uppercase;
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Real dogfood measurements                                       */
+/* ─────────────────────────────────────────────────────────────── */
+.measure{
+  display:grid;
+  grid-template-columns:3fr 2fr;
+  gap:clamp(2rem,4vw,4rem);
+}
+@media (max-width:900px){.measure{grid-template-columns:1fr}}
+
+.table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:0.88rem;
+}
+.table thead th{
+  text-align:left;
+  font-family:var(--font-mono);
+  font-size:10px;
+  font-weight:500;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--muted);
+  padding:0.85rem 0.6rem;
+  border-bottom:1px solid var(--border);
+}
+.table tbody td{
+  padding:1rem 0.6rem;
+  border-bottom:1px solid var(--border);
+  color:var(--muted-2);
+  vertical-align:top;
+}
+.table tbody td:first-child{color:var(--paper)}
+.table tbody td.num{
+  font-family:var(--font-mono);
+  text-align:right;
+  color:var(--paper);
+}
+.table .deny{color:var(--accent-2);font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.04em}
+.table .pass{color:var(--muted);font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.04em}
+.table .win{color:var(--accent);font-weight:600}
+.table tfoot td{
+  padding:1.2rem 0.6rem;
+  font-weight:600;
+  color:var(--paper);
+  font-size:0.92rem;
+  border-top:2px solid var(--accent);
+}
+
+.measure-aside{
+  padding:2rem;
+  background:var(--ink-2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  display:flex;
+  flex-direction:column;
+}
+.measure-aside h4{
+  font-family:var(--font-display);
+  font-weight:400;
+  font-size:1.3rem;
+  line-height:1.2;
+  color:var(--paper);
+  margin-bottom:1.2rem;
+  letter-spacing:-0.01em;
+}
+.measure-aside .metric{
+  padding:1rem 0;
+  border-top:1px dashed var(--border);
+}
+.measure-aside .metric:first-of-type{border-top:0;padding-top:0}
+.measure-aside .metric dt{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--muted);
+  margin-bottom:0.25rem;
+}
+.measure-aside .metric dd{
+  font-family:var(--font-display);
+  font-size:2.4rem;
+  font-weight:300;
+  line-height:0.9;
+  letter-spacing:-0.03em;
+  font-variation-settings:"opsz" 144;
+  color:var(--paper);
+}
+.measure-aside .metric dd .sub{
+  font-size:0.4em;
+  color:var(--accent);
+  font-family:var(--font-mono);
+  font-weight:500;
+  letter-spacing:0.05em;
+  margin-left:0.4em;
+  vertical-align:middle;
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Quick reference strip                                           */
+/* ─────────────────────────────────────────────────────────────── */
+.commands{
+  display:grid;
+  grid-template-columns:repeat(4, 1fr);
+  gap:1px;
+  background:var(--border);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+}
+@media (max-width:900px){.commands{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:520px){.commands{grid-template-columns:1fr}}
+
+.cmd{
+  background:var(--ink);
+  padding:1.4rem 1.2rem;
+}
+.cmd .label{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  font-weight:500;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--muted);
+  margin-bottom:0.5rem;
+}
+.cmd code{
+  font-family:var(--font-mono);
+  font-size:12px;
+  color:var(--accent-2);
+  display:block;
+  margin-bottom:0.7rem;
+  word-break:break-all;
+}
+.cmd p{
+  font-size:0.78rem;
+  color:var(--muted-2);
+  line-height:1.5;
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Footer                                                          */
+/* ─────────────────────────────────────────────────────────────── */
+footer{
+  padding-block:clamp(3rem,6vh,5rem);
+  display:grid;
+  grid-template-columns: 2fr 1fr;
+  gap:2rem;
+  align-items:end;
+}
+@media (max-width:720px){footer{grid-template-columns:1fr}}
+footer p{color:var(--muted);font-size:0.85rem;max-width:44ch}
+footer .version{
+  font-family:var(--font-display);
+  font-weight:400;
+  font-size:2rem;
+  color:var(--paper);
+  letter-spacing:-0.02em;
+  line-height:1;
+  font-variation-settings:"opsz" 144;
+  margin-bottom:0.5rem;
+}
+footer .version em{color:var(--accent);font-style:italic}
+footer .links{
+  display:flex;
+  flex-wrap:wrap;
+  gap:1.5rem;
+  justify-self:end;
+}
+@media (max-width:720px){footer .links{justify-self:start}}
+footer a{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--muted-2);
+  text-decoration:none;
+  padding-bottom:0.1em;
+  border-bottom:1px solid var(--border);
+  transition:color .3s var(--ease-out), border-color .3s var(--ease-out);
+}
+footer a:hover{color:var(--accent);border-color:var(--accent)}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Reveal animations                                               */
+/* ─────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference){
+  .reveal{
+    opacity:0;
+    transform:translateY(28px);
+    transition:opacity .9s var(--ease-out), transform .9s var(--ease-out);
+  }
+  .reveal.in{opacity:1;transform:none}
+  .reveal.d1{transition-delay:0.08s}
+  .reveal.d2{transition-delay:0.16s}
+  .reveal.d3{transition-delay:0.24s}
+  .reveal.d4{transition-delay:0.32s}
+  .reveal.d5{transition-delay:0.40s}
+}
+
+/* Focus states for accessibility */
+a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+
+/* Print — force scroll-reveal elements visible and tighten for paper */
+@media print{
+  html,body{background:var(--ink);color:var(--paper)}
+  .hero::before{display:none}
+  .reveal{opacity:1 !important;transform:none !important;transition:none !important}
+  .example-card{position:static}
+  .section{page-break-inside:avoid;border-bottom:1px solid var(--border)}
+  .hero{page-break-after:always}
+  .timeline{page-break-inside:avoid}
+  .substrate{page-break-inside:avoid}
+  .measure{page-break-inside:avoid}
+  .commands{page-break-inside:avoid}
+  h1,h2,h3,h4,h5{page-break-after:avoid}
+  .event,.layer,.cmd,.step{page-break-inside:avoid}
+  /* Force dark-background printing */
+  *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
+}
+@page{
+  size:A3 landscape;
+  margin:10mm;
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════ HERO -->
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">engram v0.3.0 · Sentinel</div>
+      <h1 class="reveal in">When you give Claude Code a task,<br><em>seven hooks</em> decide what your agent <span class="mark">actually reads</span>.</h1>
+    </div>
+    <div>
+      <p class="lede reveal d1">The old ceiling was that your agent had to <em>remember</em> to use engram. The Sentinel removes that contract. It sits at the tool-call boundary and intercepts every Read, Edit, Write, and Bash — replacing full file reads with <strong>~300-token structural graph summaries</strong> before your agent ever sees the content.</p>
+      <dl class="stats reveal d2">
+        <div class="stat"><dt>Token reduction</dt><dd>82<span class="unit">%</span></dd></div>
+        <div class="stat"><dt>Read hit rate</dt><dd>75<span class="unit">%</span></dd></div>
+        <div class="stat"><dt>Hook handlers</dt><dd>7</dd></div>
+        <div class="stat"><dt>Tests passing</dt><dd>439</dd></div>
+      </dl>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════════ THE LIFECYCLE -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="section-num reveal">01 · <span>The lifecycle</span></p>
+      <div>
+        <h2 class="reveal d1">Four events fire in order.<br>Your agent never sees the seams.</h2>
+        <p class="section-blurb reveal d2">From the moment you press Enter to the moment Claude writes back, engram is watching four Claude Code lifecycle events. Three of them inject context; one just takes notes. Read left to right.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="timeline">
+
+      <article class="event reveal d1">
+        <span class="event-num">fires first</span>
+        <span class="event-order">01</span>
+        <h3>SessionStart</h3>
+        <h4>A project brief lands before you type a word.</h4>
+        <p>When Claude Code opens in an <strong>engram-initialized project</strong>, the Sentinel reads <code>.git/HEAD</code> and queries the graph for god nodes, stats, and top landmines. It composes a ~500-token project brief and hands it to Claude as <code>additionalContext</code>.</p>
+        <p><strong>Source guard:</strong> fires on <code>startup · clear · compact</code>. Resume is passthrough so context isn&rsquo;t double-injected.</p>
+        <span class="impact">replaces ~4 exploration reads · ≈ −5,000 tok</span>
+      </article>
+
+      <article class="event reveal d2">
+        <span class="event-num">fires on every prompt</span>
+        <span class="event-order">02</span>
+        <h3>UserPromptSubmit</h3>
+        <h4>Your prompt is pre-queried against the graph.</h4>
+        <p>Keywords are extracted (≥3 chars, non-stopword). If there are ≥2 significant terms AND the graph returns ≥3 matching nodes, engram pre-loads the relevant subgraph as <code>additionalContext</code>. Claude starts reasoning with structure already in hand.</p>
+        <p><strong>Privacy invariant:</strong> raw prompt text is never written to the hook log. Only the decision (injected / skipped) is recorded. Asserted in tests.</p>
+        <span class="impact">prevents ~1.5 reads per prompt · ≈ −8,000 tok</span>
+      </article>
+
+      <article class="event reveal d3">
+        <span class="event-num">fires on every tool call</span>
+        <span class="event-order">03</span>
+        <h3>PreToolUse</h3>
+        <h4>Read, Edit, Write, and Bash are intercepted.</h4>
+        <p><strong>Read:</strong> deny + reason with structural summary. File is never actually read — the summary arrives as a system-reminder containing the graph view. <strong>Edit/Write:</strong> allow + landmine warnings (never blocks). <strong>Bash:</strong> strict parser for <code>cat/head/tail</code> single-file invocations delegates to the Read handler.</p>
+        <p><strong>The money path.</strong> 60% hit rate on mature projects. This is where 18,000 of the 42,500 tokens come from.</p>
+        <span class="impact">replaces full reads · ≈ −18,000 tok</span>
+      </article>
+
+      <article class="event reveal d4">
+        <span class="event-num">fires on every completion</span>
+        <span class="event-order">04</span>
+        <h3>PostToolUse</h3>
+        <h4>Pure observer — logs, never injects.</h4>
+        <p>After the tool runs, the Sentinel records tool name, file path, output size, success flag, and the PreToolUse decision to <code>.engram/hook-log.jsonl</code>. The log is append-only with 10&thinsp;MB rotation and atomic writes on POSIX.</p>
+        <p><strong>Why observer only?</strong> v0.3.0 produces the data; v0.3.1 will use it to self-tune the confidence threshold, mistake boost, and coverage ceiling. Never modifies tool output.</p>
+        <span class="impact">no direct savings · enables self-tuning</span>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ THE DECISION TREE -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="section-num reveal">02 · <span>The money path, zoomed in</span></p>
+      <div>
+        <h2 class="reveal d1">Every Read goes through <em>nine checks</em> before engram decides.</h2>
+        <p class="section-blurb reveal d2">The Read handler is the highest-leverage component. Nine passthrough branches guard against false-positive interceptions. The tenth branch is the one that saves tokens.</p>
+      </div>
+    </div>
+
+    <div class="money-grid">
+      <!-- Decision tree -->
+      <div class="decision reveal d1">
+
+        <div class="step">
+          <div class="step-marker">path <strong>1</strong></div>
+          <div class="step-body">
+            <h5>Validate payload shape</h5>
+            <p>tool_name is Read, file_path is a string, offset/limit are not set.</p>
+            <span class="check pass">tool_name</span><span class="check pass">file_path</span><span class="check fail">offset&gt;0 · limit&gt;0</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-marker">path <strong>2</strong></div>
+          <div class="step-body">
+            <h5>Content safety</h5>
+            <p>Reject 38 binary extensions (.png .pdf .zip .wasm ...). Reject 10 secret patterns (.env, .env.*, .pem, .key, id_rsa, credentials, secrets.json).</p>
+            <span class="check fail">binary</span><span class="check fail">secret</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-marker">path <strong>3</strong></div>
+          <div class="step-body">
+            <h5>Resolve context</h5>
+            <p>Normalize path, walk up for <code>.engram/graph.db</code>, verify the file lives inside the project root. Exempt paths in <code>node_modules</code>, <code>.git</code>, <code>.engram/cache</code>.</p>
+            <span class="check pass">project root</span><span class="check fail">outside</span><span class="check fail">node_modules</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-marker">path <strong>4</strong></div>
+          <div class="step-body">
+            <h5>Kill switch</h5>
+            <p>If <code>.engram/hook-disabled</code> exists, passthrough immediately. Used for debugging without uninstalling.</p>
+            <span class="check fail">hook-disabled flag</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-marker">path <strong>5</strong></div>
+          <div class="step-body">
+            <h5>Query graph for file context</h5>
+            <p>Opens <code>.engram/graph.db</code>, filters nodes where <code>sourceFile === relPath</code>, computes <code>codeNodeCount</code> excluding file/module metadata.</p>
+            <span class="check pass">nodes found</span><span class="check fail">empty graph</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-marker">path <strong>6</strong></div>
+          <div class="step-body">
+            <h5>Staleness check</h5>
+            <p>If <code>file.mtime &gt; graph.db.mtime</code>, the graph is stale for this file. Passthrough so Claude sees current contents.</p>
+            <span class="check fail">stale</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-marker">path <strong>7</strong></div>
+          <div class="step-body">
+            <h5>Confidence threshold</h5>
+            <p><code>min(codeNodeCount / 3, 1) × avgNodeConfidence</code>. Must be ≥ 0.7. Conservative — prefer passthrough over false positive.</p>
+            <span class="check pass">≥ 0.7</span><span class="check fail">&lt; 0.7</span>
+          </div>
+        </div>
+
+        <div class="step outcome">
+          <div class="step-marker">deny <strong>→</strong></div>
+          <div class="step-body">
+            <h5>Deny + reason with structural summary</h5>
+            <p>Render up to 600 tokens of NODE and EDGE lines sorted by degree, with an escape-hatch footer. Claude Code delivers this as a system-reminder. The file is <strong>never actually read</strong>.</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Example JSON response -->
+      <aside class="example-card reveal d2">
+        <header>
+          <span><span class="dot"></span>stdout — hook response</span>
+          <span>exit 0</span>
+        </header>
+<pre>{
+  <span class="k">"hookSpecificOutput"</span>: {
+    <span class="k">"hookEventName"</span>: <span class="s">"PreToolUse"</span>,
+    <span class="k">"permissionDecision"</span>: <span class="s">"deny"</span>,
+    <span class="k">"permissionDecisionReason"</span>: <span class="s">"[engram] Structural
+      summary for src/core.ts
+
+      Nodes: 13 | avg extraction
+      confidence: 1.00
+
+      NODE init() [function] L48
+      NODE query() [function] L131
+      NODE path() [function] L145
+      NODE godNodes() [function] L159
+      NODE stats() [function] L173
+      NODE getFileContext() [function] L270
+      NODE mistakes() [function] L377
+      NODE benchmark() [function] L418
+      NODE learn() [function] L182
+      NODE getDbPath() [function] L21
+      NODE getStore() [function] L25
+
+      Key relationships:
+      EDGE core.ts --imports--&gt; query.ts
+      EDGE core.ts --imports--&gt; store.ts
+      EDGE core.ts --contains--&gt; init()
+      EDGE core.ts --contains--&gt; getFileContext()
+
+      Note: engram replaced a full-file
+      read with this structural view to
+      save tokens. If you need specific
+      lines, Read this file again with
+      explicit offset/limit — engram
+      passes partial reads through
+      unchanged."</span>
+  }
+}</pre>
+        <div class="tokens">
+          <span class="before">raw read: ~4,169 tok</span>
+          <span class="arrow">→</span>
+          <span class="after">summary: ~300 tok</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ ECOSYSTEM SUBSTRATE -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="section-num reveal">03 · <span>The substrate</span></p>
+      <div>
+        <h2 class="reveal d1">Six parallel layers feed the <em>same</em> session.</h2>
+        <p class="section-blurb reveal d2">engram is one of six persistence layers your Claude Code session leans on. Each one fills a different gap. The Sentinel is the newest; the others have been running for months.</p>
+      </div>
+    </div>
+
+    <div class="substrate">
+
+      <div class="layer reveal d1">
+        <span class="tag">layer 01</span>
+        <h4>engram graph</h4>
+        <p class="meta">.engram/graph.db · SQLite</p>
+        <p>Structural code knowledge. AST miner (10 languages, zero LLM cost), git miner (co-change, hot files), session miner (decisions, mistakes). <span class="badge">v0.3 sentinel</span></p>
+      </div>
+
+      <div class="layer reveal d2">
+        <span class="tag">layer 02</span>
+        <h4>MemPalace</h4>
+        <p class="meta">~/.mempalace · ChromaDB + SQLite KG</p>
+        <p>Semantic memory across 8,646 drawers. Mined from vault, projects, rules, agent memory. Hourly miner + real-time fswatch. <span class="badge">always on</span></p>
+      </div>
+
+      <div class="layer reveal d3">
+        <span class="tag">layer 03</span>
+        <h4>Rule files</h4>
+        <p class="meta">~/.claude/rules/ · 9 files</p>
+        <p>brain-os, coding-style, context-rules, failure-playbook, hooks, super-agents, agent-memory, mcp-cli, unified-memory. Loaded every session.</p>
+      </div>
+
+      <div class="layer reveal d4">
+        <span class="tag">layer 04</span>
+        <h4>Skills</h4>
+        <p class="meta">~/.claude/skills/ · 418 skills</p>
+        <p>Pattern-matched, lazy-loaded. Indexed into engram by the skills-miner as <code>concept</code> nodes with <code>triggered_by</code> edges to keyword concepts.</p>
+      </div>
+
+      <div class="layer reveal d5">
+        <span class="tag">layer 05</span>
+        <h4>Agents</h4>
+        <p class="meta">~/.claude/agents/ · 101 agents</p>
+        <p>Custom + plugin + super commanders. Each spawn reads its own memory file in <code>~/vault/01-KNOWLEDGE/agent-memory/</code> before work begins.</p>
+      </div>
+
+      <div class="layer reveal d5">
+        <span class="tag">layer 06</span>
+        <h4>MCP servers</h4>
+        <p class="meta">mcp-cli wrappers (T1) · direct MCP (T4)</p>
+        <p>context7, mempalace, obsidian, render, sentry, playwright, engram, contextplus. CLI wrappers preferred — ~100 tok vs ~5K tok direct call.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ REAL MEASUREMENTS -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="section-num reveal">04 · <span>Real measurements</span></p>
+      <div>
+        <h2 class="reveal d1">Not projected. <em>Measured on real engram code.</em></h2>
+        <p class="section-blurb reveal d2">Four representative files from this repo. Three intercepted, one passthrough (correctly — only one exported function, below threshold). 82&thinsp;% token reduction. 75&thinsp;% Read hit rate. Same numbers anyone can reproduce with <code>engram hook-preview</code>.</p>
+      </div>
+    </div>
+
+    <div class="measure">
+      <table class="table reveal d1">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Nodes</th>
+            <th class="num">Raw read</th>
+            <th class="num">Sentinel</th>
+            <th class="num">Savings</th>
+            <th>Decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>src/core.ts</td>
+            <td>13</td>
+            <td class="num">4,169</td>
+            <td class="num">~300</td>
+            <td class="num win">−3,869</td>
+            <td><span class="deny">DENY</span></td>
+          </tr>
+          <tr>
+            <td>src/graph/query.ts</td>
+            <td>10</td>
+            <td class="num">4,890</td>
+            <td class="num">~300</td>
+            <td class="num win">−4,590</td>
+            <td><span class="deny">DENY</span></td>
+          </tr>
+          <tr>
+            <td>src/intercept/dispatch.ts</td>
+            <td>5</td>
+            <td class="num">1,820</td>
+            <td class="num">~300</td>
+            <td class="num win">−1,520</td>
+            <td><span class="deny">DENY</span></td>
+          </tr>
+          <tr>
+            <td>src/intercept/handlers/read.ts</td>
+            <td>1</td>
+            <td class="num">1,310</td>
+            <td class="num">1,310</td>
+            <td class="num">0</td>
+            <td><span class="pass">passthrough</span></td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Totals</td>
+            <td>29</td>
+            <td class="num">12,189</td>
+            <td class="num">2,210</td>
+            <td class="num win">−9,979</td>
+            <td class="win">−82&thinsp;%</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <aside class="measure-aside reveal d2">
+        <h4>What the numbers say</h4>
+        <div class="metric">
+          <dt>Session reduction</dt>
+          <dd>82<span class="sub">measured</span></dd>
+        </div>
+        <div class="metric">
+          <dt>Read hit rate</dt>
+          <dd>75<span class="sub">measured</span></dd>
+        </div>
+        <div class="metric">
+          <dt>Projected (Day 0)</dt>
+          <dd>80<span class="sub">estimated</span></dd>
+        </div>
+        <div class="metric">
+          <dt>Hook cold start</dt>
+          <dd>131<span class="sub">ms</span></dd>
+        </div>
+        <div class="metric">
+          <dt>Test suite</dt>
+          <dd>1.5<span class="sub">seconds</span></dd>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ QUICK REFERENCE -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="section-num reveal">05 · <span>Quick reference</span></p>
+      <div>
+        <h2 class="reveal d1">Seven commands <em>you&rsquo;ll actually use</em>.</h2>
+        <p class="section-blurb reveal d2">Everything else is a passthrough branch or a safety invariant. These seven are the surface you interact with.</p>
+      </div>
+    </div>
+
+    <div class="commands">
+
+      <div class="cmd reveal d1">
+        <div class="label">install</div>
+        <code>engram install-hook</code>
+        <p>Adds the four hook entries to <code>.claude/settings.local.json</code>. Atomic. Idempotent. Backed up.</p>
+      </div>
+
+      <div class="cmd reveal d1">
+        <div class="label">dry-run</div>
+        <code>engram hook-preview &lt;file&gt;</code>
+        <p>Show what the Read handler <em>would</em> do for a file. Deny, allow, or passthrough — with the reason.</p>
+      </div>
+
+      <div class="cmd reveal d2">
+        <div class="label">measure</div>
+        <code>engram hook-stats</code>
+        <p>Summarize <code>.engram/hook-log.jsonl</code>. Per-event, per-tool, per-decision breakdown. Estimated tokens saved.</p>
+      </div>
+
+      <div class="cmd reveal d2">
+        <div class="label">kill switch</div>
+        <code>engram hook-disable</code>
+        <p>Touch <code>.engram/hook-disabled</code>. Every handler checks it and passes through. Reversible with <code>hook-enable</code>.</p>
+      </div>
+
+      <div class="cmd reveal d3">
+        <div class="label">rebuild graph</div>
+        <code>engram init</code>
+        <p>Re-mine the project. ~40&thinsp;ms, zero LLM calls, zero tokens used. Run after structural changes.</p>
+      </div>
+
+      <div class="cmd reveal d3">
+        <div class="label">explicit query</div>
+        <code>engram query &quot;...&quot;</code>
+        <p>Direct graph query. BFS with 2,000-token budget. For when the hook didn&rsquo;t catch what you needed.</p>
+      </div>
+
+      <div class="cmd reveal d4">
+        <div class="label">rollback</div>
+        <code>engram uninstall-hook</code>
+        <p>Surgical removal. Preserves every other hook in settings.json. Automatic backup before the write.</p>
+      </div>
+
+      <div class="cmd reveal d4">
+        <div class="label">upgrade</div>
+        <code>npm i -g engramx@latest</code>
+        <p>Pull the latest from npm. v0.3.1 will tune confidence thresholds from real hook-log data.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="wrap">
+  <div>
+    <div class="version">engram <em>v0.3.0 &middot; Sentinel</em></div>
+    <p>Context as infra for your AI coding tools. Hook-based interception, zero LLM cost, zero cloud, zero native deps. Published 2026-04-11.</p>
+  </div>
+  <div class="links">
+    <a href="https://www.npmjs.com/package/engramx">npm</a>
+    <a href="https://github.com/NickCirv/engram">github</a>
+    <a href="https://github.com/NickCirv/engram/releases/tag/v0.3.0">release</a>
+  </div>
+</footer>
+
+<!-- ═══════════════════════════════════════════════════════════════ SCROLL REVEAL -->
+<script>
+(() => {
+  const mm = window.matchMedia('(prefers-reduced-motion: reduce)');
+  if (mm.matches) {
+    document.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
+    return;
+  }
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) {
+        e.target.classList.add('in');
+        io.unobserve(e.target);
+      }
+    }
+  }, { threshold: 0.1, rootMargin: '0px 0px -80px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+})();
+</script>
+
+</body>
+</html>

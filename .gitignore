@@ -5,3 +5,5 @@ dist/
 .env
 .DS_Store
 **/.DS_Store
+# Claude Code local hook install state — project-local, machine-specific
+.claude/settings.local.json
