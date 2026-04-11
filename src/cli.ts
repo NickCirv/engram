@@ -2,6 +2,17 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  unlinkSync,
+  copyFileSync,
+  renameSync,
+} from "node:fs";
+import { dirname, join, resolve as pathResolve } from "node:path";
+import { homedir } from "node:os";
+import {
   init,
   query,
   path,
@@ -13,13 +24,25 @@ import {
 } from "./core.js";
 import { install as installHooks, uninstall as uninstallHooks, status as hooksStatus } from "./hooks.js";
 import { autogen } from "./autogen.js";
+import { dispatchHook } from "./intercept/dispatch.js";
+import {
+  installEngramHooks,
+  uninstallEngramHooks,
+  formatInstallDiff,
+  type ClaudeCodeSettings,
+} from "./intercept/installer.js";
+import { summarizeHookLog, formatStatsSummary } from "./intercept/stats.js";
+import { readHookLog } from "./intelligence/hook-log.js";
+import { findProjectRoot } from "./intercept/context.js";
 
 const program = new Command();
 
 program
   .name("engram")
-  .description("AI coding memory that learns from every session")
-  .version("0.2.1");
+  .description(
+    "Context as infra for AI coding tools — hook-based Read/Edit interception + structural graph summaries"
+  )
+  .version("0.3.0");
 
 program
   .command("init")
@@ -249,5 +272,446 @@ program
       );
     }
   );
+
+// ── Sentinel hook commands (v0.3.0) ─────────────────────────────────────────
+
+/**
+ * Resolve the Claude Code settings file path for a given scope.
+ *   - local   → <project>/.claude/settings.local.json (gitignored)
+ *   - project → <project>/.claude/settings.json (committed)
+ *   - user    → ~/.claude/settings.json (global)
+ */
+function resolveSettingsPath(
+  scope: string,
+  projectPath: string
+): string | null {
+  const absProject = pathResolve(projectPath);
+  switch (scope) {
+    case "local":
+      return join(absProject, ".claude", "settings.local.json");
+    case "project":
+      return join(absProject, ".claude", "settings.json");
+    case "user":
+      return join(homedir(), ".claude", "settings.json");
+    default:
+      return null;
+  }
+}
+
+/**
+ * engram intercept — the entry point Claude Code calls for every hook
+ * invocation. Reads JSON from stdin, dispatches through the handler
+ * registry, writes a JSON response to stdout.
+ *
+ * Contract: ALWAYS exits 0. Any failure resolves to "no stdout output",
+ * which Claude Code interprets as passthrough.
+ */
+program
+  .command("intercept")
+  .description(
+    "Hook entry point. Reads JSON from stdin, writes response JSON to stdout. Called by Claude Code."
+  )
+  .action(async () => {
+    // Read stdin with a hard cap. If nothing arrives within a few
+    // seconds, bail with passthrough rather than hanging.
+    const stdinTimeout = setTimeout(() => {
+      process.exit(0);
+    }, 3000);
+
+    let input = "";
+    try {
+      for await (const chunk of process.stdin) {
+        input += chunk;
+        // Safety cap — absurdly large inputs get rejected.
+        if (input.length > 1_000_000) break;
+      }
+    } catch {
+      clearTimeout(stdinTimeout);
+      process.exit(0);
+    }
+    clearTimeout(stdinTimeout);
+
+    if (!input.trim()) process.exit(0);
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(input);
+    } catch {
+      process.exit(0);
+    }
+
+    try {
+      const result = await dispatchHook(payload);
+      if (result && typeof result === "object") {
+        process.stdout.write(JSON.stringify(result));
+      }
+    } catch {
+      // Never block Claude Code on engram bugs.
+    }
+
+    process.exit(0);
+  });
+
+/**
+ * engram install-hook — write engram's PreToolUse / PostToolUse /
+ * SessionStart / UserPromptSubmit entries into a Claude Code settings
+ * file, preserving any existing non-engram hooks. Atomic write with
+ * timestamped backup.
+ */
+program
+  .command("install-hook")
+  .description("Install engram hook entries into Claude Code settings")
+  .option("--scope <scope>", "local | project | user", "local")
+  .option("--dry-run", "Show diff without writing", false)
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(
+    async (opts: {
+      scope: string;
+      dryRun: boolean;
+      project: string;
+    }) => {
+      const settingsPath = resolveSettingsPath(opts.scope, opts.project);
+      if (!settingsPath) {
+        console.error(
+          chalk.red(
+            `Unknown scope: ${opts.scope} (expected: local | project | user)`
+          )
+        );
+        process.exit(1);
+      }
+
+      // Read existing settings (or default to empty object).
+      let existing: ClaudeCodeSettings = {};
+      if (existsSync(settingsPath)) {
+        try {
+          const raw = readFileSync(settingsPath, "utf-8");
+          existing = raw.trim() ? (JSON.parse(raw) as ClaudeCodeSettings) : {};
+        } catch (err) {
+          console.error(
+            chalk.red(
+              `Failed to parse ${settingsPath}: ${(err as Error).message}`
+            )
+          );
+          console.error(
+            chalk.dim(
+              "Fix the JSON syntax and re-run install-hook, or remove the file and start fresh."
+            )
+          );
+          process.exit(1);
+        }
+      }
+
+      const result = installEngramHooks(existing);
+
+      console.log(
+        chalk.bold(`\n📌 engram install-hook (scope: ${opts.scope})`)
+      );
+      console.log(chalk.dim(`   Target: ${settingsPath}`));
+
+      if (result.added.length === 0) {
+        console.log(
+          chalk.yellow(
+            `\n   All engram hooks already installed (${result.alreadyPresent.join(", ")}).`
+          )
+        );
+        console.log(
+          chalk.dim(
+            "   Run 'engram uninstall-hook' first if you want to reinstall."
+          )
+        );
+        return;
+      }
+
+      console.log(chalk.cyan("\n   Changes:"));
+      console.log(
+        formatInstallDiff(existing, result.updated)
+          .split("\n")
+          .map((l) => "     " + l)
+          .join("\n")
+      );
+
+      if (opts.dryRun) {
+        console.log(chalk.dim("\n   (dry-run — no changes written)"));
+        return;
+      }
+
+      // Atomic write with backup.
+      try {
+        mkdirSync(dirname(settingsPath), { recursive: true });
+        if (existsSync(settingsPath)) {
+          const backupPath = `${settingsPath}.engram-backup-${new Date().toISOString().replace(/[:.]/g, "-")}.bak`;
+          copyFileSync(settingsPath, backupPath);
+          console.log(chalk.dim(`   Backup: ${backupPath}`));
+        }
+        const tmpPath = settingsPath + ".engram-tmp";
+        writeFileSync(
+          tmpPath,
+          JSON.stringify(result.updated, null, 2) + "\n"
+        );
+        renameSync(tmpPath, settingsPath);
+      } catch (err) {
+        console.error(
+          chalk.red(`\n   ❌ Write failed: ${(err as Error).message}`)
+        );
+        process.exit(1);
+      }
+
+      console.log(
+        chalk.green(
+          `\n   ✅ Installed ${result.added.length} hook event${result.added.length === 1 ? "" : "s"}: ${result.added.join(", ")}`
+        )
+      );
+      if (result.alreadyPresent.length > 0) {
+        console.log(
+          chalk.dim(
+            `   Already present: ${result.alreadyPresent.join(", ")}`
+          )
+        );
+      }
+      console.log(
+        chalk.dim(
+          "\n   Next: open a Claude Code session and engram will start intercepting tool calls."
+        )
+      );
+    }
+  );
+
+/**
+ * engram uninstall-hook — remove engram's entries from a settings file,
+ * preserving everything else. Cleans up empty arrays.
+ */
+program
+  .command("uninstall-hook")
+  .description("Remove engram hook entries from Claude Code settings")
+  .option("--scope <scope>", "local | project | user", "local")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (opts: { scope: string; project: string }) => {
+    const settingsPath = resolveSettingsPath(opts.scope, opts.project);
+    if (!settingsPath) {
+      console.error(chalk.red(`Unknown scope: ${opts.scope}`));
+      process.exit(1);
+    }
+
+    if (!existsSync(settingsPath)) {
+      console.log(
+        chalk.yellow(`No settings file at ${settingsPath} — nothing to remove.`)
+      );
+      return;
+    }
+
+    let existing: ClaudeCodeSettings;
+    try {
+      const raw = readFileSync(settingsPath, "utf-8");
+      existing = raw.trim() ? (JSON.parse(raw) as ClaudeCodeSettings) : {};
+    } catch (err) {
+      console.error(
+        chalk.red(`Failed to parse ${settingsPath}: ${(err as Error).message}`)
+      );
+      process.exit(1);
+    }
+
+    const result = uninstallEngramHooks(existing);
+
+    if (result.removed.length === 0) {
+      console.log(
+        chalk.yellow(`\n   No engram hooks found in ${settingsPath}.`)
+      );
+      return;
+    }
+
+    // Atomic write with backup.
+    try {
+      const backupPath = `${settingsPath}.engram-backup-${new Date().toISOString().replace(/[:.]/g, "-")}.bak`;
+      copyFileSync(settingsPath, backupPath);
+      const tmpPath = settingsPath + ".engram-tmp";
+      writeFileSync(tmpPath, JSON.stringify(result.updated, null, 2) + "\n");
+      renameSync(tmpPath, settingsPath);
+      console.log(
+        chalk.green(
+          `\n   ✅ Removed engram hooks from ${result.removed.length} event${result.removed.length === 1 ? "" : "s"}: ${result.removed.join(", ")}`
+        )
+      );
+      console.log(chalk.dim(`   Backup: ${backupPath}`));
+    } catch (err) {
+      console.error(
+        chalk.red(`\n   ❌ Write failed: ${(err as Error).message}`)
+      );
+      process.exit(1);
+    }
+  });
+
+/**
+ * engram hook-stats — summarize .engram/hook-log.jsonl for the given
+ * project. Prints a human-readable report, or JSON with --json.
+ */
+program
+  .command("hook-stats")
+  .description("Summarize hook-log.jsonl for a project")
+  .option("-p, --project <path>", "Project directory", ".")
+  .option("--json", "Output as JSON", false)
+  .action(async (opts: { project: string; json: boolean }) => {
+    const absProject = pathResolve(opts.project);
+    const projectRoot = findProjectRoot(absProject) ?? absProject;
+    const entries = readHookLog(projectRoot);
+    const summary = summarizeHookLog(entries);
+
+    if (opts.json) {
+      console.log(JSON.stringify(summary, null, 2));
+      return;
+    }
+
+    console.log(formatStatsSummary(summary));
+  });
+
+/**
+ * engram hook-preview — show what the Read handler would do for a
+ * specific file WITHOUT installing the hook. Useful for debugging
+ * coverage before committing to an install.
+ */
+program
+  .command("hook-preview")
+  .description("Show what the Read handler would do for a file (dry-run)")
+  .argument("<file>", "Target file path")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (file: string, opts: { project: string }) => {
+    const absProject = pathResolve(opts.project);
+    const absFile = pathResolve(absProject, file);
+
+    const payload = {
+      hook_event_name: "PreToolUse",
+      tool_name: "Read",
+      cwd: absProject,
+      tool_input: { file_path: absFile },
+    };
+
+    const result = await dispatchHook(payload);
+
+    console.log(chalk.bold(`\n📋 Hook preview: ${absFile}`));
+    console.log(chalk.dim(`   Project: ${absProject}`));
+    console.log();
+
+    if (result === null || result === undefined) {
+      console.log(
+        chalk.yellow("   Decision: PASSTHROUGH (Read would execute normally)")
+      );
+      console.log(
+        chalk.dim(
+          "   Possible reasons: file not in graph, confidence below threshold, content unsafe, outside project, stale graph."
+        )
+      );
+      return;
+    }
+
+    const wrapped = result as {
+      hookSpecificOutput?: {
+        permissionDecision?: string;
+        permissionDecisionReason?: string;
+        additionalContext?: string;
+      };
+    };
+    const decision = wrapped.hookSpecificOutput?.permissionDecision;
+
+    if (decision === "deny") {
+      console.log(chalk.green("   Decision: DENY (Read would be replaced)"));
+      console.log(chalk.dim("   Summary (would be delivered to Claude):"));
+      console.log();
+      const reason =
+        wrapped.hookSpecificOutput?.permissionDecisionReason ?? "";
+      console.log(
+        reason
+          .split("\n")
+          .map((l) => "     " + l)
+          .join("\n")
+      );
+      return;
+    }
+
+    if (decision === "allow") {
+      console.log(chalk.cyan("   Decision: ALLOW (with additionalContext)"));
+      const ctx = wrapped.hookSpecificOutput?.additionalContext ?? "";
+      if (ctx) {
+        console.log(chalk.dim("   Additional context that would be injected:"));
+        console.log(
+          ctx
+            .split("\n")
+            .map((l) => "     " + l)
+            .join("\n")
+        );
+      }
+      return;
+    }
+
+    console.log(chalk.yellow(`   Decision: ${decision ?? "unknown"}`));
+  });
+
+/**
+ * engram hook-disable — touch .engram/hook-disabled so every handler
+ * exits to passthrough. Use for debugging without a full uninstall.
+ */
+program
+  .command("hook-disable")
+  .description("Disable engram hooks via kill switch (does not uninstall)")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (opts: { project: string }) => {
+    const absProject = pathResolve(opts.project);
+    const projectRoot = findProjectRoot(absProject);
+    if (!projectRoot) {
+      console.error(
+        chalk.red(`Not an engram project: ${absProject}`)
+      );
+      console.error(chalk.dim("Run 'engram init' first."));
+      process.exit(1);
+    }
+    const flagPath = join(projectRoot, ".engram", "hook-disabled");
+    try {
+      writeFileSync(flagPath, new Date().toISOString());
+      console.log(
+        chalk.green(`✅ engram hooks disabled for ${projectRoot}`)
+      );
+      console.log(chalk.dim(`   Flag: ${flagPath}`));
+      console.log(
+        chalk.dim("   Run 'engram hook-enable' to re-enable.")
+      );
+    } catch (err) {
+      console.error(
+        chalk.red(`Failed to create flag: ${(err as Error).message}`)
+      );
+      process.exit(1);
+    }
+  });
+
+/**
+ * engram hook-enable — remove the kill switch flag.
+ */
+program
+  .command("hook-enable")
+  .description("Re-enable engram hooks (remove kill switch flag)")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (opts: { project: string }) => {
+    const absProject = pathResolve(opts.project);
+    const projectRoot = findProjectRoot(absProject);
+    if (!projectRoot) {
+      console.error(chalk.red(`Not an engram project: ${absProject}`));
+      process.exit(1);
+    }
+    const flagPath = join(projectRoot, ".engram", "hook-disabled");
+    if (!existsSync(flagPath)) {
+      console.log(
+        chalk.yellow(`engram hooks already enabled for ${projectRoot}`)
+      );
+      return;
+    }
+    try {
+      unlinkSync(flagPath);
+      console.log(
+        chalk.green(`✅ engram hooks re-enabled for ${projectRoot}`)
+      );
+    } catch (err) {
+      console.error(
+        chalk.red(`Failed to remove flag: ${(err as Error).message}`)
+      );
+      process.exit(1);
+    }
+  });
 
 program.parse();

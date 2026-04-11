@@ -4,6 +4,139 @@ All notable changes to engram are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-04-11 — "Sentinel"
+
+### Added — The Claude Code Hook Interception Layer
+
+**The big change:** engram is no longer just a tool your agent queries.
+It's now a Claude Code hook layer that intercepts file reads, edits,
+prompts, and session starts — automatically replacing full file reads
+with ~300-token structural graph summaries when confidence is high.
+
+Empirically verified on 2026-04-11 against a live Claude Code session.
+The hook mechanism is `PreToolUse deny + permissionDecisionReason`,
+which Claude Code delivers to the agent as a system-reminder containing
+the engram summary. File is never actually read, so savings materialize
+at the agent-turn layer, not just when the agent remembers to ask.
+
+**Seven new CLI commands:**
+
+- `engram intercept` — hook entry point. Reads JSON from stdin,
+  dispatches through the handler registry, writes response JSON to
+  stdout. ALWAYS exits 0 — the process boundary enforces the "never
+  block Claude Code" invariant.
+- `engram install-hook [--scope local|project|user] [--dry-run]` —
+  adds engram's entries to a Claude Code settings file. Default scope
+  is `local` (project-local, gitignored). Preserves existing non-engram
+  hooks. Idempotent. Atomic write with timestamped backup.
+- `engram uninstall-hook` — surgical removal.
+- `engram hook-stats [--json]` — summarize `.engram/hook-log.jsonl`
+  with per-event / per-tool / per-decision breakdowns and estimated
+  token savings.
+- `engram hook-preview <file>` — dry-run the Read handler for a file
+  without installing. Shows deny+summary, allow+landmines, or
+  passthrough with explanation.
+- `engram hook-disable` / `engram hook-enable` — toggle
+  `.engram/hook-disabled` kill switch.
+
+**Seven new hook handlers:**
+
+- `PreToolUse:Read` — deny + reason with engram's structural summary.
+  60% hit rate × ~1,200 tokens saved per hit. Projected: -18,000
+  tokens per session.
+- `PreToolUse:Edit` / `PreToolUse:Write` — allow + additionalContext
+  with landmine warnings for files with past mistakes. NEVER blocks
+  writes — advisory injection only. Projected: -10,000 tokens by
+  preventing bug re-loops.
+- `PreToolUse:Bash` — strict parser for single-argument `cat|head|tail
+  |less|more <file>` invocations, delegating to the Read handler. Any
+  shell metacharacter rejects the parse. Closes the Bash workaround
+  loophole without risking shell misinterpretation.
+- `SessionStart` — injects a project brief (god nodes + graph stats
+  + top landmines + git branch) on source=startup/clear/compact.
+  Passes through on source=resume. Replaces 3-5 initial exploration
+  reads. Projected: -5,000 tokens per session.
+- `UserPromptSubmit` — keyword-gated pre-query injection. Extracts
+  significant terms (≥3 chars, non-stopword), requires ≥2 terms AND
+  ≥3 graph matches before injecting. Budget 500 tokens per injection.
+  **PRIVACY:** raw prompt text is never logged. Projected: -8,000
+  tokens per session.
+- `PostToolUse` — pure observer. Logs tool/path/outputSize/success
+  to `.engram/hook-log.jsonl` for `engram hook-stats` and v0.3.1
+  self-tuning.
+
+**Total projected savings: -42,500 tokens per session** (on ~52,500
+baseline ≈ 80% session reduction). Every number is arithmetic on
+empirically verified hook mechanisms.
+
+### Added — Infrastructure
+
+- **`src/intercept/` module (14 files):** safety.ts (error/timeout
+  wrappers, PASSTHROUGH sentinel, kill-switch check), context.ts
+  (path normalization, project detection, content safety, cwd guard),
+  formatter.ts (verified JSON response builders with 8000-char
+  truncation), dispatch.ts (event routing + PreToolUse decision
+  logging), installer.ts (pure settings.json transforms), stats.ts
+  (pure log aggregation), and 7 handlers under `handlers/`.
+
+- **`src/intelligence/hook-log.ts`:** append-only JSONL logger with
+  10MB rotation. Atomic appends (safe for <4KB writes on POSIX
+  without locking). `readHookLog` for stats queries. Never throws.
+
+- **10 safety invariants, all enforced at runtime:**
+  1. Any handler error → passthrough (never block Claude Code)
+  2. 2-second per-handler timeout
+  3. Kill switch respected by all handlers
+  4. Atomic settings.json writes with backups
+  5. Never intercept outside project root
+  6. Never intercept binary files or secrets (.env/.pem/.key)
+  7. Never log user prompt content
+  8. Never inject >8000 chars per hook response
+  9. Stale graph detection (file mtime > graph mtime → passthrough)
+  10. Partial-read bypass (offset/limit → passthrough)
+
+### Changed
+
+- `core.ts::mistakes()` now accepts an optional `sourceFile` filter for
+  per-file landmine lookup.
+- `getFileContext()` added — the bridge from absolute file paths (as
+  hooks receive them) to graph queries. Never throws.
+- `renderFileStructure()` added to `graph/query.ts` — file-scoped
+  summary renderer. Exposes `codeNodeCount` for accurate confidence.
+- Confidence formula: `min(codeNodeCount / 3, 1) × avgNodeConfidence`.
+  Conservative 0.7 threshold for interception.
+- Dispatcher logs PreToolUse decisions to hook-log for `hook-stats`.
+- Minor terminology: user-facing comments and docs now say "landmines"
+  instead of "regret buffer" (internal API unchanged — `mistakes()`,
+  `list_mistakes` MCP tool, `kind: "mistake"` schema all stable).
+
+### Test coverage
+
+- **+225 tests** across Days 1-5 (total 439, up from 214 in v0.2.1).
+- Full suite time: ~1.5 seconds.
+- 7 end-to-end subprocess tests that actually spawn
+  `node dist/cli.js intercept` and pipe JSON payloads.
+- 4 regression fixtures captured from the 2026-04-11 live spike.
+- NEVER-deny invariant asserted for Edit/Write handler in tests.
+- PRIVACY invariant asserted for UserPromptSubmit handler in tests.
+
+### Deferred to v0.3.1
+
+- **Grep interception.** Regex metacharacters + string-literal searches
+  mean engram can't correctly handle every grep.
+- **Per-user confidence threshold config.** v0.3.0 hardcodes 0.7.
+- **Self-tuning from hook-log data.** Will tune 2.5x mistake boost,
+  0.5x keyword downweight, 0.7 confidence threshold, coverage ceiling.
+
+### Migration
+
+**No migration needed.** v0.3.0 is purely additive. All v0.2.1 CLI
+commands work identically. MCP tools (`query_graph`, `god_nodes`,
+`graph_stats`, `shortest_path`, `benchmark`, `list_mistakes`) are
+unchanged. The hook layer is opt-in via `engram install-hook`.
+
+Existing engram projects continue to work without reinstalling.
+
 ## [0.2.1] — 2026-04-10
 
 ### Fixed

@@ -1,0 +1,12 @@
+{
+  "session_id": "spike-2026-04-11",
+  "transcript_path": "/tmp/engram-spike/transcript.jsonl",
+  "cwd": "/tmp/engram-spike/test-project",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/tmp/engram-spike/test-project/target-v2.txt"
+  },
+  "tool_use_id": "toolu_spike_01"
+}

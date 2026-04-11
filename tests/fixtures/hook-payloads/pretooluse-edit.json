@@ -1,0 +1,15 @@
+{
+  "session_id": "spike-2026-04-11",
+  "transcript_path": "/tmp/engram-spike/transcript.jsonl",
+  "cwd": "/tmp/engram-spike/test-project",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/tmp/engram-spike/test-project/src/cli.ts",
+    "old_string": "const FOO = 1;",
+    "new_string": "const FOO = 2;",
+    "replace_all": false
+  },
+  "tool_use_id": "toolu_spike_02"
+}

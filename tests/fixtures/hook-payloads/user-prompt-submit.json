@@ -1,0 +1,8 @@
+{
+  "session_id": "spike-2026-04-11",
+  "transcript_path": "/tmp/engram-spike/transcript.jsonl",
+  "cwd": "/tmp/engram-spike/test-project",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "How does the authentication flow work in this codebase?"
+}

@@ -7,7 +7,9 @@ import type { GraphEdge, GraphNode } from "./schema.js";
 import { sliceGraphemeSafe, truncateGraphemeSafe } from "./render-utils.js";
 
 // v0.2: mistake priority boost. When a query matches a mistake node, it
-// gets a higher score so the regret buffer surfaces before normal results.
+// gets a higher score so the landmines surface before normal results.
+// ("Landmines" is the user-facing name for past mistakes — internal API
+// stays on "mistake" / "list_mistakes" for backward compatibility.)
 // 2.5x is tuned by intuition — large enough to beat pure text-match score
 // parity, small enough that a stronger text match on a non-mistake still
 // wins. Verified in tests/mistake-memory.test.ts.
@@ -25,7 +27,7 @@ const MISTAKE_SCORE_BOOST = 2.5;
 const KEYWORD_SCORE_DOWNWEIGHT = 0.5;
 
 // Exported for use by the MCP server (serve.ts) so truncation is
-// consistent across the regret buffer block and the list_mistakes tool.
+// consistent across the landmines block and the list_mistakes tool.
 export const MAX_MISTAKE_LABEL_CHARS = 500;
 
 // v0.2.1: a node is a "hidden keyword" if it's a concept with subkind
@@ -62,8 +64,8 @@ function scoreNodes(
       if (file.includes(t)) score += 1;
     }
     if (score > 0) {
-      // Priority boost for mistake nodes so the regret buffer surfaces
-      // relevant past failures before normal code results.
+      // Priority boost for mistake nodes so landmines surface relevant
+      // past failures before normal code results.
       if (node.kind === "mistake") score *= MISTAKE_SCORE_BOOST;
       // Priority downweight for keyword concept nodes. Keeps them seed-
       // eligible when no code/skill matches exist (so skill discovery
@@ -248,7 +250,7 @@ function renderSubgraph(
   const charBudget = tokenBudget * CHARS_PER_TOKEN;
   const lines: string[] = [];
 
-  // v0.2: regret buffer. If any mistakes are in the result set, emit them
+  // v0.2/v0.3: landmines block. If any mistakes are in the result set, emit them
   // at the top of the output as a warning block and exclude them from the
   // main NODE list (they're still in the scored results, just rendered
   // separately with a distinctive marker).
@@ -366,4 +368,184 @@ function renderPath(nodes: GraphNode[], edges: GraphEdge[]): string {
     segments.push(`--${edges[i].relation}${conf}--> ${nodes[i + 1]?.label ?? "?"}`);
   }
   return `Path (${edges.length} hops): ${segments.join(" ")}`;
+}
+
+export interface FileStructureResult {
+  readonly text: string;
+  /** Total nodes rendered in the summary (includes the file metadata node). */
+  readonly nodeCount: number;
+  /**
+   * Count of code declaration nodes — excludes the `file` and `module`
+   * metadata kinds. This is what callers should use to judge whether the
+   * graph has meaningful coverage of the file's contents. A file with
+   * `nodeCount: 5` but `codeNodeCount: 1` is actually sparse — it only
+   * has the file metadata and a single declaration.
+   */
+  readonly codeNodeCount: number;
+  readonly avgConfidence: number;
+  readonly estimatedTokens: number;
+}
+
+/**
+ * Render the structural view of a single file as a compact summary
+ * suitable for dropping into a PreToolUse deny reason. Used by the Read
+ * handler to replace a full file read with a ~300-token graph summary.
+ *
+ * Strategy:
+ *   1. Filter all graph nodes where sourceFile === relativeFilePath
+ *   2. Group by NodeKind so the summary is scannable by kind (functions,
+ *      classes, types, ...)
+ *   3. Append key relationships: edges where at least one endpoint is in
+ *      this file. Sorted by degree so the most-connected nodes surface first.
+ *   4. Include a header describing the file and a footer telling Claude how
+ *      to escape (Read with explicit offset/limit still works).
+ *   5. Truncate to `tokenBudget` using the same surrogate-safe slice as
+ *      renderSubgraph so we never corrupt JSON serialization.
+ *
+ * Returns a FileStructureResult with the rendered text, node count, and
+ * average extraction confidence for the nodes in this file. Callers use
+ * the nodeCount + avgConfidence to decide whether to actually use the
+ * summary (see `core.ts::getFileContext` and the confidence threshold in
+ * `intercept/handlers/read.ts`).
+ *
+ * If the file has zero nodes in the graph, returns an empty-shell result
+ * with `nodeCount: 0`. Callers MUST check this before using `text`.
+ */
+export function renderFileStructure(
+  store: GraphStore,
+  relativeFilePath: string,
+  tokenBudget = 600
+): FileStructureResult {
+  const allNodes = store.getAllNodes();
+  const fileNodes = allNodes.filter(
+    (n) => n.sourceFile === relativeFilePath && !isHiddenKeyword(n)
+  );
+
+  if (fileNodes.length === 0) {
+    return {
+      text: "",
+      nodeCount: 0,
+      codeNodeCount: 0,
+      avgConfidence: 0,
+      estimatedTokens: 0,
+    };
+  }
+
+  // Code node count excludes file/module metadata kinds. These represent
+  // the file itself (one per file) and are not useful signal for coverage.
+  const codeNodeCount = fileNodes.filter(
+    (n) => n.kind !== "file" && n.kind !== "module"
+  ).length;
+
+  // Average extraction confidence — used by the caller to decide whether
+  // to trust this summary as a full-file replacement.
+  const avgConfidence =
+    fileNodes.reduce((s, n) => s + n.confidenceScore, 0) / fileNodes.length;
+
+  // Degree map: how many edges touch each node in this file. Used to sort
+  // nodes within each kind group so the most-connected (= most important)
+  // surface first.
+  const allEdges = store.getAllEdges();
+  const fileNodeIds = new Set(fileNodes.map((n) => n.id));
+  const degreeMap = new Map<string, number>();
+  for (const e of allEdges) {
+    if (fileNodeIds.has(e.source)) {
+      degreeMap.set(e.source, (degreeMap.get(e.source) ?? 0) + 1);
+    }
+    if (fileNodeIds.has(e.target)) {
+      degreeMap.set(e.target, (degreeMap.get(e.target) ?? 0) + 1);
+    }
+  }
+
+  // Group nodes by kind so the summary is scannable.
+  const byKind = new Map<GraphNode["kind"], GraphNode[]>();
+  for (const n of fileNodes) {
+    const list = byKind.get(n.kind) ?? [];
+    list.push(n);
+    byKind.set(n.kind, list);
+  }
+  // Sort each group by degree (desc) so the most connected nodes come first.
+  for (const list of byKind.values()) {
+    list.sort(
+      (a, b) => (degreeMap.get(b.id) ?? 0) - (degreeMap.get(a.id) ?? 0)
+    );
+  }
+
+  // Kind render order — entities users care about most, then metadata kinds.
+  // Matches the NodeKind union in schema.ts exactly; do not add kinds that
+  // don't exist in the schema or TS will flag them.
+  const kindOrder: GraphNode["kind"][] = [
+    "class",
+    "interface",
+    "type",
+    "function",
+    "method",
+    "variable",
+    "import",
+    "module",
+    "file",
+    "decision",
+    "pattern",
+    "mistake",
+    "concept",
+  ];
+
+  const lines: string[] = [];
+  lines.push(`[engram] Structural summary for ${relativeFilePath}`);
+  lines.push(
+    `Nodes: ${fileNodes.length} | avg extraction confidence: ${avgConfidence.toFixed(2)}`
+  );
+  lines.push("");
+
+  for (const kind of kindOrder) {
+    const group = byKind.get(kind);
+    if (!group || group.length === 0) continue;
+    for (const n of group) {
+      const loc = n.sourceLocation ?? "";
+      lines.push(`NODE ${n.label} [${n.kind}] ${loc}`.trim());
+    }
+  }
+
+  // Relationships involving this file's nodes (outgoing + incoming).
+  // Keep it short — cap at 10 edges to stay well under budget.
+  const relevantEdges = allEdges
+    .filter(
+      (e) => fileNodeIds.has(e.source) || fileNodeIds.has(e.target)
+    )
+    .slice(0, 10);
+
+  if (relevantEdges.length > 0) {
+    lines.push("");
+    lines.push("Key relationships:");
+    for (const e of relevantEdges) {
+      const src = allNodes.find((n) => n.id === e.source);
+      const tgt = allNodes.find((n) => n.id === e.target);
+      if (src && tgt) {
+        lines.push(`EDGE ${src.label} --${e.relation}--> ${tgt.label}`);
+      }
+    }
+  }
+
+  lines.push("");
+  lines.push(
+    "Note: engram replaced a full-file read with this structural view to save tokens. " +
+      "If you need specific lines, Read this file again with explicit offset/limit " +
+      "parameters — engram passes partial reads through unchanged."
+  );
+
+  let text = lines.join("\n");
+  const charBudget = tokenBudget * CHARS_PER_TOKEN;
+  if (text.length > charBudget) {
+    text =
+      sliceGraphemeSafe(text, charBudget) +
+      "\n... (truncated to fit summary budget)";
+  }
+
+  return {
+    text,
+    nodeCount: fileNodes.length,
+    codeNodeCount,
+    avgConfidence,
+    estimatedTokens: Math.ceil(text.length / CHARS_PER_TOKEN),
+  };
 }

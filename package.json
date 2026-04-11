@@ -1,7 +1,7 @@
 {
   "name": "engramx",
-  "version": "0.2.1",
-  "description": "AI coding memory that learns from every session — persistent, structural, universal",
+  "version": "0.3.0",
+  "description": "Context as infra for AI coding tools — a Claude Code hook layer that intercepts Read/Edit/Grep and replaces file reads with structural graph summaries. Persistent, local, zero LLM cost.",
   "type": "module",
   "bin": {
     "engram": "dist/cli.js",

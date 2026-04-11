@@ -1,0 +1,8 @@
+{
+  "session_id": "spike-2026-04-11",
+  "transcript_path": "/tmp/engram-spike/transcript.jsonl",
+  "cwd": "/tmp/engram-spike/test-project",
+  "hook_event_name": "SessionStart",
+  "source": "startup",
+  "model": "claude-sonnet-4-6"
+}

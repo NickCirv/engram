@@ -2,11 +2,11 @@
  * Core engram operations — init, mine, query, stats.
  * This is the main API surface that CLI and MCP server both use.
  */
-import { join, resolve } from "node:path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { join, resolve, relative } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { GraphStore } from "./graph/store.js";
-import { queryGraph, shortestPath } from "./graph/query.js";
+import { queryGraph, shortestPath, renderFileStructure } from "./graph/query.js";
 import { extractDirectory } from "./miners/ast-miner.js";
 import { mineGitHistory } from "./miners/git-miner.js";
 import { mineSessionHistory, learnFromSession } from "./miners/session-miner.js";
@@ -179,6 +179,171 @@ export async function stats(projectRoot: string): Promise<GraphStats> {
   }
 }
 
+export interface FileContextResult {
+  /** True if the graph has at least one node with this sourceFile. */
+  readonly found: boolean;
+  /**
+   * Confidence that the summary is a faithful replacement for reading the
+   * file. Combines coverage (do we have enough CODE declarations?) and
+   * quality (are those nodes extracted with high confidence?). Scale 0..1.
+   *
+   * Formula: min(codeNodeCount / 3, 1) * avgExtractionConfidence
+   *   - 3 code declarations is the "full coverage" ceiling. A file with
+   *     3+ exported functions/classes/types has meaningful structure that
+   *     the graph summary captures well.
+   *   - `file` and `module` metadata nodes are EXCLUDED from the count so
+   *     a file with only its own metadata node doesn't look covered.
+   *   - avgExtractionConfidence weights by how sure the miner was
+   *     (EXTRACTED = 1.0, INFERRED ≈ 0.7, AMBIGUOUS ≈ 0.4).
+   */
+  readonly confidence: number;
+  /** The rendered structural summary (empty if found=false). */
+  readonly summary: string;
+  /** How many nodes matched the file (includes file metadata). */
+  readonly nodeCount: number;
+  /** Code declaration count (excludes file/module metadata nodes). */
+  readonly codeNodeCount: number;
+  /** Average extraction confidence across the file's nodes. */
+  readonly avgNodeConfidence: number;
+  /** Graph database mtime in ms since epoch (used for staleness checks). */
+  readonly graphMtimeMs: number;
+  /** File mtime in ms since epoch (null if the file does not exist). */
+  readonly fileMtimeMs: number | null;
+  /** True if the file is newer than the graph — summary is stale. */
+  readonly isStale: boolean;
+}
+
+/**
+ * Number of CODE nodes (excluding file/module metadata) at which coverage
+ * is considered "full" for confidence purposes. Tuned empirically on
+ * 2026-04-11: auth.ts fixture with 2 code nodes (class + function) should
+ * be borderline, 3+ should confidently intercept.
+ *
+ * KNOWN LIMITATION: this formula undervalues files with a single large
+ * class + many methods. The AST miner currently emits one node per class
+ * (not one per method), so a 20-method file is counted as 1 code node.
+ * The result is conservative passthrough — we'd rather miss a chance to
+ * save tokens than feed Claude a sparse summary. v0.3.1 will tune this
+ * from real hook-stats data, potentially by folding edge degree into the
+ * coverage score so a richly-connected class node counts for more.
+ */
+const FILE_CONTEXT_COVERAGE_CEILING = 3;
+
+/**
+ * Resolve a file path (absolute or project-relative) against a project
+ * root and return the engram graph's structural view of that file, plus
+ * metadata needed by the Read interception hook to decide whether to use
+ * the summary as a replacement for a raw file read.
+ *
+ * This is the bridge between the hook layer (which receives absolute
+ * paths from Claude Code) and the graph layer (which stores sourceFile
+ * as project-relative paths).
+ *
+ * Contract:
+ *   - Never throws. Any internal error resolves to `found: false` with
+ *     the failure reflected in nodeCount=0 and confidence=0.
+ *   - Opens and closes the store in a single call. Caller must NOT hold
+ *     the store open concurrently.
+ *   - Does NOT check `.engram/hook-disabled` — that's the safety layer's
+ *     job, handled upstream by the Read handler.
+ *   - Does check file vs graph mtime and sets `isStale` accordingly, but
+ *     still returns the summary. Caller decides what to do with stale data.
+ */
+export async function getFileContext(
+  projectRoot: string,
+  absFilePath: string
+): Promise<FileContextResult> {
+  const empty: FileContextResult = {
+    found: false,
+    confidence: 0,
+    summary: "",
+    nodeCount: 0,
+    codeNodeCount: 0,
+    avgNodeConfidence: 0,
+    graphMtimeMs: 0,
+    fileMtimeMs: null,
+    isStale: false,
+  };
+
+  try {
+    const root = resolve(projectRoot);
+    const abs = resolve(absFilePath);
+    const relPath = relative(root, abs);
+
+    // If the file is outside the project (relative path starts with ..),
+    // there's no graph data for it by construction.
+    if (relPath.startsWith("..") || relPath === "") {
+      return empty;
+    }
+
+    // Capture the graph database mtime for staleness comparison. We use
+    // the db file's fs mtime rather than the stats table's `last_mined`
+    // key because the fs mtime is always up-to-date even if the stats
+    // table lags behind incremental updates.
+    const dbPath = getDbPath(root);
+    let graphMtimeMs = 0;
+    try {
+      graphMtimeMs = statSync(dbPath).mtimeMs;
+    } catch {
+      // No graph.db — nothing to do. Return empty (found: false).
+      return empty;
+    }
+
+    // Capture the file's mtime. If the file doesn't exist (common case
+    // for new files during an Edit), fileMtimeMs is null and we treat the
+    // summary as not-stale (the hook will still fall through because the
+    // graph will have zero nodes for a file that doesn't exist yet).
+    let fileMtimeMs: number | null = null;
+    try {
+      fileMtimeMs = statSync(abs).mtimeMs;
+    } catch {
+      fileMtimeMs = null;
+    }
+
+    const isStale = fileMtimeMs !== null && fileMtimeMs > graphMtimeMs;
+
+    const store = await getStore(root);
+    try {
+      const summary = renderFileStructure(store, relPath);
+      if (summary.codeNodeCount === 0) {
+        // No code declarations → not worth a summary even if there's a
+        // file metadata node. Treat as passthrough.
+        return {
+          ...empty,
+          nodeCount: summary.nodeCount,
+          codeNodeCount: 0,
+          graphMtimeMs,
+          fileMtimeMs,
+          isStale,
+        };
+      }
+      const coverageScore = Math.min(
+        summary.codeNodeCount / FILE_CONTEXT_COVERAGE_CEILING,
+        1
+      );
+      const confidence = coverageScore * summary.avgConfidence;
+      return {
+        found: true,
+        confidence,
+        summary: summary.text,
+        nodeCount: summary.nodeCount,
+        codeNodeCount: summary.codeNodeCount,
+        avgNodeConfidence: summary.avgConfidence,
+        graphMtimeMs,
+        fileMtimeMs,
+        isStale,
+      };
+    } finally {
+      store.close();
+    }
+  } catch {
+    // Never throw from getFileContext. Graceful degradation is the whole
+    // point of the hook layer — any error here should fall through to
+    // "no summary available" so the Read proceeds normally.
+    return empty;
+  }
+}
+
 export async function learn(
   projectRoot: string,
   text: string,
@@ -208,14 +373,27 @@ export interface MistakeEntry {
  * v0.2: list mistake nodes from the graph. Powers the `engram mistakes`
  * CLI command and the `list_mistakes` MCP tool. Mistakes are sorted by
  * most-recently-verified first.
+ *
+ * v0.3: added `sourceFile` option. When set, only returns mistakes whose
+ * `sourceFile` matches (exact string match, project-relative). Used by
+ * the Edit/Write hook handler for per-file landmine lookups.
  */
 export async function mistakes(
   projectRoot: string,
-  options: { limit?: number; sinceDays?: number } = {}
+  options: {
+    limit?: number;
+    sinceDays?: number;
+    sourceFile?: string;
+  } = {}
 ): Promise<MistakeEntry[]> {
   const store = await getStore(projectRoot);
   try {
     let items = store.getAllNodes().filter((n) => n.kind === "mistake");
+
+    if (options.sourceFile !== undefined) {
+      const target = options.sourceFile;
+      items = items.filter((m) => m.sourceFile === target);
+    }
 
     if (options.sinceDays !== undefined) {
       const cutoff = Date.now() - options.sinceDays * 24 * 60 * 60 * 1000;
