@@ -39,8 +39,10 @@ const program = new Command();
 
 program
   .name("engram")
-  .description("AI coding memory that learns from every session")
-  .version("0.2.1");
+  .description(
+    "Context as infra for AI coding tools — hook-based Read/Edit interception + structural graph summaries"
+  )
+  .version("0.3.0");
 
 program
   .command("init")

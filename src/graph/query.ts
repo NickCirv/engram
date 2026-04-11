@@ -7,7 +7,9 @@ import type { GraphEdge, GraphNode } from "./schema.js";
 import { sliceGraphemeSafe, truncateGraphemeSafe } from "./render-utils.js";
 
 // v0.2: mistake priority boost. When a query matches a mistake node, it
-// gets a higher score so the regret buffer surfaces before normal results.
+// gets a higher score so the landmines surface before normal results.
+// ("Landmines" is the user-facing name for past mistakes — internal API
+// stays on "mistake" / "list_mistakes" for backward compatibility.)
 // 2.5x is tuned by intuition — large enough to beat pure text-match score
 // parity, small enough that a stronger text match on a non-mistake still
 // wins. Verified in tests/mistake-memory.test.ts.
@@ -25,7 +27,7 @@ const MISTAKE_SCORE_BOOST = 2.5;
 const KEYWORD_SCORE_DOWNWEIGHT = 0.5;
 
 // Exported for use by the MCP server (serve.ts) so truncation is
-// consistent across the regret buffer block and the list_mistakes tool.
+// consistent across the landmines block and the list_mistakes tool.
 export const MAX_MISTAKE_LABEL_CHARS = 500;
 
 // v0.2.1: a node is a "hidden keyword" if it's a concept with subkind
@@ -62,8 +64,8 @@ function scoreNodes(
       if (file.includes(t)) score += 1;
     }
     if (score > 0) {
-      // Priority boost for mistake nodes so the regret buffer surfaces
-      // relevant past failures before normal code results.
+      // Priority boost for mistake nodes so landmines surface relevant
+      // past failures before normal code results.
       if (node.kind === "mistake") score *= MISTAKE_SCORE_BOOST;
       // Priority downweight for keyword concept nodes. Keeps them seed-
       // eligible when no code/skill matches exist (so skill discovery
@@ -248,7 +250,7 @@ function renderSubgraph(
   const charBudget = tokenBudget * CHARS_PER_TOKEN;
   const lines: string[] = [];
 
-  // v0.2: regret buffer. If any mistakes are in the result set, emit them
+  // v0.2/v0.3: landmines block. If any mistakes are in the result set, emit them
   // at the top of the output as a warning block and exclude them from the
   // main NODE list (they're still in the scored results, just rendered
   // separately with a distinctive marker).
