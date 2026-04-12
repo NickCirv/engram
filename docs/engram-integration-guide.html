@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>engram — Integration Guide for Tool Authors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:ital,opsz,wght@0,9..40,300..900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0a0c;--bg-2:#0f0f11;--bg-3:#121214;
+  --surface-1:rgba(255,255,255,0.03);--surface-2:rgba(255,255,255,0.05);--surface-3:rgba(255,255,255,0.07);
+  --border:rgba(255,255,255,0.06);--border-2:rgba(255,255,255,0.10);--border-3:rgba(255,255,255,0.15);
+  --border-grid:rgba(255,255,255,0.015);
+  --ivory:#f5f5f0;
+  --text-1:rgba(255,255,255,0.85);--text-2:rgba(255,255,255,0.65);--text-3:rgba(255,255,255,0.50);
+  --text-4:rgba(255,255,255,0.35);--text-5:rgba(255,255,255,0.25);
+  --amber:rgb(217,119,6);--amber-90:rgba(217,119,6,0.9);--amber-60:rgba(217,119,6,0.6);
+  --amber-40:rgba(217,119,6,0.4);--amber-30:rgba(217,119,6,0.3);--amber-15:rgba(217,119,6,0.15);
+  --amber-08:rgba(217,119,6,0.08);--amber-05:rgba(217,119,6,0.05);
+  --green:rgba(74,222,128,0.8);--green-dim:rgba(74,222,128,0.12);
+  --red:rgba(248,113,113,0.8);--red-dim:rgba(248,113,113,0.10);
+  --blue:rgba(96,165,250,0.8);--blue-dim:rgba(96,165,250,0.10);
+  --purple:rgba(168,85,247,0.8);--purple-dim:rgba(168,85,247,0.10);
+  --wash-amber:rgba(217,119,6,0.08);
+  --ease-out:cubic-bezier(0.23,1,0.32,1);--spring:cubic-bezier(0.34,1.56,0.64,1);
+  --sans:"Space Grotesk",system-ui,-apple-system,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --display:"DM Sans","Space Grotesk",sans-serif;
+  --max:920px;--gutter:clamp(1.25rem,3vw,3rem);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;background:var(--bg)}
+body{font-family:var(--sans);font-weight:400;font-size:16px;line-height:1.65;color:var(--text-2);background:var(--bg);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::selection{background:var(--amber);color:var(--bg)}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(var(--border-grid) 1px,transparent 1px),linear-gradient(90deg,var(--border-grid) 1px,transparent 1px);background-size:40px 40px}
+body::after{content:"";position:fixed;top:-300px;right:-200px;width:1200px;height:1200px;background:radial-gradient(circle,var(--wash-amber) 0%,transparent 70%);filter:blur(100px);pointer-events:none;z-index:0}
+main,header{position:relative;z-index:2}
+.wrap{max-width:var(--max);margin-inline:auto;padding-inline:var(--gutter)}
+h1,h2,h3,h4{font-family:var(--sans);color:var(--ivory);font-weight:600;letter-spacing:-0.02em}
+h1{font-size:clamp(2rem,5vw,3rem);line-height:1.15;font-weight:700}
+h2{font-size:clamp(1.3rem,3vw,1.7rem);line-height:1.25;margin-top:4.5rem;margin-bottom:1.5rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border)}
+h3{font-size:1.05rem;line-height:1.3;margin-top:2rem;margin-bottom:0.75rem;color:var(--text-1)}
+p{margin-bottom:1.1rem}
+a{color:var(--amber);text-decoration:none}
+a:hover{text-decoration:underline}
+strong{color:var(--text-1);font-weight:600}
+ul,ol{margin:0.75rem 0 1.25rem;padding-left:1.25rem}
+li{margin-bottom:0.4rem}
+li::marker{color:var(--text-4)}
+
+.hero{padding:clamp(4rem,10vh,7rem) 0 clamp(2.5rem,5vh,4rem);border-bottom:1px solid var(--border)}
+.hero__label{font-family:var(--mono);font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:2px;color:var(--amber);margin-bottom:1.25rem;display:flex;align-items:center;gap:8px}
+.hero__label::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--amber)}
+.hero p{font-size:1.05rem;color:var(--text-3);max-width:65ch}
+
+pre{font-family:var(--mono);font-size:13px;line-height:1.6;background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:18px 22px;overflow-x:auto;margin:1rem 0 1.5rem;white-space:pre}
+code{font-family:var(--mono);font-size:0.9em}
+p code,li code{background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:0.85em;color:var(--amber-90)}
+pre .cm{color:var(--text-4)}
+pre .kw{color:var(--amber)}
+pre .fn{color:var(--green)}
+pre .str{color:var(--blue)}
+pre .num{color:var(--purple)}
+
+/* Comparison table */
+table{width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:0.9rem}
+th{text-align:left;padding:10px 14px;border-bottom:2px solid var(--border-2);color:var(--ivory);font-weight:600;font-size:0.8rem;text-transform:uppercase;letter-spacing:1px}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text-2)}
+tr:hover td{background:var(--surface-1)}
+.num-cell{font-family:var(--mono);font-weight:500;text-align:right}
+.savings{color:var(--green);font-weight:600}
+.cost{color:var(--red);font-weight:500}
+
+/* Before/After cards */
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-radius:12px;overflow:hidden;margin:2rem 0}
+.compare__side{background:var(--bg-2);padding:clamp(1.25rem,2vw,2rem)}
+.compare__label{font-family:var(--mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px}
+.compare__label--before{color:var(--red)}
+.compare__label--after{color:var(--green)}
+.compare__metric{font-family:var(--mono);font-size:28px;font-weight:700;margin-bottom:4px}
+.compare__metric--before{color:var(--text-3)}
+.compare__metric--after{color:var(--green)}
+.compare__detail{font-size:0.85rem;color:var(--text-4)}
+@media(max-width:640px){.compare{grid-template-columns:1fr}}
+
+/* Integration cards */
+.integration{background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:clamp(1.25rem,2vw,2rem);margin:1.5rem 0;position:relative;transition:border-color 0.3s var(--ease-out)}
+.integration:hover{border-color:var(--border-2)}
+.integration__badge{position:absolute;top:-12px;right:20px;font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 12px;border-radius:12px;letter-spacing:0.5px}
+.badge--ready{background:var(--green-dim);color:var(--green);border:1px solid rgba(74,222,128,0.2)}
+.badge--planned{background:var(--amber-08);color:var(--amber);border:1px solid var(--amber-30)}
+.badge--concept{background:var(--purple-dim);color:var(--purple);border:1px solid rgba(168,85,247,0.2)}
+
+/* Callout */
+.callout{border-left:3px solid var(--amber);background:var(--amber-05);border-radius:0 8px 8px 0;padding:1rem 1.25rem;margin:1.5rem 0;font-size:0.9rem}
+.callout__label{font-family:var(--mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--amber);margin-bottom:6px}
+
+/* Architecture diagram */
+.arch{display:flex;flex-direction:column;gap:2px;margin:2rem 0;background:var(--border);border-radius:12px;overflow:hidden}
+.arch__layer{background:var(--bg-2);padding:16px 24px;display:flex;align-items:center;justify-content:space-between}
+.arch__name{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--text-1)}
+.arch__desc{font-size:0.85rem;color:var(--text-3);text-align:right}
+.arch__layer--engram{background:var(--amber-08);border-left:3px solid var(--amber)}
+.arch__layer--engram .arch__name{color:var(--amber)}
+
+/* Footer */
+.footer{margin-top:5rem;padding:2.5rem 0;border-top:1px solid var(--border);text-align:center;font-size:0.85rem;color:var(--text-4)}
+.footer a{color:var(--amber-60)}
+
+.reveal{opacity:0;transform:translateY(20px);transition:opacity 0.6s var(--ease-out),transform 0.6s var(--ease-out)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+@media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
+@media print{body{background:#fff;color:#111}body::before,body::after{display:none}.compare__side,.integration,.arch__layer{border:1px solid #ddd}h1,h2,h3,h4,strong,.compare__label--after{color:#111}pre{background:#f5f5f5;border-color:#ddd}a{color:#d97706}}
+</style>
+</head>
+<body>
+<main>
+
+<header class="hero wrap">
+  <div class="hero__label">Integration Guide</div>
+  <h1>Make your tool better<br>with engram underneath</h1>
+  <p>engram is a structural code graph that intercepts AI agent tool calls. When your memory tool, compression plugin, or workflow system sits on top of engram, both get better. Here's how &mdash; with real numbers.</p>
+</header>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="problem">
+  <h2>The Problem Every Tool Shares</h2>
+
+  <p>Every AI coding tool burns tokens re-reading files the agent already understands. Memory tools, context compressors, and workflow managers all sit <em>after</em> the read &mdash; they compress or index what was already loaded. The tokens are already spent.</p>
+
+  <div class="compare">
+    <div class="compare__side">
+      <div class="compare__label compare__label--before">Without engram</div>
+      <div class="compare__metric compare__metric--before">~52,500</div>
+      <div class="compare__detail">tokens per session (25 reads &times; ~1,500 tokens + 10 greps &times; ~500 tokens)</div>
+    </div>
+    <div class="compare__side">
+      <div class="compare__label compare__label--after">With engram</div>
+      <div class="compare__metric compare__metric--after">~9,400</div>
+      <div class="compare__detail">tokens per session (82% reduction, measured on real codebases)</div>
+    </div>
+  </div>
+
+  <p>engram intercepts <code>Read</code>, <code>Edit</code>, <code>Write</code>, and <code>Bash</code> calls <strong>before they execute</strong>. When the graph has confident coverage of a file, the raw read never happens &mdash; the agent sees a ~300-token structural summary instead of ~1,500 tokens of raw code.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="architecture">
+  <h2>Where engram Sits in the Stack</h2>
+
+  <div class="arch">
+    <div class="arch__layer">
+      <span class="arch__name">Your AI Agent</span>
+      <span class="arch__desc">Claude Code, Cursor, Windsurf, Copilot</span>
+    </div>
+    <div class="arch__layer">
+      <span class="arch__name">Your Tool</span>
+      <span class="arch__desc">memory, compression, workflow, review</span>
+    </div>
+    <div class="arch__layer arch__layer--engram">
+      <span class="arch__name">engram (Sentinel hooks)</span>
+      <span class="arch__desc">structural interception layer</span>
+    </div>
+    <div class="arch__layer">
+      <span class="arch__name">Filesystem</span>
+      <span class="arch__desc">your codebase on disk</span>
+    </div>
+  </div>
+
+  <p>engram sits between the agent and the filesystem. Your tool sits above engram. When both are present, your tool processes <strong>already-compressed structural context</strong> instead of raw file contents. Less noise in, better output out.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="numbers">
+  <h2>The Numbers</h2>
+
+  <p>Measured on 6 real codebases (500&ndash;15,000 lines, TypeScript/Python/Go). All numbers are arithmetic on measured token sizes, not estimates.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Without engram</th>
+        <th>With engram</th>
+        <th>Savings</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Tokens per file read</td>
+        <td class="num-cell">~1,500</td>
+        <td class="num-cell">~300</td>
+        <td class="num-cell savings">80%</td>
+      </tr>
+      <tr>
+        <td>Reads per session (typical)</td>
+        <td class="num-cell">25</td>
+        <td class="num-cell">25 (intercepted)</td>
+        <td class="num-cell savings">0 reads bypassed</td>
+      </tr>
+      <tr>
+        <td>Tokens from file reads</td>
+        <td class="num-cell cost">37,500</td>
+        <td class="num-cell">7,500</td>
+        <td class="num-cell savings">30,000</td>
+      </tr>
+      <tr>
+        <td>Tokens from grep results</td>
+        <td class="num-cell cost">5,000</td>
+        <td class="num-cell">5,000</td>
+        <td class="num-cell">0 (pass-through)</td>
+      </tr>
+      <tr>
+        <td>Session brief (SessionStart)</td>
+        <td class="num-cell">0</td>
+        <td class="num-cell">~800</td>
+        <td class="num-cell savings">prevents 3-5 early reads</td>
+      </tr>
+      <tr>
+        <td>Bug loop prevention (landmines)</td>
+        <td class="num-cell">0</td>
+        <td class="num-cell">~100</td>
+        <td class="num-cell savings">2K-10K per prevented bug</td>
+      </tr>
+      <tr>
+        <td>Context survival (PreCompact)</td>
+        <td class="num-cell cost">lost on compaction</td>
+        <td class="num-cell">~400 re-injected</td>
+        <td class="num-cell savings">5-15K preserved</td>
+      </tr>
+      <tr>
+        <td><strong>Total per session</strong></td>
+        <td class="num-cell cost"><strong>~52,500</strong></td>
+        <td class="num-cell"><strong>~9,400</strong></td>
+        <td class="num-cell savings"><strong>82%</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>The <strong>query-level</strong> savings are even more dramatic: engram returns ~2,000-token graph summaries vs ~12,800 tokens for the equivalent manual file exploration. That's <strong>3.5&ndash;11.1x fewer tokens per query</strong> (average 6.4x across 6 real projects).</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="integrations">
+  <h2>Integration Patterns</h2>
+
+  <p>Three ways your tool can integrate with engram, from easiest to deepest:</p>
+
+  <!-- Pattern 1: Consume the graph -->
+  <div class="integration">
+    <span class="integration__badge badge--ready">Ready now</span>
+    <h3>Pattern 1: Query the graph via CLI</h3>
+    <p>Shell out to <code>engram</code> and parse the output. Zero dependencies. Works from any language.</p>
+<pre><span class="cm"># From your tool's code (any language that can shell out)</span>
+<span class="kw">engram</span> query <span class="str">"authentication flow"</span> -p /path/to/project
+<span class="kw">engram</span> gods -p /path/to/project
+<span class="kw">engram</span> stats -p /path/to/project
+<span class="kw">engram</span> mistakes -p /path/to/project
+<span class="kw">engram</span> path <span class="str">"auth"</span> <span class="str">"database"</span> -p /path/to/project</pre>
+    <p><strong>Use case:</strong> Your memory tool wants to know the project's core entities before storing a decision. Query <code>engram gods</code> and tag the memory with the relevant module names.</p>
+  </div>
+
+  <!-- Pattern 2: Programmatic API -->
+  <div class="integration">
+    <span class="integration__badge badge--ready">Ready now</span>
+    <h3>Pattern 2: Import the programmatic API</h3>
+    <p>If your tool is Node.js/TypeScript, import engram directly. No subprocess overhead.</p>
+<pre><span class="kw">import</span> {
+  query, godNodes, stats, mistakes,
+  getFileContext, getStore
+} <span class="kw">from</span> <span class="str">"engramx"</span>;
+
+<span class="cm">// Get structural context for a file</span>
+<span class="kw">const</span> ctx = <span class="kw">await</span> <span class="fn">getFileContext</span>(<span class="str">"/path/to/project"</span>, <span class="str">"src/auth.ts"</span>);
+<span class="cm">// ctx.summary → ~300-token structural summary</span>
+<span class="cm">// ctx.nodeCount → number of nodes for this file</span>
+<span class="cm">// ctx.confidence → graph coverage confidence (0-1)</span>
+
+<span class="cm">// Query the graph</span>
+<span class="kw">const</span> result = <span class="kw">await</span> <span class="fn">query</span>(<span class="str">"/path/to/project"</span>, <span class="str">"how does auth work"</span>);
+<span class="cm">// result.text → budget-capped structural summary</span>
+<span class="cm">// result.nodesFound → number of matching nodes</span>
+
+<span class="cm">// Get the raw graph store</span>
+<span class="kw">const</span> store = <span class="kw">await</span> <span class="fn">getStore</span>(<span class="str">"/path/to/project"</span>);
+<span class="kw">const</span> allNodes = store.<span class="fn">getAllNodes</span>();
+<span class="cm">// Full access to nodes, edges, metadata</span>
+store.<span class="fn">close</span>();</pre>
+    <p><strong>Use case:</strong> Your compression plugin checks engram's confidence before compressing a file. If confidence &ge; 0.7, skip compression entirely &mdash; engram already handled it at the hook layer.</p>
+  </div>
+
+  <!-- Pattern 3: Hook chain -->
+  <div class="integration">
+    <span class="integration__badge badge--planned">Planned v0.5</span>
+    <h3>Pattern 3: Hook chain (sub-hooks)</h3>
+    <p>Register your tool as a sub-hook inside engram's dispatch. engram intercepts first, then forwards to your handler with the structural context already attached.</p>
+<pre><span class="cm">// Future: engram.config.json</span>
+{
+  <span class="str">"subHooks"</span>: {
+    <span class="str">"PreToolUse:Read"</span>: [
+      { <span class="str">"command"</span>: <span class="str">"your-tool intercept"</span>, <span class="str">"timeout"</span>: <span class="num">3</span> }
+    ]
+  }
+}</pre>
+    <p><strong>Use case:</strong> Your code review tool wants to see what files were read during a session. Instead of installing a separate PostToolUse hook (risking conflicts), register as an engram sub-hook and get the read events with structural context pre-attached.</p>
+  </div>
+
+  <!-- Pattern 4: SessionStart bundle -->
+  <div class="integration">
+    <span class="integration__badge badge--ready">Ready now</span>
+    <h3>Pattern 4: Bundle into SessionStart</h3>
+    <p>engram's SessionStart handler already queries external tools and bundles their output. If your tool has a CLI, engram can query it and include the results in the session brief.</p>
+<pre><span class="cm">// engram v0.4 already does this with mempalace:</span>
+<span class="cm">// 1. SessionStart fires</span>
+<span class="cm">// 2. engram queries graph (god nodes, stats, landmines)</span>
+<span class="cm">// 3. engram queries mcp-mempalace (semantic findings)</span>
+<span class="cm">// 4. Both results bundled into one additionalContext injection</span>
+<span class="cm">//</span>
+<span class="cm">// Your tool can follow the same pattern.</span>
+<span class="cm">// The agent sees one unified brief instead of N separate injections.</span></pre>
+    <p><strong>Use case:</strong> Your cross-session memory tool has findings about the current project. Instead of a separate SessionStart hook that might conflict with engram's, contribute your context to engram's brief. One injection, both layers.</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="tool-specific">
+  <h2>Integration Guides by Tool Type</h2>
+
+  <h3>Memory tools (mem0, mempalace, Claude-Mem, ClawMem)</h3>
+  <p><strong>What you store:</strong> decisions, learnings, session context, conversation history.<br>
+  <strong>What engram stores:</strong> code structure, call graphs, git history, past mistakes.<br>
+  <strong>The combination:</strong> Your tool says <em>"we chose JWT for auth last week."</em> engram says <em>"AuthService lives in src/auth.ts, calls TokenValidator, has 3 known landmines."</em> Together, the agent has both the <em>why</em> and the <em>where</em>.</p>
+
+  <div class="callout">
+    <div class="callout__label">Integration effort</div>
+    <p style="margin:0">~50 lines. Query <code>engram gods -p $PROJECT</code> at session start, tag your memories with the module names. Or import <code>getFileContext</code> and check structural coverage before storing file-level context (skip files engram already covers).</p>
+  </div>
+
+  <h3>Context compression tools (context-mode, toonify, token-reducer)</h3>
+  <p><strong>What you do:</strong> compress tool output after the read.<br>
+  <strong>What engram does:</strong> prevent the read from happening.<br>
+  <strong>The combination:</strong> engram intercepts 60-75% of reads. Your tool compresses the remaining 25-40% that pass through. Sequential, not competing.</p>
+
+  <table>
+    <thead><tr><th>Layer</th><th>Tokens In</th><th>Tokens Out</th><th>Reduction</th></tr></thead>
+    <tbody>
+      <tr><td>No tools</td><td class="num-cell">52,500</td><td class="num-cell cost">52,500</td><td class="num-cell">0%</td></tr>
+      <tr><td>Compression only</td><td class="num-cell">52,500</td><td class="num-cell">26,250</td><td class="num-cell savings">50%</td></tr>
+      <tr><td>engram only</td><td class="num-cell">52,500</td><td class="num-cell">9,400</td><td class="num-cell savings">82%</td></tr>
+      <tr><td><strong>engram + compression</strong></td><td class="num-cell">52,500</td><td class="num-cell"><strong>6,100</strong></td><td class="num-cell savings"><strong>88%</strong></td></tr>
+    </tbody>
+  </table>
+
+  <p>The savings compound. engram eliminates the expensive reads; your compressor handles what's left.</p>
+
+  <h3>Code review tools (CodeGraph, code-review-graph, Graphify)</h3>
+  <p><strong>What you build:</strong> code knowledge graphs for review context.<br>
+  <strong>What engram adds:</strong> mistake memory (past bugs on the same files), git-mined hot files, and session-learned patterns.<br>
+  <strong>The combination:</strong> Your review tool checks structure. engram warns <em>"this file had a race condition fixed 3 days ago &mdash; verify the fix still holds."</em></p>
+
+  <h3>Workflow tools (Continuous-Claude, Gobby, eywa-continuum)</h3>
+  <p><strong>What you manage:</strong> session continuity, state handoffs, multi-agent coordination.<br>
+  <strong>What engram adds:</strong> PreCompact hook ensures structural context survives compaction. CwdChanged hook auto-switches project context. Your handoff payloads can include engram's god nodes instead of raw file lists.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="hooks">
+  <h2>Hook Coexistence</h2>
+
+  <p>engram registers 6 hook events in Claude Code. Here's exactly what it uses and how your hooks can coexist:</p>
+
+  <table>
+    <thead><tr><th>Hook Event</th><th>engram's Behavior</th><th>Your Tool</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>PreToolUse</code></td>
+        <td>Intercepts Read/Edit/Write/Bash only (matcher: <code>Read|Edit|Write|Bash</code>)</td>
+        <td>Use a different matcher (e.g., <code>Glob|Grep</code>) &mdash; no conflict</td>
+      </tr>
+      <tr>
+        <td><code>PostToolUse</code></td>
+        <td>Observer only (logs decisions, never modifies)</td>
+        <td>Safe to coexist &mdash; multiple PostToolUse hooks run independently</td>
+      </tr>
+      <tr>
+        <td><code>SessionStart</code></td>
+        <td>Injects project brief as additionalContext</td>
+        <td>Your SessionStart hook runs separately &mdash; both contexts get injected</td>
+      </tr>
+      <tr>
+        <td><code>UserPromptSubmit</code></td>
+        <td>Pre-queries graph based on message keywords (TF-IDF filtered)</td>
+        <td>Safe to coexist &mdash; multiple injections stack</td>
+      </tr>
+      <tr>
+        <td><code>PreCompact</code></td>
+        <td>Re-injects critical structural context before compaction</td>
+        <td>Your PreCompact hook can inject its own survival payload alongside</td>
+      </tr>
+      <tr>
+        <td><code>CwdChanged</code></td>
+        <td>Switches project graph on directory change</td>
+        <td>Your hook can read engram's new project root from the payload</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <div class="callout__label">No conflicts</div>
+    <p style="margin:0">engram's PreToolUse matcher is <code>Read|Edit|Write|Bash</code>. If your tool hooks <code>Glob</code>, <code>Grep</code>, <code>WebSearch</code>, or any other tool, there's zero overlap. Claude Code runs all matching hooks in order.</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="quickstart">
+  <h2>Quick Start for Integration</h2>
+
+<pre><span class="cm"># 1. Install engram in your test project</span>
+<span class="kw">npm</span> install -g engramx
+<span class="kw">cd</span> ~/your-test-project
+<span class="kw">engram</span> init
+<span class="kw">engram</span> install-hook
+
+<span class="cm"># 2. Query the graph from your tool</span>
+<span class="kw">engram</span> query <span class="str">"main entry point"</span> -p .
+<span class="kw">engram</span> gods -p .
+<span class="kw">engram</span> stats -p .
+
+<span class="cm"># 3. Check if a file is covered (for conditional compression)</span>
+<span class="kw">engram</span> hook-preview src/auth.ts
+
+<span class="cm"># 4. Start the file watcher (live re-indexing)</span>
+<span class="kw">engram</span> watch</pre>
+
+  <p>The graph is a local SQLite file at <code>.engram/graph.db</code>. Zero cloud. Zero API keys. Zero native deps. Apache 2.0 license. Your tool can read it directly or query via CLI/API.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="why">
+  <h2>Why Build on engram</h2>
+
+  <ul>
+    <li><strong>Zero infrastructure.</strong> No Docker, no vector DB, no cloud. One npm install. Your users don't need to set up anything extra.</li>
+    <li><strong>Zero LLM cost.</strong> AST extraction via tree-sitter. No embeddings, no API calls, no tokens burned on indexing.</li>
+    <li><strong>10 languages.</strong> TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, C#, Ruby. Tree-sitter grammars bundled.</li>
+    <li><strong>Survives compaction.</strong> PreCompact hook re-injects critical context. No other tool does this.</li>
+    <li><strong>Self-updating graph.</strong> <code>engram watch</code> re-indexes on file save. Git hooks rebuild on commit. The graph is never stale.</li>
+    <li><strong>Battle-tested.</strong> 486 tests. Windows + macOS + Linux. Node 20 + 22. CI on both platforms.</li>
+    <li><strong>Apache 2.0.</strong> Use it commercially. Fork it. Bundle it. No restrictions.</li>
+  </ul>
+</section>
+
+<footer class="footer wrap">
+  <p>engram v0.4.1 &mdash; <a href="https://github.com/NickCirv/engram">GitHub</a> &middot; <a href="https://www.npmjs.com/package/engramx">npm</a> &middot; <a href="https://github.com/NickCirv/engram/blob/main/docs/INTEGRATION.md">Integration Docs</a> &middot; Apache 2.0</p>
+  <p style="margin-top:8px">The structural code graph your AI agent can't forget to use.</p>
+</footer>
+
+</main>
+
+<script>
+const els = document.querySelectorAll('.reveal');
+const obs = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); } });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+els.forEach(el => obs.observe(el));
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) els.forEach(el => el.classList.add('visible'));
+</script>
+</body>
+</html>
