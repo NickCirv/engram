@@ -24,6 +24,8 @@ export const ENGRAM_HOOK_EVENTS = [
   "PostToolUse",
   "SessionStart",
   "UserPromptSubmit",
+  "PreCompact",
+  "CwdChanged",
 ] as const;
 
 export type EngramHookEvent = (typeof ENGRAM_HOOK_EVENTS)[number];
@@ -100,6 +102,14 @@ export function buildEngramHookEntries(
     },
     UserPromptSubmit: {
       // No matcher — UserPromptSubmit has no tool name.
+      hooks: [baseCmd],
+    },
+    PreCompact: {
+      // No matcher — PreCompact has no tool name.
+      hooks: [baseCmd],
+    },
+    CwdChanged: {
+      // No matcher — CwdChanged has no tool name.
       hooks: [baseCmd],
     },
   };

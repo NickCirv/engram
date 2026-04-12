@@ -43,6 +43,14 @@ import {
   handlePostTool,
   type PostToolHookPayload,
 } from "./handlers/post-tool.js";
+import {
+  handlePreCompact,
+  type PreCompactHookPayload,
+} from "./handlers/pre-compact.js";
+import {
+  handleCwdChanged,
+  type CwdChangedHookPayload,
+} from "./handlers/cwd-changed.js";
 import { findProjectRoot, isValidCwd } from "./context.js";
 import { logHookEvent } from "../intelligence/hook-log.js";
 
@@ -95,6 +103,8 @@ function validatePayload(
  *   | SessionStart       |  —    | handleSessionStart      |
  *   | UserPromptSubmit   |  —    | handleUserPromptSubmit  |
  *   | PostToolUse        |  —    | handlePostTool          |
+ *   | PreCompact         |  —    | handlePreCompact        |
+ *   | CwdChanged         |  —    | handleCwdChanged        |
  *
  * Unknown events and unsupported PreToolUse tools resolve to PASSTHROUGH.
  */
@@ -123,6 +133,16 @@ export async function dispatchHook(
     case "PostToolUse":
       return runHandler(() =>
         handlePostTool(payload as unknown as PostToolHookPayload)
+      );
+
+    case "PreCompact":
+      return runHandler(() =>
+        handlePreCompact(payload as unknown as PreCompactHookPayload)
+      );
+
+    case "CwdChanged":
+      return runHandler(() =>
+        handleCwdChanged(payload as unknown as CwdChangedHookPayload)
       );
 
     default:

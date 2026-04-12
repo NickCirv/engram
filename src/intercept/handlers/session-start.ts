@@ -19,7 +19,11 @@
  *   - resume   → PASSTHROUGH (session already has prior context)
  */
 import { existsSync, readFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { basename, dirname, join, resolve } from "node:path";
+
+const execFileAsync = promisify(execFile);
 import { godNodes, mistakes, stats } from "../../core.js";
 import { findProjectRoot, isValidCwd } from "../context.js";
 import { isHookDisabled, PASSTHROUGH, type HandlerResult } from "../safety.js";
@@ -138,6 +142,71 @@ function formatBrief(args: {
   return lines.join("\n");
 }
 
+/**
+ * Query mempalace for semantic context about this project. Returns a
+ * compact summary of top findings, or null if mempalace is unavailable.
+ *
+ * Graceful degradation: if the `mcp-mempalace` CLI isn't installed,
+ * the command fails, or it returns nothing useful, this returns null
+ * and the SessionStart brief proceeds without semantic context.
+ *
+ * Uses execFile (no shell, async) to avoid command injection and blocking.
+ * Timeout: 1.5s hard cap — runs in parallel with graph queries.
+ */
+async function queryMempalace(projectName: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      "mcp-mempalace",
+      ["mempalace-search", "--query", projectName],
+      { timeout: 1500, encoding: "utf-8" }
+    );
+    const trimmed = stdout.trim();
+    if (!trimmed || trimmed.length < 20) return null;
+
+    // Parse the output — mempalace returns JSON with a results array.
+    try {
+      const parsed = JSON.parse(trimmed);
+      const results = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.results)
+          ? parsed.results
+          : [];
+      if (results.length === 0) return null;
+
+      const lines: string[] = ["[mempalace] Recent context:"];
+      for (const r of results.slice(0, 3)) {
+        const content =
+          typeof r === "string"
+            ? r
+            : typeof r?.content === "string"
+              ? r.content
+              : typeof r?.document === "string"
+                ? r.document
+                : null;
+        if (content) {
+          const short =
+            content.length > 120
+              ? content.slice(0, 117) + "..."
+              : content;
+          lines.push(`  - ${short}`);
+        }
+      }
+      return lines.length > 1 ? lines.join("\n") : null;
+    } catch {
+      // Not JSON — use raw output, truncated.
+      const maxLen = 400;
+      const capped =
+        trimmed.length > maxLen
+          ? trimmed.slice(0, maxLen - 3) + "..."
+          : trimmed;
+      return `[mempalace] ${capped}`;
+    }
+  } catch {
+    // mcp-mempalace not installed, timed out, or errored. Silent.
+    return null;
+  }
+}
+
 /** Human-readable "N ago" for a millisecond duration. */
 function describeAgo(ms: number): string {
   if (ms < 0) return "just now";
@@ -183,7 +252,12 @@ export async function handleSessionStart(
     // Compose the brief from existing core APIs. Any failure in any
     // of these three queries resolves to an empty array / default
     // stats, which still produces a valid (if sparse) brief.
-    const [gods, mistakeList, graphStats] = await Promise.all([
+    const branch = readGitBranch(projectRoot);
+    const projectName = basename(projectRoot);
+
+    // Run graph queries AND mempalace in parallel — mempalace is
+    // async (execFile) so it doesn't block the event loop.
+    const [gods, mistakeList, graphStats, mempalaceContext] = await Promise.all([
       godNodes(projectRoot, MAX_GOD_NODES).catch(() => []),
       mistakes(projectRoot, { limit: MAX_LANDMINES_IN_BRIEF }).catch(
         () => [] as Array<{ label: string; sourceFile: string }>
@@ -198,13 +272,11 @@ export async function handleSessionStart(
         lastMined: 0,
         totalQueryTokensSaved: 0,
       })),
+      queryMempalace(projectName),
     ]);
 
     // If the graph is empty, there's nothing useful to inject.
     if (graphStats.nodes === 0 && gods.length === 0) return PASSTHROUGH;
-
-    const branch = readGitBranch(projectRoot);
-    const projectName = basename(projectRoot);
 
     const text = formatBrief({
       projectName,
@@ -222,7 +294,13 @@ export async function handleSessionStart(
       })),
     });
 
-    return buildSessionContextResponse("SessionStart", text);
+    // Bundle mempalace semantic context alongside the structural brief.
+    // engram provides structure, mempalace provides decisions/learnings.
+    const fullText = mempalaceContext
+      ? text + "\n\n" + mempalaceContext
+      : text;
+
+    return buildSessionContextResponse("SessionStart", fullText);
   } catch {
     // Any composition error → passthrough. Sessions must never fail
     // to start because engram couldn't build a brief.

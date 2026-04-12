@@ -4,6 +4,42 @@ All notable changes to engram are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-04-12 — "Infrastructure"
+
+### Added
+
+- **PreCompact hook** — re-injects god nodes, active landmines, and
+  graph stats right before Claude Code compresses the conversation.
+  This is the first tool in the ecosystem whose context survives
+  compaction. No other tool does this.
+- **CwdChanged hook** — auto-switches project context when the user
+  navigates to a different directory mid-session. Injects a compact
+  brief for the new project so subsequent interceptions route to the
+  correct graph.
+- **File watcher** (`engram watch`) — incremental re-indexing via
+  `fs.watch`. On file save, clears old nodes for that file and
+  re-extracts fresh AST nodes. 300ms debounce, ignored directories
+  (node_modules, .git, dist, etc.), extension whitelist. Zero native
+  dependencies. Eliminates manual `engram init` for graph freshness.
+- **Mempalace integration** — SessionStart brief now queries
+  `mcp-mempalace` for semantic context about the project and bundles
+  top 3 findings alongside the structural brief. Runs in parallel
+  with graph queries (async execFile, 1.5s timeout). Graceful
+  degradation if mempalace is not installed.
+- **`deleteBySourceFile`** method on GraphStore — transactional
+  deletion of all nodes and edges for a given source file. Used by
+  the file watcher for incremental re-indexing.
+- **`edges.source_file` index** — enables fast lookups when the
+  watcher deletes by file. Without this, `deleteBySourceFile` would
+  do a full table scan.
+
+### Changed
+
+- Hook count: 7 → 9 (added PreCompact, CwdChanged).
+- Installer now registers 6 hook events (was 4).
+- Test count: 467 → 486 (+19 new tests for PreCompact, CwdChanged,
+  file watcher, dispatch routing).
+
 ## [0.3.2] — 2026-04-12 — "Cross-Platform"
 
 ### Fixed

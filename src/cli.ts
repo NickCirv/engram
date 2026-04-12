@@ -25,6 +25,7 @@ import {
 import { install as installHooks, uninstall as uninstallHooks, status as hooksStatus } from "./hooks.js";
 import { autogen } from "./autogen.js";
 import { dispatchHook } from "./intercept/dispatch.js";
+import { watchProject } from "./watcher.js";
 import { handleCursorBeforeReadFile } from "./intercept/cursor-adapter.js";
 import {
   installEngramHooks,
@@ -115,6 +116,45 @@ program
         )
       );
     }
+  });
+
+program
+  .command("watch")
+  .description("Watch project for file changes and re-index incrementally")
+  .argument("[path]", "Project directory", ".")
+  .action(async (projectPath: string) => {
+    const resolvedPath = pathResolve(projectPath);
+    console.log(
+      chalk.dim("👁  Watching ") +
+        chalk.white(resolvedPath) +
+        chalk.dim(" for changes...")
+    );
+
+    const controller = watchProject(resolvedPath, {
+      onReindex: (filePath, nodeCount) => {
+        console.log(
+          chalk.green("  ↻ ") +
+            chalk.white(filePath) +
+            chalk.dim(` (${nodeCount} nodes)`)
+        );
+      },
+      onError: (err) => {
+        console.error(chalk.red("  ✗ ") + err.message);
+      },
+      onReady: () => {
+        console.log(chalk.green("  ✓ Watcher active.") + chalk.dim(" Press Ctrl+C to stop."));
+      },
+    });
+
+    // Keep process alive until Ctrl+C
+    process.on("SIGINT", () => {
+      controller.abort();
+      console.log(chalk.dim("\n  Watcher stopped."));
+      process.exit(0);
+    });
+
+    // Prevent the process from exiting
+    await new Promise(() => {});
   });
 
 program

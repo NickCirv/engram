@@ -77,6 +77,7 @@ export class GraphStore {
       "CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source)",
       "CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target)",
       "CREATE INDEX IF NOT EXISTS idx_edges_relation ON edges(relation)",
+      "CREATE INDEX IF NOT EXISTS idx_edges_source_file ON edges(source_file)",
     ];
     for (const sql of indexes) {
       try { this.db.run(sql); } catch { /* already exists */ }
@@ -123,6 +124,23 @@ export class GraphStore {
         JSON.stringify(edge.metadata),
       ]
     );
+  }
+
+  /**
+   * Remove all nodes and edges associated with a specific source file.
+   * Used by the file watcher for incremental re-indexing — old nodes for
+   * a changed file are cleared before re-extracting.
+   */
+  deleteBySourceFile(sourceFile: string): void {
+    this.db.run("BEGIN TRANSACTION");
+    try {
+      this.db.run("DELETE FROM edges WHERE source_file = ?", [sourceFile]);
+      this.db.run("DELETE FROM nodes WHERE source_file = ?", [sourceFile]);
+      this.db.run("COMMIT");
+    } catch (e) {
+      this.db.run("ROLLBACK");
+      throw e;
+    }
   }
 
   bulkUpsert(nodes: GraphNode[], edges: GraphEdge[]): void {
