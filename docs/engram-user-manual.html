@@ -1,0 +1,926 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>engram — Installation &amp; Setup Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:ital,opsz,wght@0,9..40,300..900&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   engram brand palette — from assets/banner.html + sentinel doc
+   ══════════════════════════════════════════════════════════════ */
+:root{
+  --bg:             #0a0a0c;
+  --bg-2:           #0f0f11;
+  --bg-3:           #121214;
+  --surface-1:      rgba(255,255,255,0.03);
+  --surface-2:      rgba(255,255,255,0.05);
+  --surface-3:      rgba(255,255,255,0.07);
+  --border:         rgba(255,255,255,0.06);
+  --border-2:       rgba(255,255,255,0.10);
+  --border-3:       rgba(255,255,255,0.15);
+  --border-grid:    rgba(255,255,255,0.015);
+
+  --ivory:          #f5f5f0;
+  --text-1:         rgba(255,255,255,0.85);
+  --text-2:         rgba(255,255,255,0.65);
+  --text-3:         rgba(255,255,255,0.50);
+  --text-4:         rgba(255,255,255,0.35);
+  --text-5:         rgba(255,255,255,0.25);
+
+  --amber:          rgb(217, 119, 6);
+  --amber-90:       rgba(217, 119, 6, 0.9);
+  --amber-60:       rgba(217, 119, 6, 0.6);
+  --amber-40:       rgba(217, 119, 6, 0.4);
+  --amber-30:       rgba(217, 119, 6, 0.3);
+  --amber-15:       rgba(217, 119, 6, 0.15);
+  --amber-08:       rgba(217, 119, 6, 0.08);
+  --amber-05:       rgba(217, 119, 6, 0.05);
+
+  --green:          rgba(74, 222, 128, 0.8);
+  --green-dim:      rgba(74, 222, 128, 0.12);
+  --red:            rgba(248, 113, 113, 0.8);
+  --red-dim:        rgba(248, 113, 113, 0.10);
+  --blue:           rgba(96, 165, 250, 0.8);
+  --blue-dim:       rgba(96, 165, 250, 0.10);
+
+  --wash-amber:     rgba(217, 119, 6, 0.08);
+  --wash-purple:    rgba(168, 85, 247, 0.04);
+
+  --ease-out:       cubic-bezier(0.23, 1, 0.32, 1);
+  --spring:         cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --sans: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --display: "DM Sans", "Space Grotesk", sans-serif;
+
+  --max: 860px;
+  --gutter: clamp(1.25rem, 3vw, 3rem);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;background:var(--bg)}
+body{
+  font-family:var(--sans);
+  font-weight:400;
+  font-size:16px;
+  line-height:1.65;
+  color:var(--text-2);
+  background:var(--bg);
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+::selection{background:var(--amber);color:var(--bg)}
+
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:
+    linear-gradient(var(--border-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-grid) 1px, transparent 1px);
+  background-size:40px 40px;
+}
+body::after{
+  content:"";position:fixed;top:-300px;right:-200px;
+  width:1200px;height:1200px;
+  background:radial-gradient(circle,var(--wash-amber) 0%,transparent 70%);
+  filter:blur(100px);pointer-events:none;z-index:0;
+}
+
+main,header,.toc-sidebar{position:relative;z-index:2}
+
+.wrap{
+  max-width:var(--max);
+  margin-inline:auto;
+  padding-inline:var(--gutter);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Typography
+   ══════════════════════════════════════════════════════════════ */
+h1,h2,h3,h4{font-family:var(--sans);color:var(--ivory);font-weight:600;letter-spacing:-0.02em}
+h1{font-size:clamp(2rem,5vw,3.2rem);line-height:1.15;font-weight:700}
+h2{font-size:clamp(1.4rem,3vw,1.8rem);line-height:1.25;margin-top:5rem;margin-bottom:1.5rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border)}
+h3{font-size:1.1rem;line-height:1.3;margin-top:2.5rem;margin-bottom:1rem;color:var(--text-1)}
+p{margin-bottom:1.25rem}
+a{color:var(--amber);text-decoration:none;transition:color 0.2s var(--ease-out)}
+a:hover{color:var(--amber-90);text-decoration:underline}
+strong{color:var(--text-1);font-weight:600}
+
+/* ═══════════════════════════════════════════════════════════════
+   Hero
+   ══════════════════════════════════════════════════════════════ */
+.hero{
+  padding:clamp(4rem,10vh,8rem) 0 clamp(3rem,6vh,5rem);
+  border-bottom:1px solid var(--border);
+}
+.hero__label{
+  font-family:var(--mono);
+  font-size:12px;
+  font-weight:500;
+  text-transform:uppercase;
+  letter-spacing:2px;
+  color:var(--amber);
+  margin-bottom:1.25rem;
+  display:flex;align-items:center;gap:8px;
+}
+.hero__label::before{
+  content:"";width:8px;height:8px;border-radius:50%;
+  background:var(--amber);
+}
+.hero h1{margin-bottom:1.25rem}
+.hero p{font-size:1.1rem;color:var(--text-3);max-width:60ch}
+.hero__version{
+  display:inline-flex;align-items:center;gap:6px;
+  margin-top:1rem;
+  font-family:var(--mono);font-size:13px;
+  color:var(--text-4);
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:6px;padding:6px 14px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Table of Contents — sidebar on desktop, inline on mobile
+   ══════════════════════════════════════════════════════════════ */
+.toc-sidebar{
+  position:fixed;top:50%;left:clamp(16px,2vw,40px);
+  transform:translateY(-50%);
+  display:flex;flex-direction:column;gap:2px;
+  z-index:100;
+}
+.toc-sidebar a{
+  font-family:var(--mono);font-size:11px;font-weight:400;
+  color:var(--text-5);padding:6px 10px;
+  border-left:2px solid transparent;
+  transition:all 0.25s var(--ease-out);
+  text-decoration:none;
+  white-space:nowrap;
+}
+.toc-sidebar a:hover,.toc-sidebar a.active{
+  color:var(--amber);
+  border-left-color:var(--amber);
+  background:var(--amber-05);
+}
+@media(max-width:1200px){.toc-sidebar{display:none}}
+
+/* ═══════════════════════════════════════════════════════════════
+   Step cards
+   ══════════════════════════════════════════════════════════════ */
+.step{
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:clamp(1.5rem,3vw,2.5rem);
+  margin:2rem 0;
+  position:relative;
+  transition:border-color 0.3s var(--ease-out);
+}
+.step:hover{border-color:var(--border-2)}
+.step__number{
+  position:absolute;
+  top:-14px;left:24px;
+  font-family:var(--mono);font-size:12px;font-weight:600;
+  color:var(--amber);
+  background:var(--bg);
+  border:1px solid var(--amber-30);
+  border-radius:20px;
+  padding:3px 14px;
+  letter-spacing:1px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Code blocks
+   ══════════════════════════════════════════════════════════════ */
+pre{
+  font-family:var(--mono);
+  font-size:13.5px;
+  line-height:1.6;
+  background:var(--bg-2);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:20px 24px;
+  overflow-x:auto;
+  margin:1rem 0 1.5rem;
+  white-space:pre;
+  -webkit-overflow-scrolling:touch;
+}
+code{font-family:var(--mono);font-size:0.9em}
+p code, li code{
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:2px 7px;
+  font-size:0.85em;
+  color:var(--amber-90);
+}
+pre .comment{color:var(--text-4)}
+pre .cmd{color:var(--amber)}
+pre .flag{color:var(--text-3)}
+pre .output{color:var(--green)}
+pre .path{color:var(--text-1)}
+
+/* ═══════════════════════════════════════════════════════════════
+   Tier table
+   ══════════════════════════════════════════════════════════════ */
+.tier-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:1px;
+  background:var(--border);
+  border-radius:12px;
+  overflow:hidden;
+  margin:2rem 0;
+}
+.tier-card{
+  background:var(--bg-2);
+  padding:clamp(1.25rem,2vw,2rem);
+  position:relative;
+}
+.tier-card::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:3px;
+  background:var(--tier-color,var(--border-2));
+}
+.tier-card__label{
+  font-family:var(--mono);font-size:11px;font-weight:500;
+  text-transform:uppercase;letter-spacing:1.5px;
+  color:var(--tier-color,var(--text-4));
+  margin-bottom:8px;
+}
+.tier-card__title{
+  font-size:1.1rem;font-weight:600;
+  color:var(--ivory);margin-bottom:8px;
+}
+.tier-card__savings{
+  font-family:var(--mono);font-size:22px;font-weight:700;
+  color:var(--tier-color,var(--amber));
+  margin-bottom:8px;
+}
+.tier-card__desc{font-size:0.85rem;color:var(--text-3);line-height:1.5}
+
+/* ═══════════════════════════════════════════════════════════════
+   Callout boxes
+   ══════════════════════════════════════════════════════════════ */
+.callout{
+  border-left:3px solid var(--callout-color,var(--amber));
+  background:var(--callout-bg,var(--amber-05));
+  border-radius:0 8px 8px 0;
+  padding:1rem 1.25rem;
+  margin:1.5rem 0;
+  font-size:0.9rem;
+}
+.callout--tip{--callout-color:var(--green);--callout-bg:var(--green-dim)}
+.callout--warn{--callout-color:var(--red);--callout-bg:var(--red-dim)}
+.callout--info{--callout-color:var(--blue);--callout-bg:var(--blue-dim)}
+.callout__label{
+  font-family:var(--mono);font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:1px;
+  color:var(--callout-color);
+  margin-bottom:6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   How it works diagram
+   ══════════════════════════════════════════════════════════════ */
+.flow{
+  display:flex;align-items:center;gap:0;
+  margin:2rem 0;
+  overflow-x:auto;
+  padding-bottom:8px;
+}
+.flow__node{
+  background:var(--surface-2);
+  border:1px solid var(--border-2);
+  border-radius:8px;
+  padding:12px 18px;
+  font-family:var(--mono);font-size:12px;
+  color:var(--text-1);
+  white-space:nowrap;
+  flex-shrink:0;
+}
+.flow__node--engram{
+  border-color:var(--amber-30);
+  background:var(--amber-08);
+  color:var(--amber);
+}
+.flow__arrow{
+  color:var(--text-5);
+  font-size:18px;
+  padding:0 4px;
+  flex-shrink:0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Requirements checklist
+   ══════════════════════════════════════════════════════════════ */
+.checklist{list-style:none;padding:0;margin:1.5rem 0}
+.checklist li{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:8px 0;
+  border-bottom:1px solid var(--border);
+  font-size:0.95rem;
+}
+.checklist li:last-child{border-bottom:none}
+.check{
+  flex-shrink:0;width:20px;height:20px;
+  border-radius:4px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;margin-top:2px;
+}
+.check--req{background:var(--amber-15);color:var(--amber)}
+.check--opt{background:var(--surface-2);color:var(--text-4)}
+
+/* ═══════════════════════════════════════════════════════════════
+   Troubleshooting accordion
+   ══════════════════════════════════════════════════════════════ */
+details{
+  border:1px solid var(--border);
+  border-radius:8px;
+  margin:8px 0;
+  background:var(--surface-1);
+  transition:border-color 0.2s;
+}
+details:hover{border-color:var(--border-2)}
+details[open]{border-color:var(--amber-30)}
+summary{
+  cursor:pointer;padding:14px 18px;
+  font-size:0.95rem;font-weight:500;
+  color:var(--text-1);
+  list-style:none;
+  display:flex;align-items:center;gap:10px;
+}
+summary::before{
+  content:"";width:6px;height:6px;
+  border-right:2px solid var(--amber-60);
+  border-bottom:2px solid var(--amber-60);
+  transform:rotate(-45deg);
+  transition:transform 0.2s var(--ease-out);
+  flex-shrink:0;
+}
+details[open] summary::before{transform:rotate(45deg)}
+summary::-webkit-details-marker{display:none}
+details .detail-body{
+  padding:0 18px 18px;
+  font-size:0.9rem;
+  color:var(--text-3);
+  line-height:1.6;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Lists
+   ══════════════════════════════════════════════════════════════ */
+ul,ol{margin:0.75rem 0 1.25rem;padding-left:1.25rem}
+li{margin-bottom:0.5rem}
+li::marker{color:var(--text-4)}
+
+/* ═══════════════════════════════════════════════════════════════
+   Footer
+   ══════════════════════════════════════════════════════════════ */
+.footer{
+  margin-top:6rem;
+  padding:3rem 0;
+  border-top:1px solid var(--border);
+  text-align:center;
+  font-size:0.85rem;
+  color:var(--text-4);
+}
+.footer a{color:var(--amber-60)}
+
+/* ═══════════════════════════════════════════════════════════════
+   Scroll reveal animation
+   ══════════════════════════════════════════════════════════════ */
+.reveal{opacity:0;transform:translateY(20px);transition:opacity 0.6s var(--ease-out),transform 0.6s var(--ease-out)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+@media(prefers-reduced-motion:reduce){
+  .reveal{opacity:1;transform:none;transition:none}
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Print
+   ══════════════════════════════════════════════════════════════ */
+@media print{
+  body{background:#fff;color:#111}
+  body::before,body::after,.toc-sidebar{display:none}
+  .step,.callout,details{border-color:#ddd;break-inside:avoid}
+  pre{background:#f5f5f5;border-color:#ddd}
+  h1,h2,h3,h4,.step__number,.tier-card__title{color:#111}
+  a{color:#d97706}
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Responsive
+   ══════════════════════════════════════════════════════════════ */
+@media(max-width:640px){
+  .tier-grid{grid-template-columns:1fr}
+  .flow{flex-wrap:wrap;gap:8px}
+  .flow__arrow{display:none}
+  h2{margin-top:3.5rem}
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════
+     TOC sidebar (desktop only)
+     ════════════════════════════════════════════════════════════ -->
+<nav class="toc-sidebar" aria-label="Table of contents">
+  <a href="#prerequisites">Prerequisites</a>
+  <a href="#install">Install</a>
+  <a href="#tiers">Experience Tiers</a>
+  <a href="#tier-1">Tier 1: Graph</a>
+  <a href="#tier-2">Tier 2: Sentinel</a>
+  <a href="#tier-3">Tier 3: Skills</a>
+  <a href="#tier-4">Tier 4: Git Hooks</a>
+  <a href="#verify">Verify</a>
+  <a href="#how-it-works">How It Works</a>
+  <a href="#commands">Commands</a>
+  <a href="#troubleshooting">Troubleshooting</a>
+  <a href="#uninstall">Uninstall</a>
+</nav>
+
+<main>
+
+<!-- ════════════════════════════════════════════════════════════
+     HERO
+     ════════════════════════════════════════════════════════════ -->
+<header class="hero wrap">
+  <div class="hero__label">Installation Guide</div>
+  <h1>Get engram running<br>in under 60 seconds</h1>
+  <p>A step-by-step walkthrough for installing engram, wiring the Sentinel hooks into Claude Code, and getting the full 82% token reduction on your projects.</p>
+  <span class="hero__version">engramx v0.3.2</span>
+</header>
+
+<!-- ════════════════════════════════════════════════════════════
+     PREREQUISITES
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="prerequisites">
+  <h2>Prerequisites</h2>
+  <p>Before installing engram, make sure you have the following:</p>
+
+  <ul class="checklist">
+    <li>
+      <span class="check check--req">*</span>
+      <span><strong>Node.js 20 or higher</strong> &mdash; check with <code>node --version</code>. Node 22 LTS recommended.</span>
+    </li>
+    <li>
+      <span class="check check--req">*</span>
+      <span><strong>npm</strong> &mdash; ships with Node.js. Check with <code>npm --version</code>.</span>
+    </li>
+    <li>
+      <span class="check check--req">*</span>
+      <span><strong>Claude Code</strong> &mdash; the CLI agent from Anthropic. engram's Sentinel hooks integrate directly with Claude Code's hook system.</span>
+    </li>
+    <li>
+      <span class="check check--opt">~</span>
+      <span><strong>Git</strong> (optional) &mdash; enables the git miner (commit history analysis) and auto-rebuild hooks. Not required for the core graph.</span>
+    </li>
+    <li>
+      <span class="check check--opt">~</span>
+      <span><strong>Cursor 1.7+</strong> (optional) &mdash; experimental Cursor adapter available via <code>engram cursor-intercept</code>.</span>
+    </li>
+  </ul>
+
+  <div class="callout callout--info">
+    <div class="callout__label">Zero dependencies</div>
+    <p style="margin:0">engram has <strong>zero native dependencies</strong>. No Python, no Rust, no build tools, no Docker, no cloud services. Everything runs locally in a single SQLite file.</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     INSTALL
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="install">
+  <h2>Install engram</h2>
+
+  <div class="step">
+    <span class="step__number">STEP 1</span>
+    <h3>Install globally via npm</h3>
+    <pre><span class="cmd">npm</span> install -g engramx</pre>
+    <p>This gives you the <code>engram</code> command globally. Verify with:</p>
+    <pre><span class="cmd">engram</span> --version
+<span class="output">0.3.2</span></pre>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     EXPERIENCE TIERS
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="tiers">
+  <h2>Experience Tiers</h2>
+  <p>engram has four tiers of value. Each builds on the previous. You can stop at any level &mdash; each one works standalone.</p>
+
+  <div class="tier-grid">
+    <div class="tier-card" style="--tier-color:var(--text-3)">
+      <div class="tier-card__label">Tier 1</div>
+      <div class="tier-card__title">Graph Only</div>
+      <div class="tier-card__savings">~6x</div>
+      <div class="tier-card__desc">per query vs reading files. CLI queries, MCP server, <code>engram gen</code> for CLAUDE.md.</div>
+    </div>
+    <div class="tier-card" style="--tier-color:var(--amber)">
+      <div class="tier-card__label">Tier 2</div>
+      <div class="tier-card__title">+ Sentinel Hooks</div>
+      <div class="tier-card__savings">~82%</div>
+      <div class="tier-card__desc">per session. Automatic Read interception, Edit landmine warnings, session-start briefs.</div>
+    </div>
+    <div class="tier-card" style="--tier-color:var(--blue)">
+      <div class="tier-card__label">Tier 3</div>
+      <div class="tier-card__title">+ Skills Index</div>
+      <div class="tier-card__savings">+23%</div>
+      <div class="tier-card__desc">graph coverage. Queries surface relevant Claude Code skills alongside code structure.</div>
+    </div>
+    <div class="tier-card" style="--tier-color:var(--green)">
+      <div class="tier-card__label">Tier 4</div>
+      <div class="tier-card__title">+ Git Hooks</div>
+      <div class="tier-card__savings">0 cost</div>
+      <div class="tier-card__desc">Auto-rebuild graph on every git commit. Graph never goes stale. Zero token cost.</div>
+    </div>
+  </div>
+
+  <div class="callout callout--tip">
+    <div class="callout__label">Recommended</div>
+    <p style="margin:0">For the full experience, install all four tiers. It takes under 60 seconds and the setup is one-time per project.</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     TIER 1: GRAPH
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="tier-1">
+  <h2>Tier 1 &mdash; Build the Graph</h2>
+
+  <div class="step">
+    <span class="step__number">STEP 2</span>
+    <h3>Initialize your project</h3>
+    <p>Navigate to your project directory and run:</p>
+    <pre><span class="cmd">cd</span> ~/my-project
+<span class="cmd">engram</span> init</pre>
+    <p>This scans your codebase using tree-sitter AST extraction (no LLM, zero tokens) and builds a structural knowledge graph at <code>.engram/graph.db</code>.</p>
+    <pre><span class="output">&#x1f50d; Scanning codebase...</span>
+<span class="output">&#x1f333; AST extraction complete</span> <span class="comment">(38ms, 0 tokens used)</span>
+   <span class="path">250 nodes, 554 edges from 15 files (4,200 lines)</span>
+<span class="comment">
+&#x1f4ca; Token savings: 6.4x fewer tokens vs relevant files (25x vs full corpus)
+   Full corpus: ~12,500 tokens | Graph query: ~2,000 tokens</span></pre>
+  </div>
+
+  <h3>What you can do now</h3>
+  <pre><span class="cmd">engram</span> query <span class="flag">"how does authentication work"</span>   <span class="comment"># query the graph</span>
+<span class="cmd">engram</span> gods                                       <span class="comment"># show most-connected entities</span>
+<span class="cmd">engram</span> stats                                      <span class="comment"># node/edge counts</span>
+<span class="cmd">engram</span> path <span class="flag">"auth"</span> <span class="flag">"database"</span>                     <span class="comment"># shortest path between concepts</span>
+<span class="cmd">engram</span> gen                                        <span class="comment"># generate CLAUDE.md section</span></pre>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     TIER 2: SENTINEL
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="tier-2">
+  <h2>Tier 2 &mdash; Install Sentinel Hooks</h2>
+  <p>This is where engram becomes invisible infrastructure. The Sentinel layer intercepts Claude Code tool calls at the hook boundary &mdash; before the agent even sees the file.</p>
+
+  <div class="step">
+    <span class="step__number">STEP 3</span>
+    <h3>Wire Sentinel into Claude Code</h3>
+    <pre><span class="cmd">engram</span> install-hook</pre>
+    <p>This writes hook entries into <code>.claude/settings.local.json</code> (gitignored by default). You can preview first:</p>
+    <pre><span class="cmd">engram</span> install-hook <span class="flag">--dry-run</span>    <span class="comment"># see what would change</span></pre>
+  </div>
+
+  <h3>What Sentinel does automatically</h3>
+
+  <div class="flow">
+    <div class="flow__node">Agent calls Read</div>
+    <span class="flow__arrow">&rarr;</span>
+    <div class="flow__node flow__node--engram">Sentinel intercepts</div>
+    <span class="flow__arrow">&rarr;</span>
+    <div class="flow__node">Graph has coverage?</div>
+    <span class="flow__arrow">&rarr;</span>
+    <div class="flow__node flow__node--engram">~300 token summary</div>
+    <span class="flow__arrow">&rarr;</span>
+    <div class="flow__node">Agent uses summary</div>
+  </div>
+
+  <p>Seven hook handlers compose the interception stack:</p>
+
+  <ul>
+    <li><strong>PreToolUse:Read</strong> &mdash; blocks file reads and delivers structural summaries when graph has &ge;70% confidence</li>
+    <li><strong>PreToolUse:Edit / Write</strong> &mdash; injects landmine warnings before edits that touch files with known mistakes</li>
+    <li><strong>PreToolUse:Bash</strong> &mdash; intercepts <code>cat</code>, <code>head</code>, <code>tail</code> commands that bypass Read</li>
+    <li><strong>SessionStart</strong> &mdash; injects a project brief at the start of every session</li>
+    <li><strong>UserPromptSubmit</strong> &mdash; pre-queries the graph based on your message keywords (TF-IDF filtered)</li>
+    <li><strong>PostToolUse:Read</strong> &mdash; observes fallback reads for analytics</li>
+  </ul>
+
+  <h3>Scope options</h3>
+  <pre><span class="cmd">engram</span> install-hook                    <span class="comment"># local scope (default, gitignored)</span>
+<span class="cmd">engram</span> install-hook <span class="flag">--scope project</span>    <span class="comment"># committed to repo, shared with team</span>
+<span class="cmd">engram</span> install-hook <span class="flag">--scope user</span>       <span class="comment"># global ~/.claude/settings.json</span></pre>
+
+  <div class="callout callout--warn">
+    <div class="callout__label">Important</div>
+    <p style="margin:0">The <code>--scope user</code> option installs hooks globally. This means <strong>every</strong> Claude Code session will run through engram &mdash; even projects that haven't been initialized. engram handles this gracefully (passes through if no <code>.engram/</code> exists), but <code>local</code> scope is recommended for most users.</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     TIER 3: SKILLS
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="tier-3">
+  <h2>Tier 3 &mdash; Index Your Skills</h2>
+
+  <div class="step">
+    <span class="step__number">STEP 4</span>
+    <h3>Include skills in the graph</h3>
+    <pre><span class="cmd">engram</span> init <span class="flag">--with-skills</span></pre>
+    <p>This re-scans the project and also indexes your <code>~/.claude/skills/</code> directory. Skills appear as concept nodes in the graph, linked by <code>triggered_by</code> edges to their keyword triggers.</p>
+    <p>Queries now surface relevant skills alongside code structure. Example: querying "authentication" might return both your <code>src/auth.ts</code> module <em>and</em> the <code>better-auth</code> skill.</p>
+  </div>
+
+  <div class="callout callout--info">
+    <div class="callout__label">Custom skills path</div>
+    <p style="margin:0">Pass a custom path: <code>engram init --with-skills /path/to/skills</code></p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     TIER 4: GIT HOOKS
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="tier-4">
+  <h2>Tier 4 &mdash; Auto-Rebuild on Commit</h2>
+
+  <div class="step">
+    <span class="step__number">STEP 5</span>
+    <h3>Install git hooks</h3>
+    <pre><span class="cmd">engram</span> hooks install</pre>
+    <p>This installs a <code>post-commit</code> git hook that automatically rebuilds the graph after every commit. Your graph never goes stale &mdash; and it costs zero tokens.</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     FULL SETUP (one-liner)
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="full-setup">
+  <h3>The full setup (copy &amp; paste)</h3>
+  <pre><span class="comment"># One-time setup per project (all 4 tiers)</span>
+<span class="cmd">npm</span> install -g engramx
+<span class="cmd">cd</span> ~/my-project
+<span class="cmd">engram</span> init --with-skills      <span class="comment"># Tier 1 + 3: graph + skills</span>
+<span class="cmd">engram</span> install-hook            <span class="comment"># Tier 2: Sentinel hooks</span>
+<span class="cmd">engram</span> hooks install           <span class="comment"># Tier 4: auto-rebuild</span></pre>
+
+  <p>That's it. Open a Claude Code session and start working. engram runs invisibly.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     OPTIONAL: MEMORY.MD
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal">
+  <h3>Optional &mdash; MEMORY.md integration</h3>
+  <pre><span class="cmd">engram</span> gen <span class="flag">--memory-md</span></pre>
+  <p>Writes a marker-bounded block of structural facts into Claude's native <code>MEMORY.md</code>. Claude's Auto-Dream owns the prose; engram owns the structure. They complement each other &mdash; engram never touches content outside its markers.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     VERIFY
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="verify">
+  <h2>Verify Your Installation</h2>
+
+  <div class="step">
+    <span class="step__number">CHECK</span>
+    <h3>Test the hook before your first session</h3>
+    <pre><span class="cmd">engram</span> hook-preview src/index.ts</pre>
+    <p>This dry-runs the Read handler against a specific file and shows you exactly what Claude Code would see &mdash; the structural summary instead of the raw file contents.</p>
+    <pre><span class="comment"># After a Claude Code session, check what happened:</span>
+<span class="cmd">engram</span> hook-stats</pre>
+    <p>This summarizes <code>.engram/hook-log.jsonl</code> &mdash; how many reads were intercepted, how many fell through, and the total tokens saved.</p>
+  </div>
+
+  <ul class="checklist">
+    <li>
+      <span class="check check--req">&#x2713;</span>
+      <span><code>engram --version</code> prints <code>0.3.2</code></span>
+    </li>
+    <li>
+      <span class="check check--req">&#x2713;</span>
+      <span><code>.engram/graph.db</code> exists in your project root</span>
+    </li>
+    <li>
+      <span class="check check--req">&#x2713;</span>
+      <span><code>engram stats</code> shows nodes and edges</span>
+    </li>
+    <li>
+      <span class="check check--req">&#x2713;</span>
+      <span><code>engram hook-preview &lt;file&gt;</code> returns a summary</span>
+    </li>
+    <li>
+      <span class="check check--opt">~</span>
+      <span><code>engram hook-stats</code> shows interception data (after first session)</span>
+    </li>
+  </ul>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     HOW IT WORKS
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="how-it-works">
+  <h2>How It Works</h2>
+
+  <h3>The before (without engram)</h3>
+  <div class="flow">
+    <div class="flow__node">Agent wants context</div>
+    <span class="flow__arrow">&rarr;</span>
+    <div class="flow__node">Read src/auth.ts</div>
+    <span class="flow__arrow">&rarr;</span>
+    <div class="flow__node">~1,500 tokens</div>
+    <span class="flow__arrow">&times; 25</span>
+    <div class="flow__node">~37,500 tokens</div>
+  </div>
+
+  <h3>The after (with engram Sentinel)</h3>
+  <div class="flow">
+    <div class="flow__node">Agent wants context</div>
+    <span class="flow__arrow">&rarr;</span>
+    <div class="flow__node">Read src/auth.ts</div>
+    <span class="flow__arrow">&rarr;</span>
+    <div class="flow__node flow__node--engram">Sentinel intercepts</div>
+    <span class="flow__arrow">&rarr;</span>
+    <div class="flow__node flow__node--engram">~300 tokens</div>
+  </div>
+
+  <p>The graph is built by three miners that run locally with zero LLM cost:</p>
+  <ul>
+    <li><strong>AST miner</strong> &mdash; tree-sitter extraction across 10 languages. Functions, classes, imports, exports, call relationships.</li>
+    <li><strong>Git miner</strong> &mdash; commit history analysis. Hot files, co-change patterns, authorship.</li>
+    <li><strong>Session miner</strong> &mdash; learns from your Claude Code conversations. Mistakes, decisions, patterns.</li>
+  </ul>
+
+  <p>Everything stored in a single SQLite file (<code>.engram/graph.db</code>). No cloud. No API keys. No vector database. No embeddings.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     COMMANDS
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="commands">
+  <h2>Command Reference</h2>
+
+  <h3>Core commands</h3>
+  <pre><span class="cmd">engram</span> init [path]              <span class="comment"># build knowledge graph</span>
+<span class="cmd">engram</span> init <span class="flag">--with-skills</span>       <span class="comment"># + index ~/.claude/skills/</span>
+<span class="cmd">engram</span> query <span class="flag">"question"</span>         <span class="comment"># query the graph (BFS)</span>
+<span class="cmd">engram</span> query <span class="flag">"question"</span> --dfs   <span class="comment"># DFS traversal</span>
+<span class="cmd">engram</span> gods                     <span class="comment"># most connected entities</span>
+<span class="cmd">engram</span> stats                    <span class="comment"># node/edge counts</span>
+<span class="cmd">engram</span> bench                    <span class="comment"># token reduction benchmark</span>
+<span class="cmd">engram</span> path <span class="flag">"a"</span> <span class="flag">"b"</span>            <span class="comment"># shortest path</span>
+<span class="cmd">engram</span> learn <span class="flag">"decision..."</span>     <span class="comment"># teach a pattern</span>
+<span class="cmd">engram</span> mistakes                 <span class="comment"># list known landmines</span>
+<span class="cmd">engram</span> gen                      <span class="comment"># generate CLAUDE.md section</span>
+<span class="cmd">engram</span> gen <span class="flag">--task bug-fix</span>      <span class="comment"># task-aware view</span>
+<span class="cmd">engram</span> gen <span class="flag">--memory-md</span>         <span class="comment"># write to MEMORY.md</span></pre>
+
+  <h3>Sentinel commands</h3>
+  <pre><span class="cmd">engram</span> install-hook             <span class="comment"># install hooks (local scope)</span>
+<span class="cmd">engram</span> install-hook <span class="flag">--dry-run</span>   <span class="comment"># preview changes</span>
+<span class="cmd">engram</span> install-hook <span class="flag">--scope</span> &lt;s&gt; <span class="comment"># local | project | user</span>
+<span class="cmd">engram</span> uninstall-hook            <span class="comment"># remove engram entries</span>
+<span class="cmd">engram</span> hook-preview &lt;file&gt;      <span class="comment"># dry-run Read handler</span>
+<span class="cmd">engram</span> hook-stats               <span class="comment"># summarize hook log</span>
+<span class="cmd">engram</span> hook-stats <span class="flag">--json</span>       <span class="comment"># machine-readable</span>
+<span class="cmd">engram</span> hook-disable              <span class="comment"># kill switch</span>
+<span class="cmd">engram</span> hook-enable               <span class="comment"># re-enable</span></pre>
+
+  <h3>Git hooks</h3>
+  <pre><span class="cmd">engram</span> hooks install            <span class="comment"># auto-rebuild on commit</span>
+<span class="cmd">engram</span> hooks uninstall          <span class="comment"># remove git hooks</span>
+<span class="cmd">engram</span> hooks status             <span class="comment"># check hook state</span></pre>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     TROUBLESHOOTING
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="troubleshooting">
+  <h2>Troubleshooting</h2>
+
+  <details>
+    <summary><code>engram: command not found</code></summary>
+    <div class="detail-body">
+      <p>The global npm bin directory isn't in your PATH. Fix:</p>
+      <pre><span class="comment"># Find where npm puts global bins</span>
+<span class="cmd">npm</span> config get prefix
+<span class="comment"># Add to your shell profile (~/.zshrc or ~/.bashrc)</span>
+export PATH="$(npm config get prefix)/bin:$PATH"</pre>
+    </div>
+  </details>
+
+  <details>
+    <summary><code>engram init</code> finds 0 nodes</summary>
+    <div class="detail-body">
+      <p>engram uses tree-sitter grammars bundled with the package. Supported languages: TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, C#, Ruby. If your project uses an unsupported language, the AST miner will find file-level nodes but no function/class-level detail.</p>
+      <p>Also check: are you running <code>engram init</code> from the project root (where <code>package.json</code> or <code>.git/</code> lives)?</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Sentinel isn't intercepting reads</summary>
+    <div class="detail-body">
+      <p>Three common causes:</p>
+      <ol>
+        <li><strong>Hooks not installed</strong> &mdash; run <code>engram install-hook</code> and check <code>.claude/settings.local.json</code> for engram entries.</li>
+        <li><strong>Confidence below threshold</strong> &mdash; engram only intercepts when graph coverage is &ge;70%. New or poorly-covered files pass through. Run <code>engram hook-preview &lt;file&gt;</code> to check.</li>
+        <li><strong>Kill switch enabled</strong> &mdash; check for <code>.engram/hook-disabled</code>. Remove it or run <code>engram hook-enable</code>.</li>
+      </ol>
+    </div>
+  </details>
+
+  <details>
+    <summary>Graph is stale after code changes</summary>
+    <div class="detail-body">
+      <p>Run <code>engram init</code> again to rebuild the graph. Or install Tier 4 git hooks (<code>engram hooks install</code>) to auto-rebuild on every commit.</p>
+      <p>The Sentinel layer also checks file modification times &mdash; if a file changed since the last mine, the hook passes through instead of serving a stale summary.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Windows: paths show as <code>src\auth.ts</code> instead of <code>src/auth.ts</code></summary>
+    <div class="detail-body">
+      <p>Fixed in v0.3.2. The graph now stores all paths in POSIX form regardless of host OS. If you initialized on an older version, run <code>engram init</code> again to rebuild with normalized paths.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>How do I use engram with the MCP server?</summary>
+    <div class="detail-body">
+      <p>engram ships an MCP server for direct integration with Claude Code, Windsurf, or any MCP client:</p>
+      <pre><span class="comment"># In .claude.json (per-project MCP config)</span>
+{
+  "mcpServers": {
+    "engram": {
+      "command": "engram-serve",
+      "args": []
+    }
+  }
+}</pre>
+      <p>This exposes 6 tools: <code>query_graph</code>, <code>shortest_path</code>, <code>god_nodes</code>, <code>graph_stats</code>, <code>learn_context</code>, <code>list_mistakes</code>.</p>
+      <p>The MCP server is complementary to Sentinel &mdash; Sentinel intercepts automatically, while the MCP server lets the agent query explicitly when it wants deeper structural context.</p>
+    </div>
+  </details>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     UNINSTALL
+     ════════════════════════════════════════════════════════════ -->
+<section class="wrap reveal" id="uninstall">
+  <h2>Uninstall</h2>
+  <p>engram's uninstall is surgical. Each layer can be removed independently.</p>
+  <pre><span class="cmd">engram</span> uninstall-hook            <span class="comment"># remove Sentinel hooks (preserves other hooks)</span>
+<span class="cmd">engram</span> hooks uninstall           <span class="comment"># remove git hooks</span>
+<span class="cmd">rm</span> -rf .engram/                  <span class="comment"># delete graph database</span>
+<span class="cmd">npm</span> uninstall -g engramx         <span class="comment"># remove the CLI</span></pre>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     FOOTER
+     ════════════════════════════════════════════════════════════ -->
+<footer class="footer wrap">
+  <p>engram v0.3.2 &mdash; <a href="https://github.com/NickCirv/engram">GitHub</a> &middot; <a href="https://www.npmjs.com/package/engramx">npm</a> &middot; Apache 2.0</p>
+  <p style="margin-top:8px">The structural code graph your AI agent can't forget to use.</p>
+</footer>
+
+</main>
+
+<!-- ════════════════════════════════════════════════════════════
+     Scroll reveal + TOC scrollspy
+     ════════════════════════════════════════════════════════════ -->
+<script>
+// Scroll reveal
+const revealEls = document.querySelectorAll('.reveal');
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); revealObserver.unobserve(e.target); } });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+revealEls.forEach(el => revealObserver.observe(el));
+
+// TOC scrollspy
+const tocLinks = document.querySelectorAll('.toc-sidebar a');
+const sections = [...tocLinks].map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+const spyObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      tocLinks.forEach(l => l.classList.remove('active'));
+      const active = document.querySelector(`.toc-sidebar a[href="#${entry.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => spyObserver.observe(s));
+
+// Reduced motion
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  revealEls.forEach(el => el.classList.add('visible'));
+}
+</script>
+</body>
+</html>

@@ -18,22 +18,27 @@ import {
   writeFileSync,
   existsSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { init } from "../../src/core.js";
 
-const REPO_ROOT = resolve(new URL("../..", import.meta.url).pathname);
+// fileURLToPath is required on Windows — `new URL(...).pathname` returns
+// `/C:/Users/...` which then gets a second drive letter prepended by
+// resolve(), producing `C:\C:\Users\...` and an ENOENT.
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const CLI_PATH = join(REPO_ROOT, "dist", "cli.js");
 
-// Guard: build the CLI if it doesn't exist yet. spawnSync with argv
-// array avoids shell interpretation — "npm" and "run build" are
-// passed as literal args to the child process.
+// Guard: build the CLI if it doesn't exist yet. On Windows `npm` is a
+// `.cmd` shim that spawnSync can't exec without `shell: true`, so we
+// detect the platform and enable shell there.
 beforeAll(() => {
   if (!existsSync(CLI_PATH)) {
     const r = spawnSync("npm", ["run", "build"], {
       cwd: REPO_ROOT,
       stdio: "ignore",
       timeout: 60_000,
+      shell: process.platform === "win32",
     });
     if (r.status !== 0) {
       throw new Error(`npm run build failed with status ${r.status}`);

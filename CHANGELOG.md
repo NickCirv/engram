@@ -4,6 +4,48 @@ All notable changes to engram are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] — 2026-04-12 — "Cross-Platform"
+
+### Fixed
+
+- **Windows path portability** — Graph `sourceFile` entries now stored
+  in POSIX form (`src/auth.ts`, not `src\auth.ts`) via new
+  `toPosixPath()` in `src/graph/path-utils.ts`. All lookup sites
+  (`getFileContext`, `handleEditOrWrite`, `extractFile`) normalize
+  consistently. Without this, Sentinel on Windows would passthrough
+  every Read (zero interception). Credit: ultrathink (shahe-dev).
+- **CRLF handling in skills-miner YAML parser** — `parseYaml` now
+  strips `\r` before splitting, fixing silent failures on Windows
+  clones with `core.autocrlf=true` where `description: >` was
+  misread as `description: >\r`.
+- **libuv assertion crash on Node 25 Windows** — Replaced
+  `process.exit(0)` in `engram intercept` with `process.exitCode = 0`
+  + natural event-loop drain. The prior code raced against sql.js
+  WASM handle cleanup, triggering `UV_HANDLE_CLOSING` assertion
+  (`0xC0000409`) on Windows + Node 25.
+- **`isHardSystemPath` now platform-aware** — Detects Windows UNC
+  device paths (`//./`, `//?/`), `C:\Windows\`, and `C:\Program Files`
+  in addition to POSIX `/dev/`, `/proc/`, `/sys/`. Tests no longer
+  skip on win32.
+- **Double drive-letter bug** — Test files using
+  `new URL(".", import.meta.url).pathname` now use `fileURLToPath()`
+  which prevents `/C:/Users/...` → `C:\C:\Users\...` on Windows.
+
+### Added
+
+- **Experience Tiers in README** — New section showing the 4 tiers of
+  value (graph → Sentinel → skills → git hooks) with token savings per
+  tier and a recommended full-setup block.
+- **Post-init nudge** — `engram init` now detects whether Sentinel hooks
+  are installed and suggests `engram install-hook` if not, closing the
+  silent drop-off gap where users get 6x savings instead of 82%.
+- **Windows CI matrix** — GitHub Actions now runs on both
+  `ubuntu-latest` and `windows-latest` with Node 20 + 22.
+
+### Changed
+
+- Test count: 466 → 467 (added Windows system-path test cases).
+
 ## [0.3.1] — 2026-04-12 — "Structural"
 
 ### Added

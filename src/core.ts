@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, statSyn
 import { homedir } from "node:os";
 import { GraphStore } from "./graph/store.js";
 import { queryGraph, shortestPath, renderFileStructure } from "./graph/query.js";
+import { toPosixPath } from "./graph/path-utils.js";
 import { extractDirectory } from "./miners/ast-miner.js";
 import { mineGitHistory } from "./miners/git-miner.js";
 import { mineSessionHistory, learnFromSession } from "./miners/session-miner.js";
@@ -268,7 +269,9 @@ export async function getFileContext(
   try {
     const root = resolve(projectRoot);
     const abs = resolve(absFilePath);
-    const relPath = relative(root, abs);
+    // POSIX-normalize for consistent lookup against the graph, which
+    // always stores sourceFile in POSIX form (see graph/path-utils.ts).
+    const relPath = toPosixPath(relative(root, abs));
 
     // If the file is outside the project (relative path starts with ..),
     // there's no graph data for it by construction.

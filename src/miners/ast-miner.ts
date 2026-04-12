@@ -6,6 +6,7 @@
 import { readFileSync, existsSync, readdirSync, realpathSync } from "node:fs";
 import { basename, extname, join, relative } from "node:path";
 import type { GraphEdge, GraphNode } from "../graph/schema.js";
+import { toPosixPath } from "../graph/path-utils.js";
 
 // tree-sitter query patterns per language
 interface LangConfig {
@@ -131,7 +132,9 @@ export function extractFile(
   const content = readFileSync(filePath, "utf-8");
   const lines = content.split("\n");
 
-  const relPath = relative(rootDir, filePath);
+  // Always store POSIX paths in the graph for portability and consistent
+  // lookups on Windows (where path.relative returns native `\` separators).
+  const relPath = toPosixPath(relative(rootDir, filePath));
   const stem = basename(filePath, ext);
   const now = Date.now();
 

@@ -77,7 +77,11 @@ function parseFrontmatter(content: string): ParsedFrontmatter {
 
 function parseYaml(block: string): Record<string, unknown> {
   const data: Record<string, unknown> = {};
-  const lines = block.split("\n");
+  // Strip carriage returns so CRLF files (common on Windows when Git
+  // autocrlf=true) are parsed identically to LF files. Without this,
+  // `rest === ">"` checks fail because `rest` is `">\r"`, multiline
+  // blocks are misread as nested objects, and `data.description = ">"`.
+  const lines = block.replace(/\r/g, "").split("\n");
   let i = 0;
 
   while (i < lines.length) {

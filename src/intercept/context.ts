@@ -113,9 +113,21 @@ export function isExemptPath(absPath: string): boolean {
 function isHardSystemPath(absPath: string): boolean {
   if (!absPath) return true;
   const p = absPath.replaceAll(sep, "/");
-  // Filesystem root, device files, proc entries — never intercept.
+
+  // POSIX: filesystem root, device files, proc/sys entries.
   if (p === "/" || p.startsWith("/dev/") || p.startsWith("/proc/")) return true;
   if (p.startsWith("/sys/")) return true;
+
+  // Windows: UNC device paths, system directories. Drive letter is
+  // normalized to forward slash by the replaceAll above, so C:\Windows
+  // becomes C:/Windows.
+  const upper = p.toUpperCase();
+  if (upper.startsWith("//./") || upper.startsWith("//?/")) return true;
+  // Match C:/Windows, D:/Windows, etc.
+  if (/^[A-Z]:\/WINDOWS(\/|$)/.test(upper)) return true;
+  // Match C:/Program Files, C:/ProgramData (system locations, not user code)
+  if (/^[A-Z]:\/(PROGRAM FILES|PROGRAMDATA)(\/|$)/.test(upper)) return true;
+
   return false;
 }
 
@@ -377,10 +389,17 @@ export function resolveInterceptContext(
 ): { proceed: true; absPath: string; projectRoot: string } | { proceed: false; reason: string } {
   if (!filePath) return { proceed: false, reason: "empty-path" };
 
+  // Check the raw input BEFORE resolve — path.resolve on macOS strips
+  // Windows UNC prefixes (//./COM1 → /COM1), so we'd miss them.
+  if (isHardSystemPath(filePath)) {
+    return { proceed: false, reason: "system-path" };
+  }
+
   const absPath = normalizePath(filePath, cwd);
   if (!absPath) return { proceed: false, reason: "normalize-failed" };
 
-  // Hard system paths (/, /dev/, /proc/, /sys/) are never intercepted.
+  // Also check the resolved form (catches cases where resolve produces
+  // a system path from relative input, e.g. cwd is /dev/).
   if (isHardSystemPath(absPath)) {
     return { proceed: false, reason: "system-path" };
   }

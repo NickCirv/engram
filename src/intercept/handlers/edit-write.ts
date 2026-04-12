@@ -23,6 +23,7 @@
  */
 import { relative, resolve as resolvePath } from "node:path";
 import { mistakes } from "../../core.js";
+import { toPosixPath } from "../../graph/path-utils.js";
 import {
   isContentUnsafeForIntercept,
   resolveInterceptContext,
@@ -114,7 +115,10 @@ export async function handleEditOrWrite(
 
   // Query for mistakes. We look up by project-relative path because
   // that's how the session miner stores sourceFile on mistake nodes.
-  const relPath = relative(resolvePath(ctx.projectRoot), ctx.absPath);
+  // POSIX-normalize for consistent lookup against the graph.
+  const relPath = toPosixPath(
+    relative(resolvePath(ctx.projectRoot), ctx.absPath)
+  );
   if (!relPath || relPath.startsWith("..")) return PASSTHROUGH;
 
   let found;

@@ -18,23 +18,28 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 describe("context — normalizePath", () => {
+  // normalizePath returns paths in the host OS's native form (backslash
+  // on Windows, forward slash on POSIX). The expected values are built
+  // with path.resolve() so the tests work on both.
   it("returns empty string for empty input", () => {
     expect(normalizePath("", "/home/user")).toBe("");
   });
 
   it("returns absolute paths unchanged (but canonicalized)", () => {
-    expect(normalizePath("/foo/bar", "/home/user")).toBe("/foo/bar");
+    expect(normalizePath("/foo/bar", "/home/user")).toBe(resolve("/foo/bar"));
   });
 
   it("resolves relative paths against cwd", () => {
     expect(normalizePath("src/index.ts", "/home/user/proj")).toBe(
-      "/home/user/proj/src/index.ts"
+      resolve("/home/user/proj", "src/index.ts")
     );
   });
 
   it("collapses .. and . segments", () => {
-    expect(normalizePath("/foo/bar/../baz", "/any")).toBe("/foo/baz");
-    expect(normalizePath("./x/./y", "/tmp/cwd")).toBe("/tmp/cwd/x/y");
+    expect(normalizePath("/foo/bar/../baz", "/any")).toBe(resolve("/foo/baz"));
+    expect(normalizePath("./x/./y", "/tmp/cwd")).toBe(
+      resolve("/tmp/cwd", "x/y")
+    );
   });
 });
 
@@ -227,10 +232,32 @@ describe("context — resolveInterceptContext (end-to-end)", () => {
     if (!ctx.proceed) expect(ctx.reason).toBe("no-project-root");
   });
 
-  it("rejects hard system paths with reason=system-path", () => {
+  it("rejects POSIX hard system paths with reason=system-path", () => {
     const ctx = resolveInterceptContext("/dev/null", projectA);
     expect(ctx.proceed).toBe(false);
     if (!ctx.proceed) expect(ctx.reason).toBe("system-path");
+  });
+
+  it("rejects Windows system paths with reason=system-path", () => {
+    // UNC device path
+    const ctx1 = resolveInterceptContext("//./COM1", projectA);
+    expect(ctx1.proceed).toBe(false);
+    if (!ctx1.proceed) expect(ctx1.reason).toBe("system-path");
+
+    // Windows directory (case-insensitive)
+    const ctx2 = resolveInterceptContext("C:/Windows/System32/cmd.exe", projectA);
+    expect(ctx2.proceed).toBe(false);
+    if (!ctx2.proceed) expect(ctx2.reason).toBe("system-path");
+
+    // Program Files
+    const ctx3 = resolveInterceptContext("D:/Program Files/nodejs/node.exe", projectA);
+    expect(ctx3.proceed).toBe(false);
+    if (!ctx3.proceed) expect(ctx3.reason).toBe("system-path");
+
+    // ProgramData
+    const ctx4 = resolveInterceptContext("C:/ProgramData/chocolatey/config.xml", projectA);
+    expect(ctx4.proceed).toBe(false);
+    if (!ctx4.proceed) expect(ctx4.reason).toBe("system-path");
   });
 
   it("rejects project-internal ignored paths (node_modules) with reason=exempt-path", () => {

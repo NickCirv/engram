@@ -88,6 +88,33 @@ program
 
     console.log(chalk.green("\n✅ Ready. Your AI now has persistent memory."));
     console.log(chalk.dim("   Graph stored in .engram/graph.db"));
+
+    // Check if Sentinel hooks are already installed — if not, nudge the user.
+    const resolvedProject = pathResolve(projectPath);
+    const localSettings = join(resolvedProject, ".claude", "settings.local.json");
+    const projectSettings = join(resolvedProject, ".claude", "settings.json");
+    const hasHooks =
+      (existsSync(localSettings) &&
+        readFileSync(localSettings, "utf-8").includes("engram intercept")) ||
+      (existsSync(projectSettings) &&
+        readFileSync(projectSettings, "utf-8").includes("engram intercept"));
+
+    if (!hasHooks) {
+      console.log(
+        chalk.yellow("\n💡 Next step: ") +
+          chalk.white("engram install-hook") +
+          chalk.dim(
+            " — enables automatic Read interception (82% token savings)"
+          )
+      );
+      console.log(
+        chalk.dim(
+          "   Also recommended: " +
+            chalk.white("engram hooks install") +
+            " — auto-rebuild graph on git commit"
+        )
+      );
+    }
   });
 
 program
@@ -319,12 +346,17 @@ program
   )
   .action(async () => {
     // Read stdin with a hard cap. If nothing arrives within a few
-    // seconds, bail with passthrough rather than hanging.
+    // seconds, bail with passthrough rather than hanging. This watchdog
+    // is the ONE place we intentionally keep `process.exit` — a stuck
+    // stdin handle means the event loop can't drain naturally anyway,
+    // and a fast crash beats a hang from Claude Code's perspective.
     const stdinTimeout = setTimeout(() => {
       process.exit(0);
     }, 3000);
+    stdinTimeout.unref();
 
     let input = "";
+    let stdinFailed = false;
     try {
       for await (const chunk of process.stdin) {
         input += chunk;
@@ -332,18 +364,21 @@ program
         if (input.length > 1_000_000) break;
       }
     } catch {
-      clearTimeout(stdinTimeout);
-      process.exit(0);
+      stdinFailed = true;
     }
     clearTimeout(stdinTimeout);
 
-    if (!input.trim()) process.exit(0);
+    if (stdinFailed || !input.trim()) {
+      process.exitCode = 0;
+      return;
+    }
 
     let payload: unknown;
     try {
       payload = JSON.parse(input);
     } catch {
-      process.exit(0);
+      process.exitCode = 0;
+      return;
     }
 
     try {
@@ -354,8 +389,12 @@ program
     } catch {
       // Never block Claude Code on engram bugs.
     }
-
-    process.exit(0);
+    // Do NOT call process.exit — on Node 25 + Windows, force-exit while
+    // sql.js's WASM init leaves an async handle in UV_HANDLE_CLOSING
+    // state triggers a libuv assertion in src/win/async.c:76. Setting
+    // exitCode and returning lets the event loop drain naturally (stdin
+    // is already consumed; no other handles keep the loop alive).
+    process.exitCode = 0;
   });
 
 /**

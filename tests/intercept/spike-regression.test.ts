@@ -6,7 +6,8 @@
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   buildDenyResponse,
   buildAllowWithContextResponse,
@@ -14,8 +15,11 @@ import {
   serializeResponse,
 } from "../../src/intercept/formatter.js";
 
+// Use fileURLToPath so Windows drive letters don't collide with the
+// leading `/` in URL.pathname (which would produce `/C:/Users/...`
+// and then `resolve()` prepends the cwd drive, giving `C:\C:\Users\...`).
 const FIXTURES_DIR = join(
-  new URL(".", import.meta.url).pathname,
+  dirname(fileURLToPath(import.meta.url)),
   "..",
   "fixtures",
   "hook-payloads"

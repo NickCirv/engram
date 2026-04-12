@@ -208,8 +208,14 @@ export function hashPassword(p: string) { return "h_" + p; }
     };
   }
 
+  // POSIX-form path for the Bash command. On Windows, native `\` are shell
+  // escape chars and the strict parser in handleBash rejects them via
+  // UNSAFE_SHELL_CHARS. A real agent running Bash (git-bash / cygwin)
+  // on Windows produces forward-slash paths.
+  const toBashPath = (p: string): string => p.replace(/\\/g, "/");
+
   it("delegates 'cat <file>' to handleRead and returns deny+summary", async () => {
-    const result = await handleBash(buildPayload(`cat ${authFile}`));
+    const result = await handleBash(buildPayload(`cat ${toBashPath(authFile)}`));
     expect(result).not.toBe(PASSTHROUGH);
     if (result === PASSTHROUGH) return;
 
@@ -226,12 +232,14 @@ export function hashPassword(p: string) { return "h_" + p; }
   });
 
   it("delegates 'head <file>' the same way", async () => {
-    const result = await handleBash(buildPayload(`head ${authFile}`));
+    const result = await handleBash(buildPayload(`head ${toBashPath(authFile)}`));
     expect(result).not.toBe(PASSTHROUGH);
   });
 
   it("passes through when command uses pipes", async () => {
-    const result = await handleBash(buildPayload(`cat ${authFile} | grep validate`));
+    const result = await handleBash(
+      buildPayload(`cat ${toBashPath(authFile)} | grep validate`)
+    );
     expect(result).toBe(PASSTHROUGH);
   });
 
@@ -239,7 +247,7 @@ export function hashPassword(p: string) { return "h_" + p; }
     const result = await handleBash({
       tool_name: "Read" as unknown as "Bash",
       cwd: projectRoot,
-      tool_input: { command: `cat ${authFile}` },
+      tool_input: { command: `cat ${toBashPath(authFile)}` },
     });
     expect(result).toBe(PASSTHROUGH);
   });
@@ -256,7 +264,7 @@ export function hashPassword(p: string) { return "h_" + p; }
   it("passes through when cat targets a binary file", async () => {
     const bin = join(projectRoot, "logo.png");
     writeFileSync(bin, "\x89PNG");
-    const result = await handleBash(buildPayload(`cat ${bin}`));
+    const result = await handleBash(buildPayload(`cat ${toBashPath(bin)}`));
     // The delegated Read handler rejects binaries.
     expect(result).toBe(PASSTHROUGH);
   });
@@ -264,7 +272,7 @@ export function hashPassword(p: string) { return "h_" + p; }
   it("passes through when cat targets a .env file", async () => {
     const envFile = join(projectRoot, ".env");
     writeFileSync(envFile, "SECRET=x\n");
-    const result = await handleBash(buildPayload(`cat ${envFile}`));
+    const result = await handleBash(buildPayload(`cat ${toBashPath(envFile)}`));
     expect(result).toBe(PASSTHROUGH);
   });
 

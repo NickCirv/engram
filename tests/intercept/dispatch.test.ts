@@ -175,11 +175,16 @@ export function formatResponse() {}
   });
 
   it("routes PreToolUse:Bash with 'cat <file>' to handleBash → handleRead", async () => {
+    // Use POSIX-form path in the Bash command. On Windows, native
+    // separators (`\`) are shell escape chars and the strict parser in
+    // handleBash rejects them via UNSAFE_SHELL_CHARS. A real agent
+    // running Bash on Windows would produce forward-slash paths.
+    const bashPath = authFile.replace(/\\/g, "/");
     const result = await dispatchHook({
       hook_event_name: "PreToolUse",
       tool_name: "Bash",
       cwd: projectRoot,
-      tool_input: { command: `cat ${authFile}` },
+      tool_input: { command: `cat ${bashPath}` },
     });
     expect(result).not.toBe(PASSTHROUGH);
     if (result === PASSTHROUGH) return;
@@ -190,11 +195,12 @@ export function formatResponse() {}
   });
 
   it("routes PreToolUse:Bash with complex command to passthrough", async () => {
+    const bashPath = authFile.replace(/\\/g, "/");
     const result = await dispatchHook({
       hook_event_name: "PreToolUse",
       tool_name: "Bash",
       cwd: projectRoot,
-      tool_input: { command: `cat ${authFile} | grep Auth` },
+      tool_input: { command: `cat ${bashPath} | grep Auth` },
     });
     expect(result).toBe(PASSTHROUGH);
   });

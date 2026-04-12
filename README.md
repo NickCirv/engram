@@ -15,7 +15,7 @@
   <a href="https://github.com/NickCirv/engram/actions"><img src="https://github.com/NickCirv/engram/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node">
-  <img src="https://img.shields.io/badge/tests-439%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-467%20passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
   <img src="https://img.shields.io/badge/token%20reduction-82%25-orange" alt="82% token reduction">
@@ -109,6 +109,37 @@ engram hook-disable            # kill switch (keeps install, disables intercepts
 engram hook-enable             # re-enable
 engram uninstall-hook          # surgical removal, preserves other hooks
 ```
+
+## Experience Tiers
+
+Each tier builds on the previous. You can stop at any level — each one works standalone.
+
+| Tier | What you run | What you get | Token savings |
+|---|---|---|---|
+| **1. Graph only** | `engram init` | CLI queries, MCP server, `engram gen` for CLAUDE.md | ~6x per query vs reading files |
+| **2. + Sentinel hooks** | `engram install-hook` | Automatic Read interception, Edit landmine warnings, session-start briefs, prompt pre-query | ~82% per session (measured) |
+| **3. + Skills index** | `engram init --with-skills` | Graph includes your `~/.claude/skills/` — queries surface relevant skills alongside code | ~23% overhead on graph size |
+| **4. + Git hooks** | `engram hooks install` | Auto-rebuild graph on every `git commit` — graph never goes stale | Zero token cost |
+
+**Recommended full setup** (one-time, per project):
+
+```bash
+npm install -g engramx         # install globally
+cd ~/my-project
+engram init --with-skills      # build graph + index skills
+engram install-hook            # wire Sentinel into Claude Code
+engram hooks install           # auto-rebuild on commit
+```
+
+After this, every Claude Code session in the project automatically gets structural context, landmine warnings, and session briefs — with no manual queries needed.
+
+**Optional — MEMORY.md integration** (v0.3.1+):
+
+```bash
+engram gen --memory-md         # write structural facts into Claude's native MEMORY.md
+```
+
+This writes a marker-bounded block into `~/.claude/projects/.../memory/MEMORY.md` with your project's core entities and structure. Claude's Auto-Dream owns the prose; engram owns the structure. They complement each other — engram never touches content outside its markers.
 
 ## All Commands
 
