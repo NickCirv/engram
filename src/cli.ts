@@ -197,13 +197,28 @@ program
   .description("Output JSON label for Claude HUD --extra-cmd (fast, <20ms)")
   .argument("[path]", "Project directory", ".")
   .action(async (projectPath: string) => {
-    const resolvedPath = pathResolve(projectPath);
-    const logPath = join(resolvedPath, ".engram", "hook-log.jsonl");
+    // Walk up from the given path (or cwd) to find the nearest .engram/.
+    // This way the label works regardless of which directory the
+    // Claude Code session started in — it finds the project root
+    // the same way the Sentinel hooks do.
+    let resolvedPath = pathResolve(projectPath);
+    let found = false;
+    for (let depth = 0; depth < 20; depth++) {
+      if (existsSync(join(resolvedPath, ".engram", "graph.db"))) {
+        found = true;
+        break;
+      }
+      const parent = dirname(resolvedPath);
+      if (parent === resolvedPath) break;
+      resolvedPath = parent;
+    }
 
-    if (!existsSync(join(resolvedPath, ".engram", "graph.db"))) {
+    if (!found) {
       console.log('{"label":""}');
       return;
     }
+
+    const logPath = join(resolvedPath, ".engram", "hook-log.jsonl");
 
     if (!existsSync(logPath)) {
       console.log('{"label":"⚡engram ░░░░░░░░░░ ready"}');
