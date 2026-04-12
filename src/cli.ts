@@ -42,6 +42,12 @@ import {
 } from "./intercept/memory-md.js";
 import { basename } from "node:path";
 
+// Read version from package.json at build time via import.
+// Using createRequire to avoid ESM JSON import assertions.
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const { version: PKG_VERSION } = require("../package.json");
+
 const program = new Command();
 
 program
@@ -49,7 +55,7 @@ program
   .description(
     "Context as infra for AI coding tools — hook-based Read/Edit interception + structural graph summaries"
   )
-  .version("0.3.0");
+  .version(PKG_VERSION);
 
 program
   .command("init")
