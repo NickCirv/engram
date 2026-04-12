@@ -49,6 +49,9 @@ describe("watchProject", () => {
       },
     });
 
+    // Small delay to let the watcher fully initialize before writing.
+    await new Promise((r) => setTimeout(r, 200));
+
     // Write a new file
     writeFileSync(
       join(srcDir, "helper.ts"),

@@ -1,6 +1,6 @@
 {
   "name": "engramx",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "The structural code graph your AI agent can't forget to use. A Claude Code hook layer that intercepts Read/Edit/Write/Bash and replaces file contents with ~300-token structural graph summaries. 82% measured token reduction. Context rot is empirically solved — cite Chroma. Local SQLite, zero LLM cost, zero cloud, zero native deps.",
   "type": "module",
   "bin": {

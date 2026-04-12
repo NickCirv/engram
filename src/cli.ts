@@ -26,6 +26,7 @@ import { install as installHooks, uninstall as uninstallHooks, status as hooksSt
 import { autogen } from "./autogen.js";
 import { dispatchHook } from "./intercept/dispatch.js";
 import { watchProject } from "./watcher.js";
+import { startDashboard } from "./dashboard.js";
 import { handleCursorBeforeReadFile } from "./intercept/cursor-adapter.js";
 import {
   installEngramHooks,
@@ -160,6 +161,34 @@ program
     });
 
     // Prevent the process from exiting
+    await new Promise(() => {});
+  });
+
+program
+  .command("dashboard")
+  .alias("hud")
+  .description("Live terminal dashboard showing hook activity and token savings")
+  .argument("[path]", "Project directory", ".")
+  .action(async (projectPath: string) => {
+    const resolvedPath = pathResolve(projectPath);
+    const dbPath = join(resolvedPath, ".engram", "graph.db");
+    if (!existsSync(dbPath)) {
+      console.error(
+        chalk.red("No engram graph found at ") + chalk.white(resolvedPath)
+      );
+      console.error(chalk.dim("Run 'engram init' first."));
+      process.exit(1);
+    }
+
+    const controller = startDashboard(resolvedPath);
+
+    process.on("SIGINT", () => {
+      controller.abort();
+      console.log(chalk.dim("\n  Dashboard closed."));
+      process.exit(0);
+    });
+
+    // Keep process alive
     await new Promise(() => {});
   });
 
