@@ -46,27 +46,23 @@ engram init             # scan codebase → .engram/graph.db (~40 ms, 0 tokens)
 engram install-hook     # wire the Sentinel into Claude Code
 ```
 
-```bash
-npm install -g engramx
-cd ~/my-project
-engram init             # scan codebase → .engram/graph.db
-engram install-hook     # wire into Claude Code (project-local)
-```
-
 That's it. The next Claude Code session in that directory automatically:
 
 - **Replaces file reads with graph summaries** (Read intercept, deny+reason)
 - **Warns before edits that hit known mistakes** (Edit landmine injection)
 - **Pre-loads relevant context when you ask a question** (UserPromptSubmit pre-query)
-- **Injects a project brief at session start** (SessionStart additionalContext)
+- **Injects a project brief at session start** with mempalace semantic context (SessionStart)
+- **Survives context compaction** — re-injects critical nodes before compression (PreCompact)
+- **Auto-switches project context** when you navigate to a different repo (CwdChanged)
 - **Logs every decision for `engram hook-stats`** (PostToolUse observer)
+- **Live HUD in Claude Code status bar** — `engram hud-label` for Claude HUD integration
 
-## Architecture Diagram
+## Docs
 
-An 11-page visual walkthrough of the full lifecycle — the four hook events, the Read handler's 9-branch decision tree (with a real JSON response), the six-layer ecosystem substrate, and measured numbers from engram's own code.
-
-- 📄 **[View the PDF](docs/engram-sentinel-ecosystem.pdf)** — A3 landscape, 11 pages, 1 MB. GitHub renders it inline when clicked.
-- 🌐 **[HTML source](docs/engram-sentinel-ecosystem.html)** — single self-contained file. Download raw and open in any browser for the interactive scroll-reveal version.
+- **[Architecture Diagram](docs/engram-sentinel-ecosystem.pdf)** — 11-page visual walkthrough of the full lifecycle. [HTML version](docs/engram-sentinel-ecosystem.html).
+- **[Installation Guide](docs/engram-user-manual.html)** — AAA-designed step-by-step setup guide with experience tiers.
+- **[Integration Guide](docs/engram-integration-guide.html)** — how memory tools, compression plugins, and workflow managers integrate with engram. Real token savings numbers + code examples.
+- **[INTEGRATION.md](docs/INTEGRATION.md)** — MCP server setup and programmatic API reference.
 
 ## The Problem
 
@@ -161,7 +157,7 @@ engram gen --task bug-fix       # Task-aware view (general|bug-fix|feature|refac
 engram hooks install            # Auto-rebuild graph on git commit
 ```
 
-### Sentinel (v0.3 — new)
+### Sentinel (v0.3+)
 
 ```bash
 engram intercept                        # Hook entry point (called by Claude Code, reads stdin)
@@ -178,9 +174,24 @@ engram hook-disable                     # Kill switch (touch .engram/hook-disabl
 engram hook-enable                      # Remove kill switch
 ```
 
+### Infrastructure (v0.4 — new)
+
+```bash
+engram watch [path]                     # Live file watcher — incremental re-index on save
+engram dashboard [path]                 # Live terminal dashboard (token savings, hit rate, top files)
+engram hud [path]                       # Alias for dashboard
+engram hud-label [path]                 # JSON label for Claude HUD --extra-cmd integration
+```
+
+**Claude HUD integration** — add `--extra-cmd="engram hud-label"` to your Claude HUD statusLine command and see live savings in your Claude Code status bar:
+
+```
+⚡engram 48.5K saved ▰▰▰▰▰▰▰▰▱▱ 75%
+```
+
 ## How the Sentinel Layer Works
 
-Seven hook handlers compose the interception stack:
+Nine hook handlers compose the interception stack:
 
 | Hook | Mechanism | What it does |
 |---|---|---|
@@ -188,9 +199,11 @@ Seven hook handlers compose the interception stack:
 | **`PreToolUse:Edit`** | `allow + additionalContext` | Never blocks writes. If the file has known past mistakes, injects them as a landmine warning alongside the edit. |
 | **`PreToolUse:Write`** | Same as Edit | Advisory landmine injection. |
 | **`PreToolUse:Bash`** | Parse + delegate | Detects `cat|head|tail|less|more <single-file>` invocations (strict parser, rejects any shell metacharacter) and delegates to the Read handler. Closes the Bash workaround loophole. |
-| **`SessionStart`** | `additionalContext` | Injects a compact project brief (god nodes + graph stats + top landmines + git branch) on source=startup/clear/compact. Passes through on resume. |
+| **`SessionStart`** | `additionalContext` | Injects a compact project brief (god nodes + graph stats + top landmines + git branch) on source=startup/clear/compact. Bundles mempalace semantic context in parallel if available. Passes through on resume. |
 | **`UserPromptSubmit`** | `additionalContext` | Extracts keywords from the user's message, runs a ≤500-token pre-query, injects results. Skipped for short or generic prompts. Raw prompt content is never logged. |
-| **`PostToolUse`** | Observer | Pure logger. Writes tool/path/outputSize/success/decision to `.engram/hook-log.jsonl` for `hook-stats` and v0.3.1 self-tuning. |
+| **`PostToolUse`** | Observer | Pure logger. Writes tool/path/outputSize/success/decision to `.engram/hook-log.jsonl` for `hook-stats`. |
+| **`PreCompact`** | `additionalContext` | Re-injects god nodes + active landmines right before Claude compresses the conversation. First tool in the ecosystem whose context survives compaction. |
+| **`CwdChanged`** | `additionalContext` | Auto-switches project context when the user navigates to a different repo mid-session. Injects a compact brief for the new project. |
 
 ### Ten safety invariants, enforced at runtime
 
