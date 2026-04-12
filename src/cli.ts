@@ -193,6 +193,60 @@ program
   });
 
 program
+  .command("hud-label")
+  .description("Output JSON label for Claude HUD --extra-cmd (fast, <20ms)")
+  .argument("[path]", "Project directory", ".")
+  .action(async (projectPath: string) => {
+    const resolvedPath = pathResolve(projectPath);
+    const logPath = join(resolvedPath, ".engram", "hook-log.jsonl");
+
+    if (!existsSync(join(resolvedPath, ".engram", "graph.db"))) {
+      console.log('{"label":""}');
+      return;
+    }
+
+    if (!existsSync(logPath)) {
+      console.log('{"label":"⚡engram ░░░░░░░░░░ ready"}');
+      return;
+    }
+
+    try {
+      const entries = readHookLog(resolvedPath);
+      const summary = summarizeHookLog(entries);
+
+      if (summary.totalInvocations === 0) {
+        console.log('{"label":"⚡engram ░░░░░░░░░░ listening..."}');
+        return;
+      }
+
+      const totalPreTool =
+        (summary.byDecision["deny"] ?? 0) +
+        (summary.byDecision["allow"] ?? 0) +
+        (summary.byDecision["passthrough"] ?? 0);
+      const denied = summary.readDenyCount;
+      const hitRate = totalPreTool > 0 ? Math.round((denied / totalPreTool) * 100) : 0;
+      const tokens = summary.estimatedTokensSaved;
+
+      // Format tokens
+      let formatted: string;
+      if (tokens >= 1_000_000) formatted = (tokens / 1_000_000).toFixed(1) + "M";
+      else if (tokens >= 1_000) formatted = (tokens / 1_000).toFixed(1) + "K";
+      else formatted = String(tokens);
+
+      // Build bar (10 chars)
+      const barWidth = 10;
+      let filled = Math.round((hitRate / 100) * barWidth);
+      if (filled > barWidth) filled = barWidth;
+      if (denied > 0 && filled === 0) filled = 1;
+      const bar = "▰".repeat(filled) + "▱".repeat(barWidth - filled);
+
+      console.log(JSON.stringify({ label: `⚡engram ${formatted} saved ${bar} ${hitRate}%` }));
+    } catch {
+      console.log('{"label":"⚡engram"}');
+    }
+  });
+
+program
   .command("query")
   .description("Query the knowledge graph")
   .argument("<question>", "Natural language question or keywords")
