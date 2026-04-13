@@ -130,7 +130,11 @@ export async function resolveRichPacket(
     .filter((_, i) => i < sections.length)
     .map((r) => r.provider);
 
-  const header = `[engram] Rich context for ${filePath} (${providerNames.length} providers, ~${totalTokens} tokens)`;
+  // When called as enrichment (structure excluded), use a lighter header
+  const isEnrichment = enabledProviders && !enabledProviders.includes("engram:structure");
+  const header = isEnrichment
+    ? `[engram] Additional context (${providerNames.length} providers, ~${totalTokens} tokens)`
+    : `[engram] Rich context for ${filePath} (${providerNames.length} providers, ~${totalTokens} tokens)`;
   const text = `${header}\n\n${sections.join("\n\n")}`;
 
   return {
@@ -203,13 +207,13 @@ export function _resetAvailabilityCache(): void {
 async function filterAvailable(
   providers: readonly ContextProvider[]
 ): Promise<ContextProvider[]> {
-  const results: ContextProvider[] = [];
-  for (const p of providers) {
+  // Check all providers in PARALLEL — sequential checks would let
+  // unavailable Tier 2 providers (500ms timeout each) eat the entire
+  // enrichment budget before any Tier 1 provider gets a chance.
+  const checks = providers.map(async (p) => {
     let available = availabilityCache.get(p.name);
     if (available === undefined) {
       try {
-        // Tier 1 (internal) providers are always fast — 200ms is plenty.
-        // Tier 2 (external) providers may need process spawning — 500ms.
         const timeout = p.tier === 1 ? 200 : 500;
         available = await withTimeout(p.isAvailable(), timeout);
       } catch {
@@ -217,9 +221,11 @@ async function filterAvailable(
       }
       availabilityCache.set(p.name, available);
     }
-    if (available) results.push(p);
-  }
-  return results;
+    return { provider: p, available };
+  });
+
+  const settled = await Promise.all(checks);
+  return settled.filter((c) => c.available).map((c) => c.provider);
 }
 
 async function resolveWithTimeout(

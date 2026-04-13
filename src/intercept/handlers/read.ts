@@ -127,6 +127,9 @@ export async function handleRead(
   // The rich packet is wrapped in a tight try/catch + timeout so it
   // NEVER delays the existing graph-only path by more than ~500ms.
   // In most cases (cached), it adds <10ms of overhead.
+  // Try to enrich the graph summary with additional providers (Context Spine).
+  // The structure summary is ALREADY computed in fileCtx.summary — we only
+  // need the additional providers (mistakes, git, mempalace, context7, obsidian).
   const relPath = relative(ctx.projectRoot, ctx.absPath).replaceAll("\\", "/");
   try {
     const nodeContext = await buildNodeContext(
@@ -134,18 +137,26 @@ export async function handleRead(
       relPath,
       fileCtx
     );
-    // 1.5s timeout for the entire rich packet resolution. The per-provider
-    // timeouts are 200ms each, but parallel resolution + cache lookups
-    // should complete well under this.
+    // Skip the structure provider — we already have the summary. Only
+    // resolve the enrichment providers.
+    const enrichmentProviders = [
+      "engram:mistakes",
+      "engram:git",
+      "mempalace",
+      "context7",
+      "obsidian",
+    ];
     const richPacket = await withRichTimeout(
-      resolveRichPacket(relPath, nodeContext),
+      resolveRichPacket(relPath, nodeContext, enrichmentProviders),
       1500
     );
-    if (richPacket && richPacket.text.length > 0) {
-      return buildDenyResponse(richPacket.text);
+    if (richPacket && richPacket.providerCount > 0) {
+      // Combine: graph summary + enrichment sections
+      const enrichedText = `${fileCtx.summary}\n\n${richPacket.text}`;
+      return buildDenyResponse(enrichedText);
     }
   } catch {
-    // Rich packet failed or timed out — fall through to graph-only summary
+    // Enrichment failed or timed out — serve graph-only
   }
 
   // Fallback: graph-only summary (existing v0.4 behavior)
