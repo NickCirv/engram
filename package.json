@@ -1,7 +1,15 @@
 {
   "name": "engramx",
-  "version": "0.5.0",
-  "description": "The structural code graph your AI agent can't forget to use. A Claude Code hook layer that intercepts Read/Edit/Write/Bash and replaces file contents with ~300-token structural graph summaries. 82% measured token reduction. Context rot is empirically solved — cite Chroma. Local SQLite, zero LLM cost, zero cloud, zero native deps.",
+  "version": "0.5.1",
+  "description": "The context spine for AI coding agents. 6 providers assembled into rich context packets per Read interception. Up to 90% session-level token savings. Local SQLite, zero native deps, zero cloud.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NickCirv/engram.git"
+  },
+  "homepage": "https://github.com/NickCirv/engram",
+  "bugs": {
+    "url": "https://github.com/NickCirv/engram/issues"
+  },
   "type": "module",
   "bin": {
     "engram": "dist/cli.js",
@@ -22,7 +30,8 @@
     "ai-coding",
     "context-engineering",
     "knowledge-graph",
-    "ast",
+    "context-spine",
+    "context-providers",
     "mcp",
     "claude-code",
     "cursor",
@@ -40,7 +49,8 @@
   "files": [
     "dist",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "dependencies": {
     "chalk": "^5.6.2",

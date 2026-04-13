@@ -88,7 +88,7 @@ npm install -g engramx
 
 Requires Node.js 20+. Zero native dependencies. No build tools needed.
 
-## Quickstart (v0.3 Sentinel)
+## Quickstart
 
 ```bash
 cd ~/my-project
@@ -431,24 +431,19 @@ TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, Ruby, PHP.
 
 ## Roadmap
 
-### v0.2 (current) — **shipped April 2026**
-- ✅ Skills miner — index `~/.claude/skills/` into the graph
-- ✅ Adaptive gen — task-aware views (`--task general|bug-fix|feature|refactor`)
-- ✅ Regret buffer — surface past mistakes at the top of query results
-- ✅ `list_mistakes` MCP tool
-- ✅ Atomic init lockfile
-- ✅ Marker-safe `writeToFile` + surrogate-safe truncation
+### Shipped
+- ✅ **v0.5** — Context Spine: 6 providers, rich packets, provider cache, 90% session savings
+- ✅ **v0.4** — Infrastructure: PreCompact, CwdChanged, file watcher, MemPalace integration
+- ✅ **v0.3** — Sentinel: 9 hook handlers, Read interception, session briefs, prompt pre-query
+- ✅ **v0.2** — Skills miner, mistake memory, adaptive gen, MCP server
 
-### v0.3
-- Tree-sitter WASM (20+ languages with full call-graph precision)
-- Cross-project graph (query patterns across *all* your projects)
-- Temporal graph (commit-snapshot deltas — "what changed in auth this week?")
-- Token enforcement PreToolUse hook for Claude Code
-
-### v0.4+
-- LLM-free semantic search (locality-sensitive hashing over n-grams)
-- Graph-as-IR experimental spike
-- Team memory sync (paid tier)
+### Next
+- ECP spec v0.1 — Engram Context Protocol (open RFC)
+- Continue.dev + Cursor adapters
+- Tree-sitter opt-in (20+ languages with full AST precision)
+- Reproducible benchmark harness
+- Graph explorer (ReactFlow web UI)
+- Team sync (ElectricSQL, paid tier)
 
 ## Privacy
 
