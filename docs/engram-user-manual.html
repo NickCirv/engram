@@ -557,9 +557,9 @@ li::marker{color:var(--text-4)}
     <p>Navigate to your project directory and run:</p>
     <pre><span class="cmd">cd</span> ~/my-project
 <span class="cmd">engram</span> init</pre>
-    <p>This scans your codebase using tree-sitter AST extraction (no LLM, zero tokens) and builds a structural knowledge graph at <code>.engram/graph.db</code>.</p>
+    <p>This scans your codebase using heuristic code extraction (no LLM, zero tokens) and builds a structural knowledge graph at <code>.engram/graph.db</code>.</p>
     <pre><span class="output">&#x1f50d; Scanning codebase...</span>
-<span class="output">&#x1f333; AST extraction complete</span> <span class="comment">(38ms, 0 tokens used)</span>
+<span class="output">&#x1f333; Code extraction complete</span> <span class="comment">(38ms, 0 tokens used)</span>
    <span class="path">250 nodes, 554 edges from 15 files (4,200 lines)</span>
 <span class="comment">
 &#x1f4ca; Token savings: 6.4x fewer tokens vs relevant files (25x vs full corpus)
@@ -753,7 +753,7 @@ li::marker{color:var(--text-4)}
 
   <p>The graph is built by three miners that run locally with zero LLM cost:</p>
   <ul>
-    <li><strong>AST miner</strong> &mdash; tree-sitter extraction across 10 languages. Functions, classes, imports, exports, call relationships.</li>
+    <li><strong>AST miner</strong> &mdash; heuristic extraction across 10 languages. Functions, classes, imports, exports, call relationships.</li>
     <li><strong>Git miner</strong> &mdash; commit history analysis. Hot files, co-change patterns, authorship.</li>
     <li><strong>Session miner</strong> &mdash; learns from your Claude Code conversations. Mistakes, decisions, patterns.</li>
   </ul>
@@ -819,7 +819,7 @@ export PATH="$(npm config get prefix)/bin:$PATH"</pre>
   <details>
     <summary><code>engram init</code> finds 0 nodes</summary>
     <div class="detail-body">
-      <p>engram uses tree-sitter grammars bundled with the package. Supported languages: TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, C#, Ruby. If your project uses an unsupported language, the AST miner will find file-level nodes but no function/class-level detail.</p>
+      <p>engram uses regex heuristics for code extraction. Supported languages: TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, Ruby, PHP. Tree-sitter support is planned for a future release. If your project uses an unsupported language, the miner will find file-level nodes but no function/class-level detail.</p>
       <p>Also check: are you running <code>engram init</code> from the project root (where <code>package.json</code> or <code>.git/</code> lives)?</p>
     </div>
   </details>

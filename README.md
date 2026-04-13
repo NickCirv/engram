@@ -341,7 +341,7 @@ Each view picks a different set of sections with different limits. For example, 
 
 | | engram | Mem0 | Graphify | aider repo-map | CLAUDE.md |
 |---|---|---|---|---|---|
-| **Code structure** | AST extraction (10 langs) | No | Yes (tree-sitter) | Yes (tree-sitter) | No |
+| **Code structure** | Heuristic extraction (10 langs) | No | Yes (tree-sitter) | Yes (tree-sitter) | No |
 | **Persistent memory** | SQLite graph, survives sessions | Yes (vector + graph) | Static snapshot | Per-session only | Manual text file |
 | **Session learning** | Mines decisions, patterns, mistakes | Generic facts | No | No | You write it by hand |
 | **Universal** | MCP + CLI + auto-gen | API only | Claude Code only | aider only | Claude Code only |
@@ -382,12 +382,12 @@ engram hooks status      # Check installation
 engram hooks uninstall   # Remove hooks
 ```
 
-Code changes trigger an instant AST rebuild (no LLM, <50ms). The graph stays fresh without manual re-runs.
+Code changes trigger an instant graph rebuild (no LLM, <50ms). The graph stays fresh without manual re-runs.
 
 ## Programmatic API
 
 ```typescript
-import { init, query, godNodes, stats } from "engram";
+import { init, query, godNodes, stats } from "engramx";
 
 // Build the graph
 const result = await init("./my-project");
