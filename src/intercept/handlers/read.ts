@@ -120,16 +120,10 @@ export async function handleRead(
   // to trust the summary as a full-file replacement.
   if (fileCtx.confidence < READ_CONFIDENCE_THRESHOLD) return PASSTHROUGH;
 
-  // All checks passed. Try to assemble a rich context packet from all
-  // providers (Context Spine). Falls back to graph-only summary if
-  // providers are unavailable or exceed the timeout budget.
-  //
-  // The rich packet is wrapped in a tight try/catch + timeout so it
-  // NEVER delays the existing graph-only path by more than ~500ms.
-  // In most cases (cached), it adds <10ms of overhead.
-  // Try to enrich the graph summary with additional providers (Context Spine).
-  // The structure summary is ALREADY computed in fileCtx.summary — we only
-  // need the additional providers (mistakes, git, mempalace, context7, obsidian).
+  // Enrich the graph summary with additional providers (Context Spine).
+  // Structure is already computed in fileCtx.summary — we resolve the
+  // enrichment providers (mistakes, git, mempalace, context7, obsidian)
+  // with a 1.5s timeout. Falls back to graph-only on failure.
   const relPath = relative(ctx.projectRoot, ctx.absPath).replaceAll("\\", "/");
   try {
     const nodeContext = await buildNodeContext(
