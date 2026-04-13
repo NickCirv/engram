@@ -1,0 +1,245 @@
+/**
+ * Context Spine resolver — the core engine that assembles a rich context
+ * packet from multiple providers for a single file.
+ *
+ * On Read interception:
+ *   1. Run all available providers in parallel
+ *   2. Tier 1 providers resolve directly (graph, mistakes, git)
+ *   3. Tier 2 providers check cache first, live-resolve on miss
+ *   4. Assemble results in priority order within total token budget
+ *   5. Return formatted rich packet
+ *
+ * The resolver itself never throws — any provider failure is silently
+ * skipped. If ALL providers fail, returns null (caller falls through
+ * to existing behavior).
+ */
+import type {
+  ContextProvider,
+  NodeContext,
+  ProviderResult,
+} from "./types.js";
+import { PROVIDER_PRIORITY } from "./types.js";
+import { structureProvider } from "./engram-structure.js";
+import { mistakesProvider } from "./engram-mistakes.js";
+import { gitProvider } from "./engram-git.js";
+import { mempalaceProvider } from "./mempalace.js";
+import { context7Provider } from "./context7.js";
+import { obsidianProvider } from "./obsidian.js";
+
+/** All registered providers in resolution order. */
+const ALL_PROVIDERS: readonly ContextProvider[] = [
+  structureProvider,
+  mistakesProvider,
+  gitProvider,
+  mempalaceProvider,
+  context7Provider,
+  obsidianProvider,
+];
+
+/** Maximum total tokens for the assembled rich packet. */
+const TOTAL_TOKEN_BUDGET = 600;
+
+/** Rough token estimate: ~4 chars per token. */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+export interface RichPacket {
+  /** Assembled text with all provider sections. */
+  readonly text: string;
+  /** Number of providers that contributed. */
+  readonly providerCount: number;
+  /** Names of providers that contributed. */
+  readonly providers: readonly string[];
+  /** Estimated token count. */
+  readonly estimatedTokens: number;
+  /** Total resolution time in ms. */
+  readonly durationMs: number;
+}
+
+/**
+ * Resolve a rich context packet for a file from all available providers.
+ * Returns null if no providers produced results.
+ *
+ * @param filePath - Relative file path (POSIX)
+ * @param context - Node context with project root, imports, etc.
+ * @param enabledProviders - Optional: only use these providers (by name)
+ */
+export async function resolveRichPacket(
+  filePath: string,
+  context: NodeContext,
+  enabledProviders?: readonly string[]
+): Promise<RichPacket | null> {
+  const start = Date.now();
+
+  // Filter to enabled + available providers
+  const providers = ALL_PROVIDERS.filter((p) => {
+    if (enabledProviders && !enabledProviders.includes(p.name)) return false;
+    return true;
+  });
+
+  // Check availability (fast — cached after first call)
+  const available = await filterAvailable(providers);
+  if (available.length === 0) return null;
+
+  // Resolve all providers in parallel with per-provider timeouts
+  const settled = await Promise.allSettled(
+    available.map((p) => resolveWithTimeout(p, filePath, context))
+  );
+
+  // Collect successful results
+  const results: ProviderResult[] = [];
+  for (const outcome of settled) {
+    if (outcome.status === "fulfilled" && outcome.value) {
+      results.push(outcome.value);
+    }
+  }
+
+  if (results.length === 0) return null;
+
+  // Sort by priority order
+  const sorted = results.sort((a, b) => {
+    const aIdx = PROVIDER_PRIORITY.indexOf(a.provider);
+    const bIdx = PROVIDER_PRIORITY.indexOf(b.provider);
+    return (aIdx === -1 ? 99 : aIdx) - (bIdx === -1 ? 99 : bIdx);
+  });
+
+  // Assemble within budget
+  const sections: string[] = [];
+  let totalTokens = 0;
+
+  for (const result of sorted) {
+    const sectionTokens = estimateTokens(result.content);
+    if (totalTokens + sectionTokens > TOTAL_TOKEN_BUDGET) {
+      // Budget exceeded — skip remaining providers
+      break;
+    }
+
+    // Find the provider's label
+    const provider = ALL_PROVIDERS.find((p) => p.name === result.provider);
+    const label = provider?.label ?? result.provider.toUpperCase();
+    const cacheTag = result.cached ? ", cached" : "";
+
+    sections.push(`${label} (${result.provider}${cacheTag}):\n${result.content}`);
+    totalTokens += sectionTokens;
+  }
+
+  if (sections.length === 0) return null;
+
+  const providerNames = sorted
+    .filter((_, i) => i < sections.length)
+    .map((r) => r.provider);
+
+  const header = `[engram] Rich context for ${filePath} (${providerNames.length} providers, ~${totalTokens} tokens)`;
+  const text = `${header}\n\n${sections.join("\n\n")}`;
+
+  return {
+    text,
+    providerCount: providerNames.length,
+    providers: providerNames,
+    estimatedTokens: totalTokens + estimateTokens(header),
+    durationMs: Date.now() - start,
+  };
+}
+
+/**
+ * Warm all Tier 2 provider caches. Called at SessionStart.
+ */
+export async function warmAllProviders(
+  projectRoot: string,
+  enabledProviders?: readonly string[]
+): Promise<{ warmed: string[]; durationMs: number }> {
+  const start = Date.now();
+  const warmed: string[] = [];
+
+  const tier2 = ALL_PROVIDERS.filter(
+    (p) =>
+      p.tier === 2 &&
+      p.warmup &&
+      (!enabledProviders || enabledProviders.includes(p.name))
+  );
+
+  const available = await filterAvailable(tier2);
+
+  // Warm in parallel with per-provider timeouts
+  const settled = await Promise.allSettled(
+    available.map(async (p) => {
+      try {
+        const result = await withTimeout(p.warmup!(projectRoot), 5000);
+        if (result && result.entries.length > 0) {
+          // Write to cache
+          const { getStore } = await import("../core.js");
+          const store = await getStore(projectRoot);
+          try {
+            store.warmCache(
+              result.provider,
+              [...result.entries],
+              result.provider === "context7" ? 4 * 3600 : 3600
+            );
+            store.save();
+          } finally {
+            store.close();
+          }
+          warmed.push(p.name);
+        }
+      } catch {
+        // Silent failure
+      }
+    })
+  );
+
+  return { warmed, durationMs: Date.now() - start };
+}
+
+// ─── Internals ──────────────────────────────────────────────────
+
+const availabilityCache = new Map<string, boolean>();
+
+async function filterAvailable(
+  providers: readonly ContextProvider[]
+): Promise<ContextProvider[]> {
+  const results: ContextProvider[] = [];
+  for (const p of providers) {
+    let available = availabilityCache.get(p.name);
+    if (available === undefined) {
+      try {
+        available = await withTimeout(p.isAvailable(), 1000);
+      } catch {
+        available = false;
+      }
+      availabilityCache.set(p.name, available);
+    }
+    if (available) results.push(p);
+  }
+  return results;
+}
+
+async function resolveWithTimeout(
+  provider: ContextProvider,
+  filePath: string,
+  context: NodeContext
+): Promise<ProviderResult | null> {
+  try {
+    return await withTimeout(
+      provider.resolve(filePath, context),
+      provider.timeoutMs
+    );
+  } catch {
+    return null;
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timeout")), ms);
+    promise
+      .then((val) => {
+        clearTimeout(timer);
+        resolve(val);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
