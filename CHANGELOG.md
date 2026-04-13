@@ -4,6 +4,72 @@ All notable changes to engram are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-04-13 — "Context Spine"
+
+### Added
+
+- **Context Spine** — engram now assembles rich context packets from
+  6 providers (structure, mistakes, git, mempalace, context7, obsidian)
+  per Read interception. One response replaces 5 separate tool calls.
+  Target: up to 90% session-level token savings.
+- **Provider cache** — new `provider_cache` SQLite table with full CRUD.
+  External providers (mempalace, context7, obsidian) cache results at
+  SessionStart. Per-Read cache lookup is <5ms.
+- **ContextProvider interface** — formal contract for all providers:
+  `resolve()`, `warmup()`, `isAvailable()`, with token budgets and
+  per-provider timeouts.
+- **6 providers**: `engram:structure` (graph), `engram:mistakes` (known
+  issues), `engram:git` (recent changes/churn), `mempalace` (decisions
+  from ChromaDB), `context7` (library docs), `obsidian` (project notes).
+- **Resolver engine** — parallel resolution with priority ordering,
+  600-token total budget, graceful degradation per provider.
+- **SessionStart warmup** — fire-and-forget bulk cache fill for Tier 2
+  providers at session start.
+- **StatusLine auto-config** — `engram install-hook` now sets up the
+  Claude Code statusLine with `engram hud-label` when no existing
+  statusLine is configured.
+
+### Fixed
+
+- **CRITICAL: `renderFileStructure` full table scan** — replaced
+  `getAllNodes()`/`getAllEdges()` with targeted SQL queries
+  (`getNodesByFile`, `getEdgesForNodes`). Was silently timing out on
+  large projects (50k+ nodes).
+- **CRITICAL: `scoreNodes` full table scan** — replaced `getAllNodes()`
+  with `searchNodes()` SQL seeding. O(matches) instead of O(all nodes).
+- **Go import false positives** — import detection now tracks
+  `import()` block state. No longer fires on struct field tags like
+  `json:"name"`.
+- **TS arrow function false positives** — pattern now requires `=>`
+  in the same line. `const x = (someValue)` no longer creates false
+  function nodes.
+- **Commented-out code extraction** — lines starting with `//` or `*`
+  are skipped before pattern matching.
+- **Edge ordering** — `renderFileStructure` sorts edges by combined
+  endpoint degree before `.slice(0, 10)`. God-node relationships
+  appear first.
+- **LIKE wildcard escaping** — `%` and `_` in search queries are
+  properly escaped.
+- **SQLite variable limit** — `getEdgesForNodes` chunks IN clause at
+  400 IDs to stay under SQLite's 999 parameter limit.
+- **`warmCache` persistence** — now calls `save()` after transaction
+  commit, consistent with `bulkUpsert`.
+- **Null-safe casts** — `rowToCachedContext` uses `?? fallbacks` on
+  all fields to prevent null propagation.
+- **Parallel availability checks** — provider isAvailable() runs in
+  parallel, not sequentially. Prevents slow Tier 2 timeouts from
+  blocking Tier 1 providers.
+
+### Changed
+
+- Confidence score calibrated to 0.85 for regex extraction (was 1.0).
+  Reserves 1.0 for future tree-sitter integration.
+- Removed phantom `graphology` dependency (was in package.json with
+  zero imports in source code).
+- Test count: 493 → 520 (+27 new tests).
+- README updated: "context spine" positioning, accurate test count,
+  provider documentation, "heuristic extraction" language.
+
 ## [0.4.0] — 2026-04-12 — "Infrastructure"
 
 ### Added

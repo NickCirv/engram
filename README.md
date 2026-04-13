@@ -15,28 +15,28 @@
   <a href="https://github.com/NickCirv/engram/actions"><img src="https://github.com/NickCirv/engram/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node">
-  <img src="https://img.shields.io/badge/tests-486%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-520%20passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
-  <img src="https://img.shields.io/badge/token%20reduction-82%25-orange" alt="82% token reduction">
+  <img src="https://img.shields.io/badge/token%20savings-up%20to%2090%25-orange" alt="Up to 90% token savings">
 </p>
 
 ---
 
-# The structural code graph your AI agent can't forget to use.
+# The context spine for AI coding agents.
 
-**Context rot is empirically solved.** Chroma's July 2025 research proved that even Claude Opus 4.6 scores only 76% on MRCR v2 8-needle at 1M tokens. Long context windows don't save you — they drown you. engram is the answer: a **structural graph** of your codebase that replaces file reads with ~300-token summaries *before the agent sees them*.
+**One call replaces five.** engram intercepts file reads and serves rich context packets — structural summaries, decisions, library docs, known issues, and git history — assembled from 6 providers in a single ~500-token response. Your AI agent gets everything it needs without making 5 separate tool calls.
 
-engram installs a Claude Code hook layer at the tool-call boundary. Every `Read`, `Edit`, `Write`, and `Bash cat` gets intercepted. When the graph has confident coverage of a file, the raw read never happens — the agent sees a structural summary instead.
+engram installs a hook layer at the Claude Code tool-call boundary. Every `Read`, `Edit`, `Write`, and `Bash cat` gets intercepted. When the graph has confident coverage of a file, it serves a **rich context packet** combining structure, decisions, docs, and history — all pre-assembled, all within budget.
 
-Not a memory tool. Not a RAG layer. Not a context manager. **A structural code graph with a Claude Code hook layer that turns it into the memory your agent can't forget to exist.**
+Not a memory tool. Not a RAG layer. **The context spine that connects your knowledge graph, semantic memory, library docs, and project notes into a single context layer your AI agent can't forget to use.**
 
 | What it is | What it isn't |
 |---|---|
-| Structural code graph (AST + git + session miners) | Prose memory like Anthropic's MEMORY.md |
+| Context spine (graph + 6 providers assembled per read) | A single-purpose file summarizer |
 | Local SQLite, zero cloud, zero native deps | Vector RAG that phones home |
 | Hook-based interception at the tool boundary | A tool the agent has to remember to call |
-| 82% measured token reduction on real code | Another LongMemEval chatbot benchmark |
+| Up to 90% session-level token savings | A theoretical benchmark |
 | Complements native Claude memory | Competes with native Claude memory |
 
 ```bash
@@ -48,14 +48,14 @@ engram install-hook     # wire the Sentinel into Claude Code
 
 That's it. The next Claude Code session in that directory automatically:
 
-- **Replaces file reads with graph summaries** (Read intercept, deny+reason)
+- **Serves rich context packets** — structure + git changes + decisions + library docs in one response (Context Spine)
+- **Warms provider caches at session start** — MemPalace, Context7, Obsidian pre-fetched in background
 - **Warns before edits that hit known mistakes** (Edit landmine injection)
 - **Pre-loads relevant context when you ask a question** (UserPromptSubmit pre-query)
-- **Injects a project brief at session start** with mempalace semantic context (SessionStart)
+- **Injects a project brief at session start** with semantic context (SessionStart)
 - **Survives context compaction** — re-injects critical nodes before compression (PreCompact)
 - **Auto-switches project context** when you navigate to a different repo (CwdChanged)
-- **Logs every decision for `engram hook-stats`** (PostToolUse observer)
-- **Live HUD in Claude Code status bar** — `engram hud-label` for Claude HUD integration
+- **Shows live HUD in Claude Code status bar** — auto-configured on `install-hook`
 
 ## Docs
 
@@ -113,9 +113,10 @@ Each tier builds on the previous. You can stop at any level — each one works s
 | Tier | What you run | What you get | Token savings |
 |---|---|---|---|
 | **1. Graph only** | `engram init` | CLI queries, MCP server, `engram gen` for CLAUDE.md | ~6x per query vs reading files |
-| **2. + Sentinel hooks** | `engram install-hook` | Automatic Read interception, Edit landmine warnings, session-start briefs, prompt pre-query | ~82% per session (measured) |
-| **3. + Skills index** | `engram init --with-skills` | Graph includes your `~/.claude/skills/` — queries surface relevant skills alongside code | ~23% overhead on graph size |
-| **4. + Git hooks** | `engram hooks install` | Auto-rebuild graph on every `git commit` — graph never goes stale | Zero token cost |
+| **2. + Sentinel hooks** | `engram install-hook` | Automatic Read interception, Edit warnings, session briefs, HUD | ~80% per session |
+| **3. + Context Spine** | Configure providers.json | Rich packets: structure + decisions + docs + git in one response | Up to 90% session-level |
+| **4. + Skills index** | `engram init --with-skills` | Graph includes your `~/.claude/skills/` — queries surface relevant skills | ~23% overhead on graph size |
+| **5. + Git hooks** | `engram hooks install` | Auto-rebuild graph on every `git commit` — graph never goes stale | Zero token cost |
 
 **Recommended full setup** (one-time, per project):
 
@@ -189,6 +190,33 @@ engram hud-label [path]                 # JSON label for Claude HUD --extra-cmd 
 ⚡engram 48.5K saved ▰▰▰▰▰▰▰▰▱▱ 75%
 ```
 
+## Context Spine (v0.5 — new)
+
+The Context Spine assembles rich context from 6 providers into a single response per file read:
+
+| Provider | Tier | What it adds | Latency |
+|----------|------|-------------|---------|
+| `engram:structure` | Internal | Functions, classes, imports, edges | <50ms |
+| `engram:mistakes` | Internal | Known bugs and past failures | <10ms |
+| `engram:git` | Internal | Last modified, author, churn rate | <100ms |
+| `mempalace` | External (cached) | Decisions, learnings, project context | <5ms cached |
+| `context7` | External (cached) | Library API docs for imports | <5ms cached |
+| `obsidian` | External (cached) | Project notes, architecture docs | <5ms cached |
+
+External providers cache results in SQLite at SessionStart. Per-Read resolution is a cache lookup (<5ms), not a live query. If any provider is unavailable, it's silently skipped — you always get at least the structural summary.
+
+Configure providers in `.engram/providers.json` (optional — auto-detection works for most setups):
+
+```json
+{
+  "providers": {
+    "mempalace": { "enabled": true },
+    "context7": { "enabled": true },
+    "obsidian": { "enabled": true, "vault": "~/vault" }
+  }
+}
+```
+
 ## How the Sentinel Layer Works
 
 Nine hook handlers compose the interception stack:
@@ -228,7 +256,7 @@ If anything goes wrong, `engram hook-disable` flips the kill switch without unin
 
 engram runs three miners on your codebase. None of them use an LLM.
 
-**AST Miner** — Extracts code structure (classes, functions, imports, exports, call patterns) using pattern matching across 10 languages: TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, Ruby, PHP. Zero tokens, deterministic, cached.
+**Heuristic Code Miner** — Extracts code structure (classes, functions, imports, exports, call patterns) using regex heuristics across 10 languages: TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, Ruby, PHP. Confidence-scored (0.85 for regex extraction, 1.0 reserved for future tree-sitter). Zero tokens, deterministic, cached.
 
 **Git Miner** — Reads `git log` for co-change patterns (files that change together), hot files (most frequently modified), and authorship. Creates INFERRED edges between structurally coupled files.
 
