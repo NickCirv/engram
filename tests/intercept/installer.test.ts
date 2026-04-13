@@ -19,6 +19,7 @@ import {
   ENGRAM_HOOK_EVENTS,
   ENGRAM_PRETOOL_MATCHER,
   DEFAULT_ENGRAM_COMMAND,
+  DEFAULT_STATUSLINE_COMMAND,
   type ClaudeCodeSettings,
   type HookEntry,
 } from "../../src/intercept/installer.js";
@@ -283,5 +284,75 @@ describe("formatInstallDiff", () => {
     const settings = installEngramHooks({}).updated;
     const diff = formatInstallDiff(settings, settings);
     expect(diff).toBe("(no changes)");
+  });
+
+  it("shows statusLine addition in diff", () => {
+    const before: ClaudeCodeSettings = {};
+    const { updated: after } = installEngramHooks(before);
+    const diff = formatInstallDiff(before, after);
+    expect(diff).toContain("statusLine");
+    expect(diff).toContain("HUD enabled");
+  });
+});
+
+describe("statusLine", () => {
+  it("adds engram hud-label statusLine on fresh install", () => {
+    const result = installEngramHooks({});
+    expect(result.statusLineAdded).toBe(true);
+    expect(result.updated.statusLine).toEqual({
+      type: "command",
+      command: DEFAULT_STATUSLINE_COMMAND,
+    });
+  });
+
+  it("does NOT overwrite existing statusLine", () => {
+    const existing: ClaudeCodeSettings = {
+      statusLine: {
+        type: "command",
+        command: "bash -c 'my-custom-hud'",
+      },
+    };
+    const result = installEngramHooks(existing);
+    expect(result.statusLineAdded).toBe(false);
+    expect(result.updated.statusLine!.command).toBe("bash -c 'my-custom-hud'");
+  });
+
+  it("does NOT overwrite statusLine that already includes engram", () => {
+    const existing: ClaudeCodeSettings = {
+      statusLine: {
+        type: "command",
+        command: 'bash -c \'bun "$(ls -td ...)" --extra-cmd="engram hud-label"\'',
+      },
+    };
+    const result = installEngramHooks(existing);
+    expect(result.statusLineAdded).toBe(false);
+    expect(result.updated.statusLine!.command).toContain("extra-cmd");
+  });
+
+  it("is idempotent — second install keeps the same statusLine", () => {
+    const first = installEngramHooks({});
+    const second = installEngramHooks(first.updated);
+    expect(second.statusLineAdded).toBe(false);
+    expect(second.updated.statusLine).toEqual(first.updated.statusLine);
+  });
+
+  it("uninstall removes engram-owned statusLine", () => {
+    const installed = installEngramHooks({}).updated;
+    const result = uninstallEngramHooks(installed);
+    expect(result.statusLineRemoved).toBe(true);
+    expect(result.updated.statusLine).toBeUndefined();
+  });
+
+  it("uninstall preserves non-engram statusLine", () => {
+    const settings: ClaudeCodeSettings = {
+      ...installEngramHooks({}).updated,
+      statusLine: {
+        type: "command",
+        command: "bash -c 'my-custom-hud'",
+      },
+    };
+    const result = uninstallEngramHooks(settings);
+    expect(result.statusLineRemoved).toBe(false);
+    expect(result.updated.statusLine!.command).toBe("bash -c 'my-custom-hud'");
   });
 });

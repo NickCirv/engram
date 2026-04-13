@@ -64,11 +64,24 @@ export interface HookEntry {
   readonly hooks: readonly HookCommand[];
 }
 
+/** StatusLine config as it appears in Claude Code settings. */
+export interface StatusLineConfig {
+  readonly type: "command";
+  readonly command: string;
+}
+
+/**
+ * Default statusLine command. Uses `engram hud-label` which outputs
+ * a JSON `{"label":"..."}` line showing saved tokens and activity.
+ */
+export const DEFAULT_STATUSLINE_COMMAND = "engram hud-label";
+
 /** The shape of a Claude Code settings.json file, narrowed to hooks. */
 export interface ClaudeCodeSettings {
   hooks?: {
     [event: string]: HookEntry[] | undefined;
   };
+  statusLine?: StatusLineConfig;
   [key: string]: unknown;
 }
 
@@ -143,6 +156,8 @@ export interface InstallResult {
   readonly updated: ClaudeCodeSettings;
   readonly added: readonly EngramHookEvent[];
   readonly alreadyPresent: readonly EngramHookEvent[];
+  /** Whether a statusLine entry was added for `engram hud-label`. */
+  readonly statusLineAdded: boolean;
 }
 
 /**
@@ -181,10 +196,25 @@ export function installEngramHooks(
     added.push(event);
   }
 
+  // StatusLine: set `engram hud-label` only if no statusLine is configured.
+  // This gives users a visible HUD out of the box without overwriting any
+  // existing statusLine (e.g., claude-hud plugin or a custom command).
+  const hasStatusLine =
+    settings.statusLine &&
+    typeof settings.statusLine === "object" &&
+    typeof settings.statusLine.command === "string" &&
+    settings.statusLine.command.length > 0;
+
+  const statusLineAdded = !hasStatusLine;
+  const statusLine: StatusLineConfig | undefined = hasStatusLine
+    ? settings.statusLine
+    : { type: "command", command: DEFAULT_STATUSLINE_COMMAND };
+
   return {
-    updated: { ...settings, hooks: hooksClone },
+    updated: { ...settings, hooks: hooksClone, statusLine },
     added,
     alreadyPresent,
+    statusLineAdded,
   };
 }
 
@@ -196,6 +226,8 @@ export function installEngramHooks(
 export interface UninstallResult {
   readonly updated: ClaudeCodeSettings;
   readonly removed: readonly EngramHookEvent[];
+  /** Whether an engram-owned statusLine was removed. */
+  readonly statusLineRemoved: boolean;
 }
 
 /**
@@ -232,7 +264,15 @@ export function uninstallEngramHooks(
     updatedSettings.hooks = hooksClone;
   }
 
-  return { updated: updatedSettings, removed };
+  // Remove statusLine only if it's engram-owned (contains "engram hud-label").
+  const statusLineRemoved =
+    typeof updatedSettings.statusLine?.command === "string" &&
+    updatedSettings.statusLine.command.includes("engram hud-label");
+  if (statusLineRemoved) {
+    delete updatedSettings.statusLine;
+  }
+
+  return { updated: updatedSettings, removed, statusLineRemoved };
 }
 
 /**
@@ -271,5 +311,14 @@ export function formatInstallDiff(
       }
     }
   }
+  // Report statusLine changes.
+  const hadStatusLine = before.statusLine?.command;
+  const hasStatusLineNow = after.statusLine?.command;
+  if (!hadStatusLine && hasStatusLineNow?.includes("engram hud-label")) {
+    lines.push(`+ statusLine: engram hud-label (HUD enabled)`);
+  } else if (hadStatusLine?.includes("engram hud-label") && !hasStatusLineNow) {
+    lines.push(`- statusLine: engram hud-label (HUD removed)`);
+  }
+
   return lines.length > 0 ? lines.join("\n") : "(no changes)";
 }

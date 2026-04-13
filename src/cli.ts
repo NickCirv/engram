@@ -661,7 +661,7 @@ program
       );
       console.log(chalk.dim(`   Target: ${settingsPath}`));
 
-      if (result.added.length === 0) {
+      if (result.added.length === 0 && !result.statusLineAdded) {
         console.log(
           chalk.yellow(
             `\n   All engram hooks already installed (${result.alreadyPresent.join(", ")}).`
@@ -709,11 +709,18 @@ program
         process.exit(1);
       }
 
-      console.log(
-        chalk.green(
-          `\n   ✅ Installed ${result.added.length} hook event${result.added.length === 1 ? "" : "s"}: ${result.added.join(", ")}`
-        )
-      );
+      if (result.added.length > 0) {
+        console.log(
+          chalk.green(
+            `\n   ✅ Installed ${result.added.length} hook event${result.added.length === 1 ? "" : "s"}: ${result.added.join(", ")}`
+          )
+        );
+      }
+      if (result.statusLineAdded) {
+        console.log(
+          chalk.green("   ✅ StatusLine: engram hud-label (HUD visible in Claude Code)")
+        );
+      }
       if (result.alreadyPresent.length > 0) {
         console.log(
           chalk.dim(
@@ -765,7 +772,7 @@ program
 
     const result = uninstallEngramHooks(existing);
 
-    if (result.removed.length === 0) {
+    if (result.removed.length === 0 && !result.statusLineRemoved) {
       console.log(
         chalk.yellow(`\n   No engram hooks found in ${settingsPath}.`)
       );
@@ -779,11 +786,18 @@ program
       const tmpPath = settingsPath + ".engram-tmp";
       writeFileSync(tmpPath, JSON.stringify(result.updated, null, 2) + "\n");
       renameSync(tmpPath, settingsPath);
-      console.log(
-        chalk.green(
-          `\n   ✅ Removed engram hooks from ${result.removed.length} event${result.removed.length === 1 ? "" : "s"}: ${result.removed.join(", ")}`
-        )
-      );
+      if (result.removed.length > 0) {
+        console.log(
+          chalk.green(
+            `\n   ✅ Removed engram hooks from ${result.removed.length} event${result.removed.length === 1 ? "" : "s"}: ${result.removed.join(", ")}`
+          )
+        );
+      }
+      if (result.statusLineRemoved) {
+        console.log(
+          chalk.green("   ✅ Removed engram statusLine (HUD)")
+        );
+      }
       console.log(chalk.dim(`   Backup: ${backupPath}`));
     } catch (err) {
       console.error(
