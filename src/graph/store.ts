@@ -474,8 +474,8 @@ export class GraphStore {
       "DELETE FROM provider_cache WHERE (cached_at + ttl * 1000) <= ?",
       [now]
     );
-    const changes = this.db.getRowsModified();
-    return changes;
+    const result = this.db.exec("SELECT changes()");
+    return (result[0]?.values[0]?.[0] as number) ?? 0;
   }
 
   /**
