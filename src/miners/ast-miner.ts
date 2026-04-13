@@ -157,7 +157,7 @@ export function extractFile(
       sourceFile: relPath,
       sourceLocation: line ? `L${line}` : null,
       confidence: "EXTRACTED",
-      confidenceScore: 1.0,
+      confidenceScore: 0.85, // Regex heuristic — reserve 1.0 for tree-sitter
       lastVerified: now,
       queryCount: 0,
       metadata: { lang },
@@ -175,7 +175,7 @@ export function extractFile(
       target,
       relation,
       confidence: "EXTRACTED",
-      confidenceScore: 1.0,
+      confidenceScore: 0.85, // Regex heuristic — reserve 1.0 for tree-sitter
       sourceFile: relPath,
       sourceLocation: line ? `L${line}` : null,
       lastVerified: now,
@@ -246,6 +246,10 @@ function extractWithPatterns(
     const line = lines[i];
     const lineNum = i + 1;
 
+    // Skip commented-out lines (single-line comments and block comment continuations)
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue;
+
     // Classes
     for (const pat of patterns.classes) {
       const match = line.match(pat);
@@ -261,6 +265,9 @@ function extractWithPatterns(
     for (const pat of patterns.functions) {
       const match = line.match(pat);
       if (match?.[1]) {
+        // Arrow function pattern: require `=>` on the same line to avoid
+        // matching plain assignments like `const result = (someValue)`
+        if (pat.source.includes("const|let") && !line.includes("=>")) continue;
         const name = match[1];
         const id = makeId(stem, name);
         addNode(id, `${name}()`, "function", lineNum);
@@ -315,9 +322,32 @@ function extractGo(
     line: number | null
   ) => void
 ): void {
+  let inImportBlock = false;
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const lineNum = i + 1;
+
+    // Skip commented-out lines
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue;
+
+    // Track Go import block boundaries: `import ( ... )`
+    if (/^import\s*\(/.test(line)) {
+      inImportBlock = true;
+      continue;
+    }
+    if (inImportBlock && trimmed === ")") {
+      inImportBlock = false;
+      continue;
+    }
+    // Single-line import: `import "fmt"`
+    const singleImport = line.match(/^import\s+"([^"]+)"/);
+    if (singleImport?.[1]) {
+      const module = singleImport[1].split("/").pop()!;
+      addEdge(fileId, makeId(module), "imports", lineNum);
+      continue;
+    }
 
     // func declarations
     const funcMatch = line.match(
@@ -340,11 +370,13 @@ function extractGo(
       addEdge(fileId, id, "contains", lineNum);
     }
 
-    // imports
-    const importMatch = line.match(/^\s*"([^"]+)"/);
-    if (importMatch?.[1] && i > 0 && content.includes("import")) {
-      const module = importMatch[1].split("/").pop()!;
-      addEdge(fileId, makeId(module), "imports", lineNum);
+    // imports — only match inside import block
+    if (inImportBlock) {
+      const importMatch = line.match(/^\s*"([^"]+)"/);
+      if (importMatch?.[1]) {
+        const module = importMatch[1].split("/").pop()!;
+        addEdge(fileId, makeId(module), "imports", lineNum);
+      }
     }
   }
 }

@@ -52,10 +52,36 @@ function scoreNodes(
   store: GraphStore,
   terms: string[]
 ): Array<{ score: number; node: GraphNode }> {
-  const allNodes = store.getAllNodes();
+  // Use SQL-level filtering via searchNodes instead of materializing
+  // the entire graph into JS. Each term seeds from the index; we then
+  // deduplicate and score the reduced set in JS.
+  const seen = new Set<string>();
+  const seedNodes: GraphNode[] = [];
+  for (const t of terms) {
+    for (const node of store.searchNodes(t, 200)) {
+      if (!seen.has(node.id)) {
+        seen.add(node.id);
+        seedNodes.push(node);
+      }
+    }
+  }
+
+  // Also pull in immediate neighbors of seeds so BFS/scoring has a
+  // meaningful local neighborhood (without loading ALL nodes).
+  const neighborNodes: GraphNode[] = [];
+  for (const node of seedNodes) {
+    for (const { node: neighbor } of store.getNeighbors(node.id)) {
+      if (!seen.has(neighbor.id)) {
+        seen.add(neighbor.id);
+        neighborNodes.push(neighbor);
+      }
+    }
+  }
+
+  const allCandidates = [...seedNodes, ...neighborNodes];
   const scored: Array<{ score: number; node: GraphNode }> = [];
 
-  for (const node of allNodes) {
+  for (const node of allCandidates) {
     const label = node.label.toLowerCase();
     const file = node.sourceFile.toLowerCase();
     let score = 0;
@@ -416,10 +442,11 @@ export function renderFileStructure(
   relativeFilePath: string,
   tokenBudget = 600
 ): FileStructureResult {
-  const allNodes = store.getAllNodes();
-  const fileNodes = allNodes.filter(
-    (n) => n.sourceFile === relativeFilePath && !isHiddenKeyword(n)
-  );
+  // Use targeted SQL queries instead of full table scans. On 50k-node
+  // projects, getAllNodes()/getAllEdges() materialize the entire graph
+  // into JS arrays and time out silently.
+  const allFileNodes = store.getNodesByFile(relativeFilePath);
+  const fileNodes = allFileNodes.filter((n) => !isHiddenKeyword(n));
 
   if (fileNodes.length === 0) {
     return {
@@ -442,13 +469,15 @@ export function renderFileStructure(
   const avgConfidence =
     fileNodes.reduce((s, n) => s + n.confidenceScore, 0) / fileNodes.length;
 
+  // Fetch only edges that touch this file's nodes (indexed query).
+  const fileNodeIds = new Set(fileNodes.map((n) => n.id));
+  const fileEdges = store.getEdgesForNodes([...fileNodeIds]);
+
   // Degree map: how many edges touch each node in this file. Used to sort
   // nodes within each kind group so the most-connected (= most important)
   // surface first.
-  const allEdges = store.getAllEdges();
-  const fileNodeIds = new Set(fileNodes.map((n) => n.id));
   const degreeMap = new Map<string, number>();
-  for (const e of allEdges) {
+  for (const e of fileEdges) {
     if (fileNodeIds.has(e.source)) {
       degreeMap.set(e.source, (degreeMap.get(e.source) ?? 0) + 1);
     }
@@ -507,19 +536,40 @@ export function renderFileStructure(
   }
 
   // Relationships involving this file's nodes (outgoing + incoming).
-  // Keep it short — cap at 10 edges to stay well under budget.
-  const relevantEdges = allEdges
+  // Sort by combined degree of endpoints so god-node relationships
+  // surface first, then cap at 10 to stay under budget.
+  const relevantEdges = fileEdges
     .filter(
       (e) => fileNodeIds.has(e.source) || fileNodeIds.has(e.target)
     )
+    .sort((a, b) => {
+      const degA = (degreeMap.get(a.source) ?? 0) + (degreeMap.get(a.target) ?? 0);
+      const degB = (degreeMap.get(b.source) ?? 0) + (degreeMap.get(b.target) ?? 0);
+      return degB - degA;
+    })
     .slice(0, 10);
+
+  // Build a lookup map for node labels (covers file nodes + edge endpoints).
+  const nodeById = new Map<string, GraphNode>();
+  for (const n of fileNodes) nodeById.set(n.id, n);
+  // For edges that cross file boundaries, fetch the external endpoint.
+  for (const e of relevantEdges) {
+    if (!nodeById.has(e.source)) {
+      const n = store.getNode(e.source);
+      if (n) nodeById.set(n.id, n);
+    }
+    if (!nodeById.has(e.target)) {
+      const n = store.getNode(e.target);
+      if (n) nodeById.set(n.id, n);
+    }
+  }
 
   if (relevantEdges.length > 0) {
     lines.push("");
     lines.push("Key relationships:");
     for (const e of relevantEdges) {
-      const src = allNodes.find((n) => n.id === e.source);
-      const tgt = allNodes.find((n) => n.id === e.target);
+      const src = nodeById.get(e.source);
+      const tgt = nodeById.get(e.target);
       if (src && tgt) {
         lines.push(`EDGE ${src.label} --${e.relation}--> ${tgt.label}`);
       }

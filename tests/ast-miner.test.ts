@@ -69,7 +69,7 @@ describe("AST Miner", () => {
       const { nodes, edges } = extractFile(join(FIXTURES, "sample.ts"), FIXTURES);
       for (const node of nodes) {
         expect(node.confidence).toBe("EXTRACTED");
-        expect(node.confidenceScore).toBe(1.0);
+        expect(node.confidenceScore).toBe(0.85);
       }
       for (const edge of edges) {
         expect(edge.confidence).toBe("EXTRACTED");

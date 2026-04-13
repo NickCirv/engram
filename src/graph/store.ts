@@ -164,10 +164,11 @@ export class GraphStore {
   }
 
   searchNodes(query: string, limit = 20): GraphNode[] {
-    const pattern = `%${query}%`;
+    const escaped = query.replace(/%/g, "\\%").replace(/_/g, "\\_");
+    const pattern = `%${escaped}%`;
     const results: GraphNode[] = [];
     const stmt = this.db.prepare(
-      "SELECT * FROM nodes WHERE label LIKE ? OR id LIKE ? ORDER BY query_count DESC LIMIT ?"
+      "SELECT * FROM nodes WHERE label LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\' ORDER BY query_count DESC LIMIT ?"
     );
     stmt.bind([pattern, pattern, limit]);
     while (stmt.step()) {
@@ -224,6 +225,33 @@ export class GraphStore {
         node: this.rowToNode(row),
         degree: row.degree as number,
       });
+    }
+    stmt.free();
+    return results;
+  }
+
+  getNodesByFile(sourceFile: string): GraphNode[] {
+    const results: GraphNode[] = [];
+    const stmt = this.db.prepare(
+      "SELECT * FROM nodes WHERE source_file = ?"
+    );
+    stmt.bind([sourceFile]);
+    while (stmt.step()) {
+      results.push(this.rowToNode(stmt.getAsObject()));
+    }
+    stmt.free();
+    return results;
+  }
+
+  getEdgesForNodes(nodeIds: string[]): GraphEdge[] {
+    if (nodeIds.length === 0) return [];
+    const placeholders = nodeIds.map(() => "?").join(",");
+    const sql = `SELECT * FROM edges WHERE source IN (${placeholders}) OR target IN (${placeholders})`;
+    const results: GraphEdge[] = [];
+    const stmt = this.db.prepare(sql);
+    stmt.bind([...nodeIds, ...nodeIds]);
+    while (stmt.step()) {
+      results.push(this.rowToEdge(stmt.getAsObject()));
     }
     stmt.free();
     return results;
