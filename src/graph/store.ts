@@ -13,6 +13,7 @@ import type {
   GraphStats,
   NodeKind,
 } from "./schema.js";
+import type { CachedContext } from "../providers/types.js";
 
 export class GraphStore {
   private db: SqlJsDatabase;
@@ -69,6 +70,16 @@ export class GraphStore {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS provider_cache (
+        provider TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        content TEXT NOT NULL,
+        query_used TEXT NOT NULL DEFAULT '',
+        cached_at INTEGER NOT NULL,
+        ttl INTEGER NOT NULL DEFAULT 3600,
+        PRIMARY KEY (provider, file_path)
+      );
     `);
     // Indexes (ignore errors if they already exist)
     const indexes = [
@@ -78,6 +89,8 @@ export class GraphStore {
       "CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target)",
       "CREATE INDEX IF NOT EXISTS idx_edges_relation ON edges(relation)",
       "CREATE INDEX IF NOT EXISTS idx_edges_source_file ON edges(source_file)",
+      "CREATE INDEX IF NOT EXISTS idx_cache_file ON provider_cache(file_path)",
+      "CREATE INDEX IF NOT EXISTS idx_cache_stale ON provider_cache(cached_at)",
     ];
     for (const sql of indexes) {
       try { this.db.run(sql); } catch { /* already exists */ }
@@ -346,7 +359,158 @@ export class GraphStore {
     this.db.run("DELETE FROM nodes");
     this.db.run("DELETE FROM edges");
     this.db.run("DELETE FROM stats");
+    this.db.run("DELETE FROM provider_cache");
   }
+
+  // ─── Provider Cache ─────────────────────────────────────────────
+
+  /**
+   * Get all cached provider results for a file. Returns only non-stale
+   * entries (cached_at + ttl > now).
+   */
+  getCachedContext(filePath: string): CachedContext[] {
+    const now = Date.now();
+    const results: CachedContext[] = [];
+    const stmt = this.db.prepare(
+      `SELECT * FROM provider_cache
+       WHERE file_path = ? AND (cached_at + ttl * 1000) > ?`
+    );
+    stmt.bind([filePath, now]);
+    while (stmt.step()) {
+      results.push(this.rowToCachedContext(stmt.getAsObject()));
+    }
+    stmt.free();
+    return results;
+  }
+
+  /**
+   * Get cached context for a specific provider + file. Returns null if
+   * missing or stale.
+   */
+  getCachedContextForProvider(
+    provider: string,
+    filePath: string
+  ): CachedContext | null {
+    const now = Date.now();
+    const stmt = this.db.prepare(
+      `SELECT * FROM provider_cache
+       WHERE provider = ? AND file_path = ? AND (cached_at + ttl * 1000) > ?`
+    );
+    stmt.bind([provider, filePath, now]);
+    if (stmt.step()) {
+      const row = stmt.getAsObject();
+      stmt.free();
+      return this.rowToCachedContext(row);
+    }
+    stmt.free();
+    return null;
+  }
+
+  /**
+   * Upsert a single cached provider result.
+   */
+  setCachedContext(
+    provider: string,
+    filePath: string,
+    content: string,
+    ttl: number,
+    queryUsed = ""
+  ): void {
+    this.db.run(
+      `INSERT OR REPLACE INTO provider_cache
+       (provider, file_path, content, query_used, cached_at, ttl)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [provider, filePath, content, queryUsed, Date.now(), ttl]
+    );
+  }
+
+  /**
+   * Bulk insert/replace cache entries for a provider. Uses a transaction
+   * for performance. Called by provider warmup at SessionStart.
+   */
+  warmCache(
+    provider: string,
+    entries: ReadonlyArray<{ filePath: string; content: string }>,
+    ttl: number,
+    queryUsed = ""
+  ): void {
+    if (entries.length === 0) return;
+    this.db.run("BEGIN TRANSACTION");
+    try {
+      for (const entry of entries) {
+        this.db.run(
+          `INSERT OR REPLACE INTO provider_cache
+           (provider, file_path, content, query_used, cached_at, ttl)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [provider, entry.filePath, entry.content, queryUsed, Date.now(), ttl]
+        );
+      }
+      this.db.run("COMMIT");
+    } catch (e) {
+      this.db.run("ROLLBACK");
+      throw e;
+    }
+  }
+
+  /**
+   * Remove all stale cache entries. Called at SessionStart before warmup.
+   */
+  pruneStaleCache(): number {
+    const now = Date.now();
+    this.db.run(
+      "DELETE FROM provider_cache WHERE (cached_at + ttl * 1000) <= ?",
+      [now]
+    );
+    const changes = this.db.getRowsModified();
+    return changes;
+  }
+
+  /**
+   * Remove all cache entries for a provider. Used when a provider is
+   * disabled or its configuration changes.
+   */
+  clearProviderCache(provider: string): void {
+    this.db.run("DELETE FROM provider_cache WHERE provider = ?", [provider]);
+  }
+
+  /**
+   * Get count of cached entries per provider.
+   */
+  getCacheStats(): Array<{ provider: string; count: number; stale: number }> {
+    const now = Date.now();
+    const results: Array<{ provider: string; count: number; stale: number }> = [];
+    const stmt = this.db.prepare(
+      `SELECT provider,
+              COUNT(*) as total,
+              SUM(CASE WHEN (cached_at + ttl * 1000) <= ? THEN 1 ELSE 0 END) as stale
+       FROM provider_cache
+       GROUP BY provider`
+    );
+    stmt.bind([now]);
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      results.push({
+        provider: row.provider as string,
+        count: row.total as number,
+        stale: row.stale as number,
+      });
+    }
+    stmt.free();
+    return results;
+  }
+
+  private rowToCachedContext(row: Record<string, unknown>): CachedContext {
+    return {
+      provider: row.provider as string,
+      filePath: row.file_path as string,
+      content: row.content as string,
+      queryUsed: (row.query_used as string) ?? "",
+      cachedAt: row.cached_at as number,
+      ttl: row.ttl as number,
+    };
+  }
+
+  // ─── Lifecycle ────────────────────────────────────────────────
 
   close(): void {
     this.save();
