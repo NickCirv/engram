@@ -243,12 +243,12 @@ export class GraphStore {
     return results;
   }
 
-  getNodesByFile(sourceFile: string): GraphNode[] {
+  getNodesByFile(sourceFile: string, limit = 500): GraphNode[] {
     const results: GraphNode[] = [];
     const stmt = this.db.prepare(
-      "SELECT * FROM nodes WHERE source_file = ?"
+      "SELECT * FROM nodes WHERE source_file = ? LIMIT ?"
     );
-    stmt.bind([sourceFile]);
+    stmt.bind([sourceFile, limit]);
     while (stmt.step()) {
       results.push(this.rowToNode(stmt.getAsObject()));
     }
@@ -258,15 +258,27 @@ export class GraphStore {
 
   getEdgesForNodes(nodeIds: string[]): GraphEdge[] {
     if (nodeIds.length === 0) return [];
-    const placeholders = nodeIds.map(() => "?").join(",");
-    const sql = `SELECT * FROM edges WHERE source IN (${placeholders}) OR target IN (${placeholders})`;
+    // Chunk to stay under SQLite's SQLITE_LIMIT_VARIABLE_NUMBER (999).
+    // Each chunk binds chunk.length * 2 params (source IN + target IN).
+    const CHUNK = 400;
+    const seen = new Set<string>();
     const results: GraphEdge[] = [];
-    const stmt = this.db.prepare(sql);
-    stmt.bind([...nodeIds, ...nodeIds]);
-    while (stmt.step()) {
-      results.push(this.rowToEdge(stmt.getAsObject()));
+    for (let i = 0; i < nodeIds.length; i += CHUNK) {
+      const chunk = nodeIds.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => "?").join(",");
+      const sql = `SELECT * FROM edges WHERE source IN (${placeholders}) OR target IN (${placeholders})`;
+      const stmt = this.db.prepare(sql);
+      stmt.bind([...chunk, ...chunk]);
+      while (stmt.step()) {
+        const edge = this.rowToEdge(stmt.getAsObject());
+        const key = `${edge.source}|${edge.target}|${edge.relation}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push(edge);
+        }
+      }
+      stmt.free();
     }
-    stmt.free();
     return results;
   }
 
@@ -446,6 +458,7 @@ export class GraphStore {
         );
       }
       this.db.run("COMMIT");
+      this.save();
     } catch (e) {
       this.db.run("ROLLBACK");
       throw e;
@@ -501,12 +514,12 @@ export class GraphStore {
 
   private rowToCachedContext(row: Record<string, unknown>): CachedContext {
     return {
-      provider: row.provider as string,
-      filePath: row.file_path as string,
-      content: row.content as string,
+      provider: (row.provider as string) ?? "",
+      filePath: (row.file_path as string) ?? "",
+      content: (row.content as string) ?? "",
       queryUsed: (row.query_used as string) ?? "",
-      cachedAt: row.cached_at as number,
-      ttl: row.ttl as number,
+      cachedAt: (row.cached_at as number) ?? 0,
+      ttl: (row.ttl as number) ?? 3600,
     };
   }
 
