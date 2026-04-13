@@ -195,6 +195,11 @@ export async function warmAllProviders(
 
 const availabilityCache = new Map<string, boolean>();
 
+/** Reset availability cache. Used in tests. */
+export function _resetAvailabilityCache(): void {
+  availabilityCache.clear();
+}
+
 async function filterAvailable(
   providers: readonly ContextProvider[]
 ): Promise<ContextProvider[]> {
@@ -203,7 +208,10 @@ async function filterAvailable(
     let available = availabilityCache.get(p.name);
     if (available === undefined) {
       try {
-        available = await withTimeout(p.isAvailable(), 1000);
+        // Tier 1 (internal) providers are always fast — 200ms is plenty.
+        // Tier 2 (external) providers may need process spawning — 500ms.
+        const timeout = p.tier === 1 ? 200 : 500;
+        available = await withTimeout(p.isAvailable(), timeout);
       } catch {
         available = false;
       }

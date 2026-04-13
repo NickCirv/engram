@@ -28,6 +28,7 @@ import { godNodes, mistakes, stats } from "../../core.js";
 import { findProjectRoot, isValidCwd } from "../context.js";
 import { isHookDisabled, PASSTHROUGH, type HandlerResult } from "../safety.js";
 import { buildSessionContextResponse } from "../formatter.js";
+import { warmAllProviders } from "../../providers/resolver.js";
 
 export interface SessionStartHookPayload {
   readonly hook_event_name: "SessionStart" | string;
@@ -299,6 +300,15 @@ export async function handleSessionStart(
     const fullText = mempalaceContext
       ? text + "\n\n" + mempalaceContext
       : text;
+
+    // Context Spine: warm provider caches in the background. This fills
+    // the provider_cache table so subsequent Read interceptions can resolve
+    // rich packets from cache (<5ms) instead of live-querying providers.
+    // Fire-and-forget — cache warmup must never delay SessionStart response.
+    warmAllProviders(projectRoot).catch(() => {
+      // Silent failure. If warmup fails, Read handlers will do live
+      // resolution with per-provider timeouts and graceful degradation.
+    });
 
     return buildSessionContextResponse("SessionStart", fullText);
   } catch {
