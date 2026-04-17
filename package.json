@@ -1,7 +1,7 @@
 {
   "name": "engramx",
-  "version": "1.0.1",
-  "description": "The context spine for AI coding agents. 6 providers assembled into rich context packets per Read interception. Up to 90% session-level token savings. Local SQLite, zero native deps, zero cloud.",
+  "version": "2.0.0",
+  "description": "The context spine for AI coding agents. 8 providers + pluggable context sources, 3-layer memory cache, web dashboard, multi-IDE support (Claude Code, Cursor, Continue, Zed, Aider, Windsurf, Neovim, Emacs). 88.1% measured session-level token savings. Local SQLite, zero native deps, zero cloud.",
   "repository": {
     "type": "git",
     "url": "https://github.com/NickCirv/engram.git"
