@@ -1,7 +1,7 @@
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // Continue.dev interface definitions (peer dependency — not installed)
 interface ContextProviderDescription {
@@ -43,18 +43,12 @@ const CLI_TIMEOUT_MS = 5000;
 const HTTP_TIMEOUT_MS = 3000;
 const DEFAULT_BUDGET = 2000;
 
-function escapeShellArg(arg: string): string {
-  // Use single quotes to prevent all shell interpretation.
-  // Escape any embedded single quotes: ' → '\''
-  return "'" + arg.replace(/'/g, "'\\''") + "'";
-}
-
 async function queryViaCli(query: string, workspaceRoot: string): Promise<string | null> {
-  const escapedQuery = escapeShellArg(query);
-  const escapedRoot = escapeShellArg(workspaceRoot);
-
-  const { stdout } = await execAsync(
-    `engram query ${escapedQuery} -p ${escapedRoot} --budget ${DEFAULT_BUDGET}`,
+  // Use execFile (array args) instead of exec (shell string) — avoids
+  // shell injection and works cross-platform (no shell escaping needed).
+  const { stdout } = await execFileAsync(
+    "engram",
+    ["query", query, "-p", workspaceRoot, "--budget", String(DEFAULT_BUDGET)],
     { timeout: CLI_TIMEOUT_MS }
   );
 

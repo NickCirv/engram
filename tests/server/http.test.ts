@@ -4,12 +4,13 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createServer } from "node:http";
-import { resolve as pathResolve } from "node:path";
-import { mkdirSync } from "node:fs";
+import { resolve as pathResolve, join } from "node:path";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createHttpServer } from "../../src/server/http.js";
 
 // Use a temp project dir so the test doesn't pollute the real graph
-const TEST_PROJECT = pathResolve("/tmp/engram-http-test");
+const TEST_PROJECT = mkdtempSync(join(tmpdir(), "engram-http-test-"));
 
 /** Pick a free port by binding to :0 then immediately closing. */
 async function getFreePort(): Promise<number> {

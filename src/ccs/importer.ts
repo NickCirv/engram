@@ -55,7 +55,7 @@ export async function importCcs(projectRoot: string): Promise<CcsImportResult> {
 
   try {
     const raw = readFileSync(filePath, "utf-8");
-    const lines = raw.split("\n");
+    const lines = raw.replace(/\r\n/g, "\n").split("\n");
 
     let sectionsFound = 0;
     let nodesCreated = 0;

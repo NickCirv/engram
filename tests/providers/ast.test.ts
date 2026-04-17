@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import { join, dirname } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { getSupportedLang, getParser, _resetParserCache } from "../../src/providers/grammar-loader.js";
 import { astProvider } from "../../src/providers/ast.js";
@@ -81,7 +82,7 @@ describe("astProvider", () => {
 
   it("returns null for a non-existent file", async () => {
     const result = await astProvider.resolve(
-      "/tmp/does-not-exist-engram.ts",
+      join(tmpdir(), "does-not-exist-engram.ts"),
       mockContext
     );
     expect(result).toBeNull();

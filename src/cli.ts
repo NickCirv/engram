@@ -11,6 +11,7 @@ import {
   renameSync,
 } from "node:fs";
 import { dirname, join, resolve as pathResolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import {
   init,
@@ -1212,7 +1213,7 @@ program
     if (opts.replay) args.push("--replay", opts.replay);
     if (opts.limit) args.push("--limit", String(opts.limit));
     try {
-      execFileSync("npx", ["tsx", ...args], { stdio: "inherit", cwd: join(dirname(import.meta.url.replace("file://", "")), "..") });
+      execFileSync("npx", ["tsx", ...args], { stdio: "inherit", shell: true, cwd: join(dirname(fileURLToPath(import.meta.url)), "..") });
     } catch {
       process.exit(1);
     }
@@ -1237,7 +1238,8 @@ program
     try {
       execFileSync("npx", ["tsx", "adapters/zed/index.ts"], {
         stdio: "inherit",
-        cwd: join(dirname(import.meta.url.replace("file://", "")), ".."),
+        shell: true,
+        cwd: join(dirname(fileURLToPath(import.meta.url)), ".."),
       });
     } catch {
       process.exit(1);

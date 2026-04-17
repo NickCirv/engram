@@ -11,13 +11,15 @@
  * is silent and transparent.
  */
 import { describe, it, expect, afterEach } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { LspConnection } from "../../src/providers/lsp-connection.js";
 import { lspProvider, _resetLspCache } from "../../src/providers/lsp.js";
 import type { NodeContext } from "../../src/providers/types.js";
 
 const baseContext: NodeContext = {
   filePath: "src/auth/middleware.ts",
-  projectRoot: "/tmp/test-lsp-project",
+  projectRoot: join(tmpdir(), "test-lsp-project"),
   nodeIds: ["src/auth/middleware.ts::validateToken"],
   imports: ["jsonwebtoken"],
   hasTests: false,

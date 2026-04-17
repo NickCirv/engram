@@ -8,6 +8,7 @@
  * Called from the PostToolUse handler after Edit or Write tool completions.
  */
 import { LspConnection } from "../../providers/lsp-connection.js";
+import { toPosixPath } from "../../graph/path-utils.js";
 
 /**
  * Attempt to capture LSP diagnostics for the edited file and store them
@@ -36,14 +37,15 @@ export async function captureLspDiagnostics(
     try {
       for (const diag of diagnostics) {
         // Build a stable ID from file + line + truncated message
+        const normalizedPath = toPosixPath(filePath);
         const msgKey = diag.message.slice(0, 50).replace(/\s+/g, "-");
-        const id = `lsp:${filePath}:${diag.range.start.line}:${msgKey}`;
+        const id = `lsp:${normalizedPath}:${diag.range.start.line}:${msgKey}`;
 
         store.upsertNode({
           id,
           label: diag.message,
           kind: "mistake",
-          sourceFile: filePath,
+          sourceFile: normalizedPath,
           sourceLocation: `L${diag.range.start.line + 1}`,
           confidence: "EXTRACTED",
           confidenceScore: 0.9,

@@ -9,6 +9,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir, homedir } from "node:os";
 
 /** Status of an individual component. */
 export interface ComponentHealth {
@@ -67,10 +68,11 @@ function checkLsp(projectRoot: string): boolean {
   // Primary: flag file written by lsp provider on successful connection
   if (existsSync(join(projectRoot, ".engram", "lsp-available"))) return true;
 
-  // Fallback: well-known socket paths
+  // Fallback: well-known socket paths (use tmpdir() for cross-platform)
+  const tmp = tmpdir();
   const candidates = [
-    "/tmp/tsserver.sock",
-    "/tmp/typescript-language-server.sock",
+    join(tmp, "tsserver.sock"),
+    join(tmp, "typescript-language-server.sock"),
   ];
   return candidates.some((c) => existsSync(c));
 }
@@ -96,11 +98,7 @@ function countIdeAdapters(projectRoot: string): number {
     count += 1;
   }
   // Continue.dev — check if engram is in continue config
-  const continueConfig = join(
-    process.env.HOME ?? "",
-    ".continue",
-    "config.json"
-  );
+  const continueConfig = join(homedir(), ".continue", "config.json");
   if (existsSync(continueConfig)) {
     try {
       const cfg = readFileSync(continueConfig, "utf-8");
@@ -110,12 +108,7 @@ function countIdeAdapters(projectRoot: string): number {
     }
   }
   // Zed context server
-  const zedSettings = join(
-    process.env.HOME ?? "",
-    ".config",
-    "zed",
-    "settings.json"
-  );
+  const zedSettings = join(homedir(), ".config", "zed", "settings.json");
   if (existsSync(zedSettings)) {
     try {
       const cfg = readFileSync(zedSettings, "utf-8");
