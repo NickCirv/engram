@@ -73,6 +73,10 @@ export function mineGitHistory(
   const authorMap = new Map<string, Set<string>>();
   const commitBlocks = log.split("\n\n").filter(Boolean);
 
+  // Skip build/dist directories to avoid explosion of co-change pairs
+  const SKIP_PREFIXES = ["dist/", "build/", "node_modules/", ".venv/", "target/", "coverage/"];
+  const MAX_FILES_PER_COMMIT = 50; // Prevent O(n²) explosion
+
   for (const block of commitBlocks) {
     const lines = block.split("\n").filter(Boolean);
     if (lines.length === 0) continue;
@@ -82,13 +86,19 @@ export function mineGitHistory(
     if (parts.length < 3) continue;
 
     const author = parts[1];
-    const files = fileLines.filter(
+    let files = fileLines.filter(
       (f) =>
         f.length > 0 &&
         !f.includes("|") &&
         !f.startsWith(" ") &&
-        f.includes(".")
+        f.includes(".") &&
+        !SKIP_PREFIXES.some((p) => f.startsWith(p))
     );
+
+    // Limit files per commit to prevent O(n²) explosion
+    if (files.length > MAX_FILES_PER_COMMIT) {
+      files = files.slice(0, MAX_FILES_PER_COMMIT);
+    }
 
     // Track file change frequency
     for (const file of files) {
