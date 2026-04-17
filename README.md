@@ -5,6 +5,7 @@
 <p align="center">
   <a href="#install"><strong>Install</strong></a> ·
   <a href="#quickstart"><strong>Quickstart</strong></a> ·
+  <a href="#dashboard"><strong>Dashboard</strong></a> ·
   <a href="#benchmark"><strong>Benchmark</strong></a> ·
   <a href="#ide-integrations"><strong>IDE Integrations</strong></a> ·
   <a href="#http-api"><strong>HTTP API</strong></a> ·
@@ -14,14 +15,19 @@
 
 <p align="center">
   <a href="https://github.com/NickCirv/engram/actions"><img src="https://github.com/NickCirv/engram/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/engramx"><img src="https://img.shields.io/npm/v/engramx?color=blue" alt="npm version"></a>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node">
-  <img src="https://img.shields.io/badge/tests-579%20passing-brightgreen" alt="Tests">
-  <img src="https://img.shields.io/badge/providers-8-blue" alt="8 Providers">
-  <img src="https://img.shields.io/badge/token%20savings-88%25%20proven-orange" alt="88% Proven Savings">
+  <img src="https://img.shields.io/badge/tests-640%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/providers-8%20%2B%20plugins-blue" alt="8 Providers + plugins">
+  <img src="https://img.shields.io/badge/token%20savings-88.1%25%20measured-orange" alt="88% Proven Savings">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
   <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
 </p>
+
+---
+
+> **v2.0 "Ecosystem" shipped 2026-04-17** — web dashboard at `engram ui`, 3-layer memory cache (23μs/op at 99% hit rate), provider plugin system (`~/.engram/plugins/*.mjs`), `engram cache` CLI, schema rollback with automatic backup, incremental re-indexing (78% faster on large repos), auto-bundled tree-sitter grammars, Windsurf + Neovim + Emacs integrations. See [CHANGELOG.md](CHANGELOG.md) for the full diff.
 
 ---
 
@@ -39,6 +45,55 @@ engram install-hook
 ```
 
 That's the full setup. The next Claude Code session starts with a project brief already loaded, file reads intercepted, and a live HUD showing cumulative savings.
+
+---
+
+## Dashboard
+
+A zero-dependency web dashboard ships built-in. One command, opens in your browser:
+
+```bash
+engram ui
+```
+
+<p align="center">
+  <img src="assets/screenshots/01-overview.png" alt="engram dashboard — Overview tab" width="100%">
+</p>
+
+The **Overview** tab: real metrics from your sessions — tokens saved, cost saved at $3/M rate, session-level hit rate, cache performance, graph health.
+
+<p align="center">
+  <img src="assets/screenshots/03-activity.png" alt="engram dashboard — Activity tab" width="100%">
+</p>
+
+**Activity** — live hook events streamed via Server-Sent Events. See every `Read` / `Edit` / `Write` decision (deny = intercepted, passthrough = engram couldn't help). Per-tool breakdown on the right shows where the savings come from.
+
+<p align="center">
+  <img src="assets/screenshots/04-files.png" alt="engram dashboard — Files heatmap" width="100%">
+</p>
+
+**Files** — the heatmap ranks your hot files by interception count. Cursor knows this view.
+
+<p align="center">
+  <img src="assets/screenshots/05-graph.png" alt="engram dashboard — Knowledge graph visualization" width="100%">
+</p>
+
+**Graph** — Canvas 2D force-directed visualization of the knowledge graph. God nodes are larger and labeled. Drag to pan, scroll to zoom, click for details. 300+ nodes at 60fps.
+
+<p align="center">
+  <img src="assets/screenshots/06-providers.png" alt="engram dashboard — Providers + cache health" width="100%">
+</p>
+
+**Providers** — component health (HTTP / LSP / AST / IDE count) and per-layer cache stats (entries + cross-session hit counts).
+
+### Design
+
+- **35KB total** — one HTTP response, zero external CDN calls, works offline and on air-gapped machines.
+- **Zero runtime dependencies** — all CSS and JS inlined as TypeScript template literals; SVG charts and Canvas 2D graph hand-rolled (~400 LOC total).
+- **CSP-hardened** — `default-src 'self'; connect-src 'self'` meta tag plus `esc()` at every data-to-HTML boundary. Defends against attacker-controlled file paths and labels mined from untrusted repos.
+- **Live-updating** — SSE stream pushes new hook events to the Activity tab within 1 second.
+
+See also the **Sessions** tab (cumulative breakdown + sparkline) in [`assets/screenshots/02-sessions.png`](assets/screenshots/02-sessions.png).
 
 ---
 
@@ -128,12 +183,14 @@ Requires Node.js 20+. Zero native dependencies. No build tools. Local SQLite via
 cd ~/my-project
 engram init                      # scan codebase → .engram/graph.db (~40ms, 0 tokens)
 engram install-hook              # wire the Sentinel into Claude Code
+engram ui                        # open the web dashboard in your browser
 ```
 
 Open a Claude Code session. When the agent reads a well-covered file you will see a system-reminder with the structural summary instead of file contents. After the session:
 
 ```bash
-engram hook-stats                # what was intercepted, tokens saved
+engram hook-stats                # what was intercepted, tokens saved (CLI)
+engram ui                        # same data, richer view, real-time updates
 engram hook-preview src/auth.ts  # dry-run: see what the hook would inject for one file
 ```
 
@@ -165,10 +222,13 @@ engram hooks install             # auto-rebuild graph on every git commit
 | IDE | Integration | Setup |
 |-----|------------|-------|
 | **Claude Code** | Hook-based interception (native, automatic) | `engram install-hook` |
-| **Continue.dev** | `@engram` context provider | See [docs/integrations/continue.md](docs/integrations/continue.md) |
-| **Cursor** | MDC generation | `engram gen-mdc` |
-| **Zed** | Context server | `engram context-server` |
+| **Cursor** | MDC snapshot + native MCP | `engram gen-mdc` &middot; [docs/integrations/cursor-mcp.md](docs/integrations/cursor-mcp.md) |
+| **Continue.dev** | `@engram` context provider | [docs/integrations/continue.md](docs/integrations/continue.md) |
+| **Zed** | Context server (`/engram`) | `engram context-server` |
 | **Aider** | Context file generation | `engram gen-aider` |
+| **Windsurf** (Codeium) | `.windsurfrules` snapshot + MCP | `engram gen-windsurfrules` |
+| **Neovim** | MCP via codecompanion / avante | [docs/integrations/neovim.md](docs/integrations/neovim.md) |
+| **Emacs** | MCP via gptel-mcp | [docs/integrations/emacs.md](docs/integrations/emacs.md) |
 
 Per-IDE setup guides are in [`docs/integrations/`](docs/integrations/).
 

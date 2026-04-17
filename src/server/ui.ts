@@ -222,6 +222,7 @@ const HTML_HEAD = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:;" />
   <title>engram dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%230a0a0b'/%3E%3Ctext x='50' y='62' font-size='56' text-anchor='middle' fill='%2310b981' font-family='Menlo,monospace'%3E%E2%97%86%3C/text%3E%3C/svg%3E" />
   <style>${CSS}</style>
 </head>`;
 
@@ -394,7 +395,7 @@ async function loadOverview() {
     setText("ov-tokens", formatNumber(tokens.totalSaved ?? 0));
     setText("ov-cost", formatCost(tokens.totalSaved ?? 0));
     setText("ov-sessions", formatNumber(tokens.totalSessions ?? 0));
-    setText("ov-tokens-sub", formatPercent((tokens.avgReduction ?? 0) / 100) + " avg reduction");
+    setText("ov-tokens-sub", (Number(tokens.avgReduction ?? 0).toFixed(1) + "%") + " avg reduction");
   }
 
   if (summary) {
@@ -442,7 +443,7 @@ async function loadSessions() {
     ["Total Naive Tokens", formatNumber(tokens.totalNaiveTokens)],
     ["Total Graph Tokens", formatNumber(tokens.totalGraphTokens)],
     ["Total Saved", formatNumber(tokens.totalSaved)],
-    ["Avg Reduction", formatPercent((tokens.avgReduction ?? 0) / 100)],
+    ["Avg Reduction", (Number(tokens.avgReduction ?? 0).toFixed(1) + "%")],
     ["Estimated Cost Saved", formatCost(tokens.totalSaved ?? 0)],
   ];
 

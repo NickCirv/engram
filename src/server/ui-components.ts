@@ -160,12 +160,12 @@ function renderCacheStats(stats) {
  * All values numeric from our DB.
  */
 function renderGraphStats(stats) {
-  const nodes = Number(stats.nodeCount) || 0;
-  const edges = Number(stats.edgeCount) || 0;
-  const confidence = stats.confidence || {};
-  const extracted = Number(confidence.extracted) || 0;
-  const inferred = Number(confidence.inferred) || 0;
-  const asserted = Number(confidence.asserted) || 0;
+  // The /stats API returns { nodes, edges, extractedPct, inferredPct, ambiguousPct, ... }
+  const nodes = Number(stats.nodes ?? stats.nodeCount) || 0;
+  const edges = Number(stats.edges ?? stats.edgeCount) || 0;
+  const extracted = Number(stats.extractedPct) || 0;
+  const inferred = Number(stats.inferredPct) || 0;
+  const ambiguous = Number(stats.ambiguousPct) || 0;
 
   return '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-family: SF Mono, Monaco, monospace; font-size: 12px;">' +
     '<div><div style="color: ' + COLOR_DIM + '; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px;">Nodes</div>' +
@@ -175,9 +175,9 @@ function renderGraphStats(stats) {
     '<div style="grid-column: span 2; margin-top: 8px;">' +
     '<div style="color: ' + COLOR_DIM + '; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;">Confidence Distribution</div>' +
     '<div style="display: flex; gap: 8px; font-size: 11px;">' +
-    '<span>extracted: <b style="color: ' + COLOR_ACCENT + '">' + extracted + '</b></span>' +
-    '<span>inferred: <b style="color: ' + COLOR_BLUE + '">' + inferred + '</b></span>' +
-    '<span>asserted: <b style="color: ' + COLOR_PURPLE + '">' + asserted + '</b></span>' +
+    '<span>extracted: <b style="color: ' + COLOR_ACCENT + '">' + extracted + '%</b></span>' +
+    '<span>inferred: <b style="color: ' + COLOR_BLUE + '">' + inferred + '%</b></span>' +
+    '<span>ambiguous: <b style="color: ' + COLOR_PURPLE + '">' + ambiguous + '%</b></span>' +
     '</div></div>' +
     '</div>';
 }

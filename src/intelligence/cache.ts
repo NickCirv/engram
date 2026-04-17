@@ -220,6 +220,16 @@ export class ContextCache {
     if (memResult !== undefined) {
       if (memResult.graphVersion === graphVersion) {
         this.patternHits++;
+        // Persist the hit so cross-session stats reflect this access.
+        // LRU hit would otherwise skip the SQLite hit_count update.
+        try {
+          store.runSql(
+            "UPDATE pattern_cache SET hit_count = hit_count + 1 WHERE pattern = ?",
+            [pattern]
+          );
+        } catch {
+          // Non-critical
+        }
         return memResult.result;
       }
       // Graph version changed — evict stale entry
@@ -335,33 +345,54 @@ export class ContextCache {
   getStats(store: GraphStore): CacheStats {
     let queryEntries = 0;
     let patternEntries = 0;
+    let persistedQueryHits = 0;
+    let persistedPatternHits = 0;
 
     try {
-      const stmt1 = store.prepare("SELECT COUNT(*) as cnt FROM query_cache");
-      if (stmt1.step()) queryEntries = stmt1.getAsObject().cnt as number;
+      const stmt1 = store.prepare(
+        "SELECT COUNT(*) as cnt, COALESCE(SUM(hit_count), 0) as hits FROM query_cache"
+      );
+      if (stmt1.step()) {
+        const row = stmt1.getAsObject();
+        queryEntries = row.cnt as number;
+        persistedQueryHits = row.hits as number;
+      }
       stmt1.free();
     } catch {
       // Table may not exist yet
     }
 
     try {
-      const stmt2 = store.prepare("SELECT COUNT(*) as cnt FROM pattern_cache");
-      if (stmt2.step()) patternEntries = stmt2.getAsObject().cnt as number;
+      const stmt2 = store.prepare(
+        "SELECT COUNT(*) as cnt, COALESCE(SUM(hit_count), 0) as hits FROM pattern_cache"
+      );
+      if (stmt2.step()) {
+        const row = stmt2.getAsObject();
+        patternEntries = row.cnt as number;
+        persistedPatternHits = row.hits as number;
+      }
       stmt2.free();
     } catch {
       // Table may not exist yet
     }
 
-    const totalHits = this.queryHits + this.patternHits;
+    // Merge in-process (this session) counters with persisted totals.
+    // SQLite `hit_count` accumulates across all sessions; we prefer the
+    // larger of the two to show cross-session activity without
+    // double-counting the current session's hits.
+    const queryHits = Math.max(this.queryHits, persistedQueryHits);
+    const patternHits = Math.max(this.patternHits, persistedPatternHits);
+
+    const totalHits = queryHits + patternHits;
     const totalMisses = this.queryMisses + this.patternMisses;
     const total = totalHits + totalMisses;
 
     return {
       queryEntries,
-      queryHits: this.queryHits,
+      queryHits,
       queryMisses: this.queryMisses,
       patternEntries,
-      patternHits: this.patternHits,
+      patternHits,
       patternMisses: this.patternMisses,
       hotFileCount: this.hotFiles.size,
       totalHits,

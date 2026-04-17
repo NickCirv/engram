@@ -8,7 +8,8 @@
  * The HUD label uses these to show: HTTP ✓ | LSP ✓ | AST ✓ | N IDEs
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { tmpdir, homedir } from "node:os";
 
 /** Status of an individual component. */
@@ -78,13 +79,32 @@ function checkLsp(projectRoot: string): boolean {
 }
 
 /**
- * Check AST (tree-sitter) availability by looking for grammar files.
- * These are bundled at install time.
+ * Check AST (tree-sitter) availability by looking for bundled grammar
+ * WASM files. In v2.0+ these ship at `dist/grammars/*.wasm` from the
+ * engram install itself, regardless of the user's project layout.
  */
 function checkAst(projectRoot: string): boolean {
-  // Future: grammars/ directory with WASM files
-  const grammarsDir = join(projectRoot, "node_modules", "web-tree-sitter");
-  return existsSync(grammarsDir);
+  // v2.0: grammars bundled with engram at install time
+  try {
+    // Resolve relative to this file's install location. Works for both
+    // local dev (src/intercept/component-status.ts → ../../dist/grammars/)
+    // and global installs (.../engramx/dist/intercept/... → ../grammars/).
+    const here = dirname(fileURLToPath(import.meta.url));
+    const candidates = [
+      join(here, "..", "grammars"),           // from dist/intercept/
+      join(here, "..", "..", "dist", "grammars"), // from src/intercept/ dev
+    ];
+    for (const dir of candidates) {
+      if (existsSync(dir)) return true;
+    }
+  } catch {
+    // fallthrough
+  }
+
+  // Fallback: node_modules in the user's project
+  if (existsSync(join(projectRoot, "node_modules", "web-tree-sitter"))) return true;
+
+  return false;
 }
 
 /**
@@ -117,16 +137,27 @@ function countIdeAdapters(projectRoot: string): number {
       // Ignore read errors
     }
   }
-  // Claude Code hooks (always counted if .engram exists)
-  const claudeSettings = join(projectRoot, ".claude", "settings.local.json");
-  if (existsSync(claudeSettings)) {
-    try {
-      const cfg = readFileSync(claudeSettings, "utf-8");
-      if (cfg.includes("engram")) count += 1;
-    } catch {
-      // Ignore
+  // Claude Code hooks (settings.local.json or settings.json)
+  for (const f of ["settings.local.json", "settings.json"]) {
+    const claudeSettings = join(projectRoot, ".claude", f);
+    if (existsSync(claudeSettings)) {
+      try {
+        const cfg = readFileSync(claudeSettings, "utf-8");
+        if (cfg.includes("engram")) {
+          count += 1;
+          break; // count Claude Code once, not twice
+        }
+      } catch {
+        // Ignore
+      }
     }
   }
+  // Windsurf rules
+  if (existsSync(join(projectRoot, ".windsurfrules"))) count += 1;
+  // Aider context file
+  if (existsSync(join(projectRoot, ".aider-context.md"))) count += 1;
+  // CCS index
+  if (existsSync(join(projectRoot, ".context", "index.md"))) count += 1;
   return count;
 }
 

@@ -45,8 +45,10 @@ export function getCumulativeStats(store: GraphStore): CumulativeStats {
   const totalNaiveTokens = store.getStatNum("total_naive_tokens");
   const totalGraphTokens = store.getStatNum("total_graph_tokens");
   const totalSaved = store.getStatNum("total_tokens_saved");
-  const avgReduction = totalGraphTokens > 0
-    ? Math.round((totalNaiveTokens / totalGraphTokens) * 10) / 10
+  // avgReduction is a percentage (0-100). E.g., 88.4 means 88.4% fewer tokens
+  // consumed when engram intercepts vs the naive full-read baseline.
+  const avgReduction = totalNaiveTokens > 0
+    ? Math.round((totalSaved / totalNaiveTokens) * 1000) / 10
     : 0;
   const estimatedCostSaved =
     Math.round((totalSaved / 1_000_000) * COST_PER_MILLION_TOKENS * 100) / 100;

@@ -257,7 +257,24 @@ function handleProvidersHealth(
 ): void {
   try {
     const status = getComponentStatus(projectRoot);
-    json(res, 200, status);
+    // Flat, dashboard-friendly shape. The HTTP server we're responding
+    // from is definitionally running — short-circuit httpRunning to true
+    // even if the PID file hasn't been written yet in this session.
+    const httpComp = status.components.find((c) => c.name === "http");
+    const lspComp = status.components.find((c) => c.name === "lsp");
+    const astComp = status.components.find((c) => c.name === "ast");
+    json(res, 200, {
+      httpRunning: true, // we're literally responding — it's up
+      lspAvailable: !!lspComp?.available,
+      astAvailable: !!astComp?.available,
+      ideCount: status.ideCount,
+      // Also expose the raw report for advanced consumers
+      components: status.components,
+      generatedAt: status.generatedAt,
+      // Expose the httpComp flag separately in case callers want to know
+      // whether the PID file was found (vs inferred from this response)
+      httpPidDetected: !!httpComp?.available,
+    });
   } catch (err) {
     json(res, 500, { error: "Provider health failed", detail: String(err) });
   }
