@@ -83,29 +83,21 @@ describe("validatePlugin", () => {
 
 describe("loadPlugins (end-to-end)", () => {
   let testPluginsDir: string;
-  let origHome: string | undefined;
 
   beforeEach(() => {
     _resetPluginCache();
-    // Redirect HOME so the loader reads from our test dir
     testPluginsDir = join(tmpdir(), `engram-plugins-${Date.now()}`);
-    mkdirSync(join(testPluginsDir, ".engram", "plugins"), { recursive: true });
-    origHome = process.env.HOME;
-    process.env.HOME = testPluginsDir;
+    mkdirSync(testPluginsDir, { recursive: true });
   });
 
   afterEach(() => {
     _resetPluginCache();
-    if (origHome !== undefined) process.env.HOME = origHome;
     rmSync(testPluginsDir, { recursive: true, force: true });
   });
 
   it("returns empty when no plugins installed", async () => {
-    // Fresh module with updated HOME — dynamic re-import
-    const mod = await import(
-      "../../src/providers/plugin-loader.js?cb=" + Date.now()
-    );
-    const { loaded, failed } = await mod.loadPlugins();
+    const { loadPlugins } = await import("../../src/providers/plugin-loader.js");
+    const { loaded, failed } = await loadPlugins(testPluginsDir);
     expect(loaded.length).toBe(0);
     expect(failed.length).toBe(0);
   });
@@ -124,15 +116,10 @@ export default {
   async isAvailable() { return true; },
 };
 `;
-    writeFileSync(
-      join(testPluginsDir, ".engram", "plugins", "test-e2e.mjs"),
-      pluginCode
-    );
+    writeFileSync(join(testPluginsDir, "test-e2e.mjs"), pluginCode);
 
-    const mod = await import(
-      "../../src/providers/plugin-loader.js?cb=" + Date.now()
-    );
-    const { loaded, failed } = await mod.loadPlugins();
+    const { loadPlugins } = await import("../../src/providers/plugin-loader.js");
+    const { loaded, failed } = await loadPlugins(testPluginsDir);
     expect(loaded.length).toBe(1);
     expect(loaded[0].name).toBe("test-e2e");
     expect(loaded[0].version).toBe("0.1.0");
@@ -141,16 +128,23 @@ export default {
 
   it("records failures for malformed plugins without throwing", async () => {
     writeFileSync(
-      join(testPluginsDir, ".engram", "plugins", "broken.mjs"),
+      join(testPluginsDir, "broken.mjs"),
       `export default { name: "broken" };` // missing fields
     );
 
-    const mod = await import(
-      "../../src/providers/plugin-loader.js?cb=" + Date.now()
-    );
-    const { loaded, failed } = await mod.loadPlugins();
+    const { loadPlugins } = await import("../../src/providers/plugin-loader.js");
+    const { loaded, failed } = await loadPlugins(testPluginsDir);
     expect(loaded.length).toBe(0);
     expect(failed.length).toBe(1);
     expect(failed[0].file).toBe("broken.mjs");
+  });
+
+  it("returns empty when directory does not exist", async () => {
+    const { loadPlugins } = await import("../../src/providers/plugin-loader.js");
+    const { loaded, failed } = await loadPlugins(
+      join(testPluginsDir, "does-not-exist")
+    );
+    expect(loaded.length).toBe(0);
+    expect(failed.length).toBe(0);
   });
 });

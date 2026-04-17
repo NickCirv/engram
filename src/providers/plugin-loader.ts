@@ -16,8 +16,21 @@ import { homedir } from "node:os";
 import { pathToFileURL } from "node:url";
 import type { ContextProviderPlugin } from "./types.js";
 
-/** Root directory for user-installed plugins. */
-export const PLUGINS_DIR = join(homedir(), ".engram", "plugins");
+/**
+ * Resolve the plugins directory at call time, not module-load time.
+ * This matters for tests that redirect via HOME (unix) or USERPROFILE
+ * (windows), and lets the CLI respect an explicit `--plugins-dir` flag
+ * in the future without a module reload.
+ */
+export function getPluginsDir(): string {
+  return join(homedir(), ".engram", "plugins");
+}
+
+/**
+ * Back-compat constant. Evaluated once at module load — fine for runtime
+ * use but don't rely on it in tests (use `getPluginsDir()` instead).
+ */
+export const PLUGINS_DIR = getPluginsDir();
 
 export interface PluginLoadResult {
   readonly loaded: readonly ContextProviderPlugin[];
@@ -25,9 +38,10 @@ export interface PluginLoadResult {
 }
 
 /** Ensure the plugins directory exists. Safe to call repeatedly. */
-export function ensurePluginsDir(): void {
-  if (!existsSync(PLUGINS_DIR)) {
-    mkdirSync(PLUGINS_DIR, { recursive: true });
+export function ensurePluginsDir(dir?: string): void {
+  const target = dir ?? getPluginsDir();
+  if (!existsSync(target)) {
+    mkdirSync(target, { recursive: true });
   }
 }
 
@@ -84,27 +98,28 @@ export function validatePlugin(mod: unknown): { plugin: ContextProviderPlugin | 
 }
 
 /**
- * Discover and load all plugins from `~/.engram/plugins/`.
- * Returns loaded plugins + reasons for any that failed to load.
- * Never throws.
+ * Discover and load all plugins from the given directory (defaults to
+ * `~/.engram/plugins/`). Returns loaded plugins + reasons for any that
+ * failed to load. Never throws.
  */
-export async function loadPlugins(): Promise<PluginLoadResult> {
+export async function loadPlugins(dir?: string): Promise<PluginLoadResult> {
+  const pluginsDir = dir ?? getPluginsDir();
   const loaded: ContextProviderPlugin[] = [];
   const failed: { file: string; reason: string }[] = [];
 
-  if (!existsSync(PLUGINS_DIR)) {
+  if (!existsSync(pluginsDir)) {
     return { loaded, failed };
   }
 
   let files: string[];
   try {
-    files = readdirSync(PLUGINS_DIR).filter((f) => f.endsWith(".mjs") || f.endsWith(".js"));
+    files = readdirSync(pluginsDir).filter((f) => f.endsWith(".mjs") || f.endsWith(".js"));
   } catch {
     return { loaded, failed };
   }
 
   for (const file of files) {
-    const fullPath = join(PLUGINS_DIR, file);
+    const fullPath = join(pluginsDir, file);
     try {
       // Dynamic ESM import from absolute path — must be a file:// URL on Windows
       const mod = (await import(pathToFileURL(fullPath).href)) as unknown;
@@ -133,9 +148,9 @@ export async function loadPlugins(): Promise<PluginLoadResult> {
  */
 let _cache: PluginLoadResult | null = null;
 
-export async function getLoadedPlugins(): Promise<PluginLoadResult> {
+export async function getLoadedPlugins(dir?: string): Promise<PluginLoadResult> {
   if (_cache === null) {
-    _cache = await loadPlugins();
+    _cache = await loadPlugins(dir);
   }
   return _cache;
 }

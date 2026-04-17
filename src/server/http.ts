@@ -487,6 +487,20 @@ export function createHttpServer(
             "Cache-Control": "no-cache",
           });
           res.end(buildDashboardHtml());
+        } else if (req.method === "GET" && path === "/favicon.ico") {
+          // Inline SVG favicon (engram diamond on the dark bg). Avoids
+          // 404s from clients that don't honor the <link rel="icon"> tag.
+          const svg =
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+            '<rect width="100" height="100" rx="20" fill="#0a0a0b"/>' +
+            '<text x="50" y="62" font-size="56" text-anchor="middle" ' +
+            'fill="#10b981" font-family="Menlo,monospace">&#9670;</text>' +
+            '</svg>';
+          res.writeHead(200, {
+            "Content-Type": "image/svg+xml",
+            "Cache-Control": "public, max-age=86400",
+          });
+          res.end(svg);
         } else {
           json(res, 404, { error: "Not found" });
         }

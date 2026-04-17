@@ -1528,14 +1528,15 @@ pluginCmd
   .command("list")
   .description("List installed provider plugins")
   .action(async () => {
-    const { loadPlugins, PLUGINS_DIR, ensurePluginsDir } = await import("./providers/plugin-loader.js");
-    ensurePluginsDir();
-    const { loaded, failed } = await loadPlugins();
+    const { loadPlugins, getPluginsDir, ensurePluginsDir } = await import("./providers/plugin-loader.js");
+    const dir = getPluginsDir();
+    ensurePluginsDir(dir);
+    const { loaded, failed } = await loadPlugins(dir);
 
     if (loaded.length === 0 && failed.length === 0) {
       console.log(chalk.dim(`No plugins installed.`));
       console.log(chalk.dim(`Install with: engram plugin install <file.mjs>`));
-      console.log(chalk.dim(`Plugins directory: ${PLUGINS_DIR}`));
+      console.log(chalk.dim(`Plugins directory: ${dir}`));
       return;
     }
 
@@ -1569,7 +1570,7 @@ pluginCmd
   .action(async (file: string) => {
     const { copyFileSync, statSync } = await import("node:fs");
     const { basename } = await import("node:path");
-    const { PLUGINS_DIR, ensurePluginsDir, validatePlugin } = await import("./providers/plugin-loader.js");
+    const { getPluginsDir, ensurePluginsDir, validatePlugin } = await import("./providers/plugin-loader.js");
     const { pathToFileURL } = await import("node:url");
 
     const absPath = pathResolve(file);
@@ -1602,9 +1603,10 @@ pluginCmd
       process.exit(1);
     }
 
-    ensurePluginsDir();
+    const pluginsDir = getPluginsDir();
+    ensurePluginsDir(pluginsDir);
     const destName = basename(absPath);
-    const destPath = join(PLUGINS_DIR, destName);
+    const destPath = join(pluginsDir, destName);
     copyFileSync(absPath, destPath);
     console.log(chalk.green(`✓ Installed: ${destPath}`));
   });
@@ -1614,11 +1616,12 @@ pluginCmd
   .description("Remove an installed plugin by filename")
   .argument("<filename>", "Plugin filename (e.g., my-provider.mjs)")
   .action(async (filename: string) => {
-    const { PLUGINS_DIR } = await import("./providers/plugin-loader.js");
-    const target = join(PLUGINS_DIR, filename);
+    const { getPluginsDir } = await import("./providers/plugin-loader.js");
+    const pluginsDir = getPluginsDir();
+    const target = join(pluginsDir, filename);
     if (!existsSync(target)) {
       console.error(chalk.red(`No such plugin: ${filename}`));
-      console.log(chalk.dim(`Plugins directory: ${PLUGINS_DIR}`));
+      console.log(chalk.dim(`Plugins directory: ${pluginsDir}`));
       process.exit(1);
     }
     unlinkSync(target);
