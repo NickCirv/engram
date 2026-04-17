@@ -13,6 +13,10 @@ export interface CcsImportResult {
   readonly sectionsFound: number;
 }
 
+/** POSIX path for sourceFile metadata — must not use OS path separators. */
+const CCS_SOURCE = "ccs:.context/index.md";
+
+/** OS-native path for file I/O. */
 const CCS_PATH = join(".context", "index.md");
 
 /** Map a section heading to a NodeKind. */
@@ -73,7 +77,7 @@ export async function importCcs(projectRoot: string): Promise<CcsImportResult> {
         id: randomUUID(),
         label: bulletText,
         kind: currentKind,
-        sourceFile: `ccs:${CCS_PATH}`,
+        sourceFile: CCS_SOURCE,
         sourceLocation: null,
         confidence: "EXTRACTED",
         confidenceScore: 0.9,
