@@ -504,6 +504,42 @@ function getPatterns(lang: string): LangPatterns {
   }
 }
 
+const MAX_DEPTH = 100;
+
+const DEFAULT_EXCLUDED_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "build",
+  "__pycache__",
+  "vendor",
+  ".engram",
+  "target",
+  ".venv",
+  ".next",
+  ".nuxt",
+  ".output",
+  "coverage",
+  ".turbo",
+  ".cache",
+]);
+
+function loadEngramIgnore(rootDir: string): Set<string> {
+  const ignoreFile = join(rootDir, ".engramignore");
+  const excluded = new Set(DEFAULT_EXCLUDED_DIRS);
+  try {
+    const content = readFileSync(ignoreFile, "utf-8");
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith("#")) {
+        excluded.add(trimmed);
+      }
+    }
+  } catch {
+    // no .engramignore file
+  }
+  return excluded;
+}
+
 /**
  * Scan a directory recursively and extract all supported code files.
  */
@@ -588,24 +624,34 @@ export function extractDirectory(
     return false;
   }
 
-  function walk(dir: string): void {
-    // Symlink loop protection
+  // MAX_DEPTH guard prevents stack overflow + runaway recursion on
+  // pathological directory trees (symlink cycles that escape the visitedDirs
+  // check, deliberately-deep scratch dirs, etc.). Credit: PR #6 / mechtar-ru.
+  function walk(dir: string, depth: number): void {
+    if (depth > MAX_DEPTH) return;
+
     let realDir: string;
     try {
       realDir = realpathSync(dir);
     } catch {
-      return; // broken symlink
+      return;
     }
     if (visitedDirs.has(realDir)) return;
     visitedDirs.add(realDir);
 
-    const entries = readdirSync(dir, { withFileTypes: true });
+    let entries: ReturnType<typeof readdirSync>;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
     for (const entry of entries) {
       const fullPath = join(dir, entry.name);
 
       if (entry.isDirectory()) {
         if (shouldSkipDir(entry.name)) continue;
-        walk(fullPath);
+        walk(fullPath, depth + 1);
         continue;
       }
 
@@ -640,6 +686,6 @@ export function extractDirectory(
     }
   }
 
-  walk(dirPath);
+  walk(dirPath, 0);
   return { nodes: allNodes, edges: allEdges, fileCount, totalLines, mtimes, skippedCount };
 }
