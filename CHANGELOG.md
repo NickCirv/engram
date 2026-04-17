@@ -4,6 +4,49 @@ All notable changes to engram are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — v2.0 Phase 1 "Foundation"
+
+### Added
+
+- **Tree-sitter grammar bundling** — 6 WASM grammar files (TypeScript, TSX,
+  JavaScript, Python, Go, Rust) now ship inside the npm package at
+  `dist/grammars/`. The `engram:ast` provider works out of the box for npm
+  users without needing local `node_modules` tree-sitter packages.
+  New: `scripts/bundle-grammars.ts`, `prepublishOnly` runs it after build.
+- **Incremental indexing** — `init()` accepts `{ incremental: true }` to skip
+  files whose mtime hasn't changed since last index. File mtimes persisted in
+  the stats table. On a 5-file project with 1 change: 4 files skipped.
+- **`.engramignore` support** — gitignore-like syntax for excluding directories
+  and files from indexing. Loaded from project root.
+- **Memory cache system** (`src/intelligence/cache.ts`) — 3-layer compound
+  savings engine:
+  - **Query result cache** — resolved context packets per file, SQLite-backed
+    + in-memory LRU (100 entries). Invalidated on file mtime change.
+  - **Pattern cache** — structural query answers memoized with graph version
+    tracking. LRU (50 entries). Auto-invalidates on graph mutation.
+  - **Hot file cache** — `warmHotFiles()` pre-loads top-N most-accessed files
+    at SessionStart for zero first-hit latency.
+- **9 new HTTP API endpoints** for the upcoming web dashboard:
+  - `GET /api/hook-log` — paginated hook log entries
+  - `GET /api/hook-log/summary` — aggregated event/tool/decision stats
+  - `GET /api/tokens` — cumulative token savings
+  - `GET /api/files/heatmap` — file interception frequency ranking
+  - `GET /api/providers/health` — component status
+  - `GET /api/cache/stats` — cache hit/miss rates, entry counts
+  - `GET /api/graph/nodes` — paginated graph nodes
+  - `GET /api/graph/god-nodes` — top-connected entities
+  - `GET /api/sse` — Server-Sent Events for real-time updates
+
+### Changed
+
+- Default skip directories expanded: added `.next`, `.nuxt`, `coverage`,
+  `target`, `venv`, `.venv`, `.cache`, `.turbo`, `.output`, `.git`.
+- `extractFile()` now returns `lineCount` from content already parsed,
+  eliminating a redundant `readFileSync` per file during extraction.
+- `GraphStore` extended with `runSql()`, `prepare()` (public), and
+  `removeNodesForFile()` for incremental mode and cache module.
+- Test count: 579 → 603 (+24 tests: 7 incremental + 17 cache).
+
 ## [1.0.0] — 2026-04-17 — "Protocol"
 
 ### Added

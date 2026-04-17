@@ -18,7 +18,8 @@
   },
   "main": "./dist/index.js",
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node scripts/bundle-grammars.mjs",
+    "build:nogrammars": "tsup",
     "dev": "tsup --watch",
     "test": "vitest",
     "lint": "tsc --noEmit",

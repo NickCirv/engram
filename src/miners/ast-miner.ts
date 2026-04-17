@@ -3,7 +3,7 @@
  * Zero LLM cost. Extracts classes, functions, imports, call graphs.
  * Supports: TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, Ruby, PHP
  */
-import { readFileSync, existsSync, readdirSync, realpathSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { basename, extname, join, relative } from "node:path";
 import type { GraphEdge, GraphNode } from "../graph/schema.js";
 import { toPosixPath } from "../graph/path-utils.js";
@@ -124,10 +124,10 @@ interface ExtractionResult {
 export function extractFile(
   filePath: string,
   rootDir: string
-): { nodes: GraphNode[]; edges: GraphEdge[] } {
+): { nodes: GraphNode[]; edges: GraphEdge[]; lineCount: number } {
   const ext = extname(filePath).toLowerCase();
   const lang = EXT_TO_LANG[ext];
-  if (!lang) return { nodes: [], edges: [] };
+  if (!lang) return { nodes: [], edges: [], lineCount: 0 };
 
   const content = readFileSync(filePath, "utf-8");
   const lines = content.split("\n");
@@ -217,7 +217,7 @@ export function extractFile(
     );
   }
 
-  return { nodes, edges };
+  return { nodes, edges, lineCount: lines.length };
 }
 
 function extractWithPatterns(
@@ -507,17 +507,86 @@ function getPatterns(lang: string): LangPatterns {
 /**
  * Scan a directory recursively and extract all supported code files.
  */
+/** Default directories always skipped during extraction. */
+const DEFAULT_SKIP_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "build",
+  "__pycache__",
+  "vendor",
+  ".engram",
+  ".git",
+  ".next",
+  ".nuxt",
+  ".output",
+  "coverage",
+  ".turbo",
+  ".cache",
+  "target",          // Rust
+  "venv",
+  ".venv",
+  "env",
+]);
+
+/**
+ * Load .engramignore patterns from project root.
+ * Format: one glob-like pattern per line (# comments, blank lines ignored).
+ * Simple matching — supports exact dir names and trailing slash for dirs.
+ */
+function loadIgnorePatterns(rootDir: string): Set<string> {
+  const ignorePath = join(rootDir, ".engramignore");
+  const patterns = new Set<string>();
+  if (!existsSync(ignorePath)) return patterns;
+
+  try {
+    const content = readFileSync(ignorePath, "utf-8");
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      // Strip trailing slash for directory patterns
+      patterns.add(trimmed.replace(/\/+$/, ""));
+    }
+  } catch {
+    // ignore read errors
+  }
+  return patterns;
+}
+
+/**
+ * Map of relative file paths → mtime (ms). When provided, files whose
+ * mtime hasn't changed since last indexing are skipped entirely.
+ */
+export type FileMtimeMap = Map<string, number>;
+
+export interface ExtractOptions {
+  /** Previously-recorded mtimes for incremental indexing. */
+  previousMtimes?: FileMtimeMap;
+  /** Callback for progress reporting. */
+  onProgress?: (processed: number, skipped: number, currentFile: string) => void;
+}
+
 export function extractDirectory(
   dirPath: string,
-  rootDir?: string
-): ExtractionResult {
+  rootDir?: string,
+  options: ExtractOptions = {}
+): ExtractionResult & { mtimes: FileMtimeMap; skippedCount: number } {
   const root = rootDir ?? dirPath;
   const allNodes: GraphNode[] = [];
   const allEdges: GraphEdge[] = [];
   let fileCount = 0;
   let totalLines = 0;
+  let skippedCount = 0;
+  const mtimes: FileMtimeMap = new Map();
 
   const visitedDirs = new Set<string>();
+  const ignorePatterns = loadIgnorePatterns(root);
+
+  function shouldSkipDir(name: string): boolean {
+    if (name.startsWith(".")) return true;
+    if (DEFAULT_SKIP_DIRS.has(name)) return true;
+    if (ignorePatterns.has(name)) return true;
+    return false;
+  }
 
   function walk(dir: string): void {
     // Symlink loop protection
@@ -535,17 +604,7 @@ export function extractDirectory(
       const fullPath = join(dir, entry.name);
 
       if (entry.isDirectory()) {
-        if (
-          entry.name.startsWith(".") ||
-          entry.name === "node_modules" ||
-          entry.name === "dist" ||
-          entry.name === "build" ||
-          entry.name === "__pycache__" ||
-          entry.name === "vendor" ||
-          entry.name === ".engram"
-        ) {
-          continue;
-        }
+        if (shouldSkipDir(entry.name)) continue;
         walk(fullPath);
         continue;
       }
@@ -554,20 +613,33 @@ export function extractDirectory(
       const ext = extname(entry.name).toLowerCase();
       if (!SUPPORTED_EXTENSIONS.has(ext)) continue;
 
-      const { nodes, edges } = extractFile(fullPath, root);
+      // Check file-level ignore patterns
+      const relPath = toPosixPath(relative(root, fullPath));
+      if (ignorePatterns.has(entry.name) || ignorePatterns.has(relPath)) continue;
+
+      // Incremental: skip unchanged files
+      const fileMtime = statSync(fullPath).mtimeMs;
+      mtimes.set(relPath, fileMtime);
+
+      if (options.previousMtimes) {
+        const prevMtime = options.previousMtimes.get(relPath);
+        if (prevMtime !== undefined && prevMtime === fileMtime) {
+          skippedCount++;
+          options.onProgress?.(fileCount, skippedCount, relPath);
+          continue;
+        }
+      }
+
+      const { nodes, edges, lineCount } = extractFile(fullPath, root);
       allNodes.push(...nodes);
       allEdges.push(...edges);
       fileCount++;
+      totalLines += lineCount;
 
-      try {
-        const content = readFileSync(fullPath, "utf-8");
-        totalLines += content.split("\n").length;
-      } catch {
-        // skip unreadable files
-      }
+      options.onProgress?.(fileCount, skippedCount, relPath);
     }
   }
 
   walk(dirPath);
-  return { nodes: allNodes, edges: allEdges, fileCount, totalLines };
+  return { nodes: allNodes, edges: allEdges, fileCount, totalLines, mtimes, skippedCount };
 }

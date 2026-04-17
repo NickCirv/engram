@@ -369,6 +369,17 @@ export class GraphStore {
     );
   }
 
+  /** Remove all nodes and edges originating from a specific source file. */
+  removeNodesForFile(sourceFile: string): void {
+    // Delete edges that reference nodes from this file
+    this.db.run(
+      `DELETE FROM edges WHERE source IN (SELECT id FROM nodes WHERE source_file = ?)
+       OR target IN (SELECT id FROM nodes WHERE source_file = ?)`,
+      [sourceFile, sourceFile]
+    );
+    this.db.run("DELETE FROM nodes WHERE source_file = ?", [sourceFile]);
+  }
+
   clearAll(): void {
     this.db.run("DELETE FROM nodes");
     this.db.run("DELETE FROM edges");
@@ -523,6 +534,25 @@ export class GraphStore {
       cachedAt: (row.cached_at as number) ?? 0,
       ttl: (row.ttl as number) ?? 3600,
     };
+  }
+
+  // ─── Low-level DB access (for cache module) ──────────────────
+
+  /** Run raw SQL (DDL, DML). For cache table creation and updates. */
+  runSql(sql: string, params?: unknown[]): void {
+    if (params && params.length > 0) {
+      const stmt = this.db.prepare(sql);
+      stmt.bind(params as (string | number | null)[]);
+      stmt.step();
+      stmt.free();
+    } else {
+      this.db.run(sql);
+    }
+  }
+
+  /** Prepare a statement for row-by-row iteration. Caller must free(). */
+  prepare(sql: string): ReturnType<SqlJsDatabase["prepare"]> {
+    return this.db.prepare(sql);
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────

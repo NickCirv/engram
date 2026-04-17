@@ -10,9 +10,15 @@
  *   removed on shutdown. Checked by component-status.ts for HUD display.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { writeFileSync, unlinkSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, unlinkSync, mkdirSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { query, stats, learn } from "../core.js";
+import { query, stats, learn, getStore } from "../core.js";
+import { readHookLog } from "../intelligence/hook-log.js";
+import { summarizeHookLog } from "../intercept/stats.js";
+import { getCumulativeStats } from "../intelligence/token-tracker.js";
+import { getContextCache, ContextCache } from "../intelligence/cache.js";
+import { getComponentStatus } from "../intercept/component-status.js";
+import { buildDashboardHtml } from "./ui.js";
 
 // Read version — try both paths (works from src/ in dev and dist/ when built).
 import { createRequire } from "node:module";
@@ -159,6 +165,229 @@ async function handleLearn(
 }
 
 // ---------------------------------------------------------------------------
+// Dashboard API handlers
+// ---------------------------------------------------------------------------
+
+async function handleHookLog(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): Promise<void> {
+  try {
+    const url = parseUrl(req);
+    const limit = parseInt(url.searchParams.get("limit") ?? "100", 10);
+    const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
+    const entries = readHookLog(projectRoot);
+    const paginated = entries.slice(offset, offset + limit);
+    json(res, 200, { entries: paginated, total: entries.length });
+  } catch (err) {
+    json(res, 500, { error: "Hook log read failed", detail: String(err) });
+  }
+}
+
+function handleHookLogSummary(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): void {
+  try {
+    const entries = readHookLog(projectRoot);
+    const summary = summarizeHookLog(entries);
+    json(res, 200, summary);
+  } catch (err) {
+    json(res, 500, { error: "Summary failed", detail: String(err) });
+  }
+}
+
+async function handleTokens(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): Promise<void> {
+  try {
+    const store = await getStore(projectRoot);
+    try {
+      const tokenStats = getCumulativeStats(store);
+      json(res, 200, tokenStats);
+    } finally {
+      store.close();
+    }
+  } catch (err) {
+    json(res, 500, { error: "Token stats failed", detail: String(err) });
+  }
+}
+
+async function handleFilesHeatmap(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): Promise<void> {
+  try {
+    const url = parseUrl(req);
+    const limit = parseInt(url.searchParams.get("limit") ?? "20", 10);
+    const entries = readHookLog(projectRoot);
+
+    // Aggregate by file path
+    const fileMap = new Map<string, { count: number; tokensSaved: number }>();
+    for (const entry of entries) {
+      if (!entry.path) continue;
+      const existing = fileMap.get(entry.path) ?? { count: 0, tokensSaved: 0 };
+      fileMap.set(entry.path, {
+        count: existing.count + 1,
+        tokensSaved: existing.tokensSaved + (entry.tokensSaved ?? 0),
+      });
+    }
+
+    // Sort by count descending, take top N
+    const sorted = [...fileMap.entries()]
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, limit)
+      .map(([path, data]) => ({ path, ...data }));
+
+    json(res, 200, sorted);
+  } catch (err) {
+    json(res, 500, { error: "Heatmap failed", detail: String(err) });
+  }
+}
+
+function handleProvidersHealth(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): void {
+  try {
+    const status = getComponentStatus(projectRoot);
+    json(res, 200, status);
+  } catch (err) {
+    json(res, 500, { error: "Provider health failed", detail: String(err) });
+  }
+}
+
+async function handleCacheStats(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): Promise<void> {
+  try {
+    const store = await getStore(projectRoot);
+    try {
+      ContextCache.ensureTables(store);
+      const cache = getContextCache();
+      const cacheStats = cache.getStats(store);
+      json(res, 200, cacheStats);
+    } finally {
+      store.close();
+    }
+  } catch (err) {
+    json(res, 500, { error: "Cache stats failed", detail: String(err) });
+  }
+}
+
+async function handleGraphNodes(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): Promise<void> {
+  try {
+    const url = parseUrl(req);
+    const limit = parseInt(url.searchParams.get("limit") ?? "100", 10);
+    const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
+    const store = await getStore(projectRoot);
+    try {
+      const allNodes = store.getAllNodes();
+      const paginated = allNodes.slice(offset, offset + limit);
+      json(res, 200, { nodes: paginated, total: allNodes.length });
+    } finally {
+      store.close();
+    }
+  } catch (err) {
+    json(res, 500, { error: "Graph nodes failed", detail: String(err) });
+  }
+}
+
+async function handleGraphGodNodes(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): Promise<void> {
+  try {
+    const store = await getStore(projectRoot);
+    try {
+      const godNodes = store.getGodNodes(10);
+      json(res, 200, godNodes);
+    } finally {
+      store.close();
+    }
+  } catch (err) {
+    json(res, 500, { error: "God nodes failed", detail: String(err) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SSE (Server-Sent Events) for real-time dashboard updates
+// ---------------------------------------------------------------------------
+
+const sseClients = new Set<ServerResponse>();
+let hookLogWatcher: (() => void) | null = null;
+
+function handleSSE(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): void {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+  });
+
+  // Send initial keepalive
+  res.write("data: {\"type\":\"connected\"}\n\n");
+  sseClients.add(res);
+
+  // Start watching hook log if not already
+  if (!hookLogWatcher) {
+    const logPath = join(projectRoot, ".engram", "hook-log.jsonl");
+    if (existsSync(logPath)) {
+      let lastSize = statSync(logPath).size;
+
+      const checkFile = (): void => {
+        try {
+          const currentSize = statSync(logPath).size;
+          if (currentSize > lastSize) {
+            lastSize = currentSize;
+            // Broadcast to all SSE clients
+            const msg = JSON.stringify({ type: "hook-event", timestamp: Date.now() });
+            for (const client of sseClients) {
+              try {
+                client.write(`data: ${msg}\n\n`);
+              } catch {
+                sseClients.delete(client);
+              }
+            }
+          }
+        } catch {
+          // Log file gone or unreadable
+        }
+      };
+
+      const interval = setInterval(checkFile, 1000);
+      hookLogWatcher = () => clearInterval(interval);
+    }
+  }
+
+  // Cleanup on disconnect
+  res.on("close", () => {
+    sseClients.delete(res);
+    if (sseClients.size === 0 && hookLogWatcher) {
+      hookLogWatcher();
+      hookLogWatcher = null;
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // PID file management
 // ---------------------------------------------------------------------------
 
@@ -215,6 +444,32 @@ export function createHttpServer(
           handleProviders(req, res);
         } else if (req.method === "POST" && path === "/learn") {
           await handleLearn(req, res, projectRoot);
+        // Dashboard API routes
+        } else if (req.method === "GET" && path === "/api/hook-log") {
+          await handleHookLog(req, res, projectRoot);
+        } else if (req.method === "GET" && path === "/api/hook-log/summary") {
+          handleHookLogSummary(req, res, projectRoot);
+        } else if (req.method === "GET" && path === "/api/tokens") {
+          await handleTokens(req, res, projectRoot);
+        } else if (req.method === "GET" && path === "/api/files/heatmap") {
+          await handleFilesHeatmap(req, res, projectRoot);
+        } else if (req.method === "GET" && path === "/api/providers/health") {
+          handleProvidersHealth(req, res, projectRoot);
+        } else if (req.method === "GET" && path === "/api/cache/stats") {
+          await handleCacheStats(req, res, projectRoot);
+        } else if (req.method === "GET" && path === "/api/graph/nodes") {
+          await handleGraphNodes(req, res, projectRoot);
+        } else if (req.method === "GET" && path === "/api/graph/god-nodes") {
+          await handleGraphGodNodes(req, res, projectRoot);
+        } else if (req.method === "GET" && path === "/api/sse") {
+          handleSSE(req, res, projectRoot);
+        } else if (req.method === "GET" && (path === "/ui" || path === "/ui/")) {
+          // Serve the dashboard SPA
+          res.writeHead(200, {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-cache",
+          });
+          res.end(buildDashboardHtml());
         } else {
           json(res, 404, { error: "Not found" });
         }

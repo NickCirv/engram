@@ -69,10 +69,15 @@ program
     "Also index Claude Code skills from ~/.claude/skills/ or a given path"
   )
   .option("--from-ccs", "Import .context/index.md (CCS) into graph after init")
-  .action(async (projectPath: string, opts: { withSkills?: string | boolean; fromCcs?: boolean }) => {
-    console.log(chalk.dim("🔍 Scanning codebase..."));
+  .option(
+    "--incremental",
+    "Skip unchanged files (mtime-based). Dramatically faster on re-index of large repos."
+  )
+  .action(async (projectPath: string, opts: { withSkills?: string | boolean; fromCcs?: boolean; incremental?: boolean }) => {
+    console.log(chalk.dim(opts.incremental ? "🔍 Scanning changed files..." : "🔍 Scanning codebase..."));
     const result = await init(projectPath, {
       withSkills: opts.withSkills,
+      incremental: opts.incremental,
     });
     console.log(
       chalk.green("🌳 AST extraction complete") +
@@ -81,6 +86,9 @@ program
     console.log(
       `   ${chalk.bold(String(result.nodes))} nodes, ${chalk.bold(String(result.edges))} edges from ${chalk.bold(String(result.fileCount))} files (${result.totalLines.toLocaleString()} lines)`
     );
+    if (result.incremental && result.skippedFiles && result.skippedFiles > 0) {
+      console.log(chalk.dim(`   ${result.skippedFiles} unchanged files skipped (incremental mode)`));
+    }
     if (result.skillCount && result.skillCount > 0) {
       console.log(
         chalk.cyan(`   ${chalk.bold(String(result.skillCount))} skills indexed`)
@@ -1228,6 +1236,72 @@ program
   .action(async (opts: { http?: boolean; port: string; project: string }) => {
     const { startHttpServer } = await import("./server/index.js");
     await startHttpServer(pathResolve(opts.project), parseInt(opts.port, 10));
+  });
+
+/**
+ * engram ui — starts the HTTP server (if not already running) and opens
+ * the web dashboard in the user's default browser.
+ */
+program
+  .command("ui")
+  .description("Open the web dashboard (auto-starts HTTP server if needed)")
+  .option("--port <port>", "HTTP port", "7337")
+  .option("-p, --project <path>", "Project directory", ".")
+  .option("--no-open", "Don't launch browser, just print the URL")
+  .action(async (opts: { port: string; project: string; open?: boolean }) => {
+    const port = parseInt(opts.port, 10);
+    const url = `http://127.0.0.1:${port}/ui`;
+    const projectRoot = pathResolve(opts.project);
+
+    // Check if server already running (PID file check)
+    const { existsSync, readFileSync } = await import("node:fs");
+    const pidPath = join(projectRoot, ".engram", "http-server.pid");
+    let alreadyRunning = false;
+
+    if (existsSync(pidPath)) {
+      try {
+        const pid = parseInt(readFileSync(pidPath, "utf-8"), 10);
+        // process.kill(pid, 0) throws if the process doesn't exist
+        process.kill(pid, 0);
+        alreadyRunning = true;
+      } catch {
+        // Stale PID — server not actually running
+      }
+    }
+
+    if (alreadyRunning) {
+      console.log(chalk.dim(`engram server already running — opening ${url}`));
+    } else {
+      console.log(chalk.dim(`Starting engram server on ${url}...`));
+      // Spawn server as detached background process
+      const { spawn } = await import("node:child_process");
+      const child = spawn(
+        process.argv[0],
+        [process.argv[1], "server", "--port", String(port), "-p", projectRoot],
+        { detached: true, stdio: "ignore" }
+      );
+      child.unref();
+
+      // Wait briefly for server to come up
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    console.log(chalk.green(`✓ Dashboard: ${url}`));
+
+    if (opts.open !== false) {
+      const { platform } = process;
+      const opener =
+        platform === "darwin" ? "open" :
+        platform === "win32" ? "start" : "xdg-open";
+      try {
+        const { execFile } = await import("node:child_process");
+        execFile(opener, [url], { shell: platform === "win32" }, () => {
+          // fire-and-forget — browser launch is best-effort
+        });
+      } catch {
+        // Couldn't open browser, URL is already printed
+      }
+    }
   });
 
 program

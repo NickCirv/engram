@@ -34,6 +34,8 @@ export interface InitResult {
   totalLines: number;
   timeMs: number;
   skillCount?: number;
+  skippedFiles?: number;
+  incremental?: boolean;
 }
 
 export interface InitOptions {
@@ -44,6 +46,13 @@ export interface InitOptions {
    *   - `false` | `undefined` → skip (default)
    */
   withSkills?: boolean | string;
+  /**
+   * Incremental mode — skip files whose mtime hasn't changed since last init.
+   * Dramatically faster for large repos on re-index.
+   */
+  incremental?: boolean;
+  /** Callback for progress reporting during extraction. */
+  onProgress?: (processed: number, skipped: number, currentFile: string) => void;
 }
 
 export async function init(
@@ -71,7 +80,25 @@ export async function init(
   }
 
   try {
-    const { nodes, edges, fileCount, totalLines } = extractDirectory(root);
+    // Load previous mtimes for incremental mode
+    let previousMtimes: Map<string, number> | undefined;
+    if (options.incremental) {
+      const store = await getStore(root);
+      try {
+        const mtimeJson = store.getStat("file_mtimes");
+        if (mtimeJson) {
+          previousMtimes = new Map(JSON.parse(mtimeJson));
+        }
+      } finally {
+        store.close();
+      }
+    }
+
+    const { nodes, edges, fileCount, totalLines, mtimes, skippedCount } =
+      extractDirectory(root, undefined, {
+        previousMtimes,
+        onProgress: options.onProgress,
+      });
     const gitResult = mineGitHistory(root);
     const sessionResult = mineSessionHistory(root);
 
@@ -104,10 +131,25 @@ export async function init(
 
     const store = await getStore(root);
     try {
-      store.clearAll();
+      // In incremental mode, only clear nodes from changed files
+      // In full mode, clear everything and rebuild
+      if (options.incremental && previousMtimes) {
+        // Remove stale nodes/edges from files that were re-extracted
+        const clearedFiles = new Set<string>();
+        for (const node of allNodes) {
+          if (node.sourceFile && !clearedFiles.has(node.sourceFile)) {
+            store.removeNodesForFile(node.sourceFile);
+            clearedFiles.add(node.sourceFile);
+          }
+        }
+      } else {
+        store.clearAll();
+      }
       store.bulkUpsert(allNodes, allEdges);
       store.setStat("last_mined", String(Date.now()));
       store.setStat("project_root", root);
+      // Persist mtimes for next incremental run
+      store.setStat("file_mtimes", JSON.stringify([...mtimes.entries()]));
     } finally {
       store.close();
     }
@@ -119,6 +161,8 @@ export async function init(
       totalLines,
       timeMs: Date.now() - start,
       skillCount,
+      skippedFiles: skippedCount,
+      incremental: options.incremental ?? false,
     };
   } finally {
     try {

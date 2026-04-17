@@ -61,16 +61,26 @@ function findGrammarWasm(lang: string): string | null {
 
   const candidates: string[] = [];
 
-  // 1. Alongside this source file (works in both src/ and dist/)
+  // 1. Bundled grammars in dist/grammars/ (shipped with npm package)
   try {
     const here = dirname(fileURLToPath(import.meta.url));
-    candidates.push(join(here, "..", "..", "node_modules", pkg, wasmName));
+    // From dist/providers/ → dist/grammars/
     candidates.push(join(here, "..", "grammars", wasmName));
+    // From dist/ (flat) → dist/grammars/
+    candidates.push(join(here, "grammars", wasmName));
   } catch {
     // import.meta.url may not be available in all contexts
   }
 
-  // 2. Resolve via require (follows node_modules resolution)
+  // 2. node_modules (development / local install)
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    candidates.push(join(here, "..", "..", "node_modules", pkg, wasmName));
+  } catch {
+    // fallthrough
+  }
+
+  // 3. Resolve via require (follows node_modules resolution)
   try {
     const pkgMain = require.resolve(`${pkg}/package.json`);
     const pkgDir = dirname(pkgMain);
