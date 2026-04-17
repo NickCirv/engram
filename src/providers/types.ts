@@ -112,12 +112,14 @@ export interface ContextProvider {
 
 /** Provider priority order (highest first). Used when total output exceeds budget. */
 export const PROVIDER_PRIORITY: readonly string[] = [
+  "engram:ast",
   "engram:structure",
   "engram:mistakes",
   "mempalace",
   "context7",
   "engram:git",
   "obsidian",
+  "engram:lsp",
 ];
 
 /** Default TTL for cached provider results (1 hour). */

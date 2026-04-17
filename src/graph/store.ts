@@ -5,6 +5,7 @@
 import initSqlJs, { type Database as SqlJsDatabase } from "sql.js";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
+import { runMigrations } from "../db/migrate.js";
 import type {
   Confidence,
   EdgeRelation,
@@ -95,6 +96,7 @@ export class GraphStore {
     for (const sql of indexes) {
       try { this.db.run(sql); } catch { /* already exists */ }
     }
+    runMigrations(this.db, this.dbPath);
   }
 
   save(): void {

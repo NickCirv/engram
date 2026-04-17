@@ -4,6 +4,76 @@ All notable changes to engram are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] — 2026-04-17 — "Protocol"
+
+### Added
+
+- **HTTP REST server** — `engram server --http` starts a local server on
+  127.0.0.1:7337. Endpoints: `/health`, `/query`, `/stats`, `/providers`,
+  `/learn`. Bearer token auth via `ENGRAM_API_TOKEN`. PID file written on
+  start for HUD server-status detection.
+- **Tree-sitter AST provider** (`engram:ast`) — WASM-based AST parsing for
+  10 languages (TypeScript, JavaScript, Python, Go, Rust, PHP, Ruby, Java,
+  C, C++). Confidence 1.0 vs 0.85 for regex. When the AST provider succeeds
+  for a file, the regex `engram:structure` provider is skipped entirely.
+- **LSP provider** (`engram:lsp`) — connects to running LSP servers. Hover
+  info is added to Read interceptions; diagnostic events on Edit create
+  mistake nodes automatically. Best-effort with graceful degradation when no
+  LSP is running.
+- **Auto-tuning** — `engram tune [--dry-run|--apply]` analyzes
+  `.engram/hook-log.jsonl` and proposes per-project config changes:
+  confidence threshold, token budgets, provider enable/disable. Settings
+  are written to `.engram/config.json`.
+- **Schema versioning** — 6 migration files (001–006). Auto-migrate on
+  startup with backup. `engram db status` shows current schema version;
+  `engram db migrate` runs pending migrations.
+- **CCS integration** — Codebase Context Specification support.
+  `engram init --from-ccs` imports `.context/index.md` into the KG as
+  nodes. `engram gen-ccs` exports the KG to CCS format.
+- **Continue.dev context provider** — `engramx-continue` npm package.
+  Surfaces as `@engram` in Continue's @-mention system. Falls back to HTTP
+  server if CLI is unavailable.
+- **Cursor MDC generation** — `engram gen-mdc` generates
+  `.cursor/rules/engram-context.mdc` from the KG. YAML frontmatter with
+  auto-detected globs. `--watch` flag for live refresh on graph changes.
+- **Zed context server** — `engram context-server` implements Zed's
+  JSON-RPC protocol. Registers as the `/engram` slash command inside Zed.
+- **Aider context generation** — `engram gen-aider` creates
+  `.aider-context.md` from the KG. `--watch` flag for live refresh.
+- **Benchmark harness v0.2** — automated `npm run bench` with 10 task
+  fixtures. Measures baseline vs engram token savings across real tasks.
+  Result: **88.1% aggregate token savings** (measured, not estimated).
+- **Stress test suite** — `npm run stress` covering rapid concurrent reads,
+  provider concurrency, large graph operations, and hook-log replay.
+- **Component health HUD** — statusLine now shows HTTP ✓/✗, LSP ✓/✗,
+  AST ✓/✗, and N IDEs. Updates automatically as components activate.
+- **ECP spec v0.1** — Engram Context Protocol RFC at
+  `docs/specs/ecp-v0.1.md`. Vendor-neutral standard for hook-based context
+  enrichment across coding tools. CC-BY 4.0.
+- **5 integration guides** — `docs/integrations/` with setup guides for
+  Continue.dev, Cursor, Zed, Aider, Claude Code, and CCS.
+- **Per-project config** — `.engram/config.json` supports confidence
+  threshold, token budgets, and provider overrides. Read by the resolver
+  on every packet assembly.
+
+### Changed
+
+- Provider priority now includes `engram:ast` (highest confidence, runs
+  first) and `engram:lsp` (lowest, best-effort enrichment). The regex
+  `engram:structure` provider is skipped on files where AST succeeds.
+- `TOTAL_TOKEN_BUDGET` is now configurable via `.engram/config.json`.
+  Was hardcoded at 600.
+- Test count: 520 → 579 (+59 tests across 6 new test files).
+
+### Fixed
+
+- **Shell injection in Continue adapter** — switched from double-quote
+  escaping to single-quote wrapping for all CLI arguments.
+- **HTTP server package.json path resolution** — now resolves correctly
+  from both `src/` (dev) and `dist/` (built) entry points.
+
+---
+
 ## [0.5.0] — 2026-04-13 — "Context Spine"
 
 ### Added
@@ -578,6 +648,7 @@ messages for follow-up tracking.
   (3-11x) and vs full corpus (30-70x).
 - Apache 2.0 licensed.
 
+[1.0.0]: https://github.com/NickCirv/engram/releases/tag/v1.0.0
 [0.2.0]: https://github.com/NickCirv/engram/releases/tag/v0.2.0
 [0.1.1]: https://github.com/NickCirv/engram/releases/tag/v0.1.1
 [0.1.0]: https://github.com/NickCirv/engram/releases/tag/v0.1.0

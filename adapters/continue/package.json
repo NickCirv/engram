@@ -1,0 +1,41 @@
+{
+  "name": "engramx-continue",
+  "version": "1.0.0",
+  "description": "Continue.dev context provider for engram — surfaces knowledge graph as @engram",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "continue",
+    "context-provider",
+    "engram",
+    "engramx",
+    "ai-coding",
+    "knowledge-graph"
+  ],
+  "author": "NickCirv",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NickCirv/engram"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -37,6 +37,7 @@ import {
 import { summarizeHookLog, formatStatsSummary } from "./intercept/stats.js";
 import { readHookLog } from "./intelligence/hook-log.js";
 import { findProjectRoot } from "./intercept/context.js";
+import { getComponentStatus, formatHudStatus } from "./intercept/component-status.js";
 import {
   buildEngramSection,
   writeEngramSectionToMemoryMd,
@@ -66,7 +67,8 @@ program
     "--with-skills [dir]",
     "Also index Claude Code skills from ~/.claude/skills/ or a given path"
   )
-  .action(async (projectPath: string, opts: { withSkills?: string | boolean }) => {
+  .option("--from-ccs", "Import .context/index.md (CCS) into graph after init")
+  .action(async (projectPath: string, opts: { withSkills?: string | boolean; fromCcs?: boolean }) => {
     console.log(chalk.dim("🔍 Scanning codebase..."));
     const result = await init(projectPath, {
       withSkills: opts.withSkills,
@@ -122,6 +124,21 @@ program
             " — auto-rebuild graph on git commit"
         )
       );
+    }
+
+    if (opts.fromCcs) {
+      const { importCcs } = await import("./ccs/importer.js");
+      const resolvedProjectPath = pathResolve(projectPath);
+      const ccsResult = await importCcs(resolvedProjectPath);
+      if (ccsResult.nodesCreated > 0) {
+        console.log(
+          chalk.cyan(
+            `   ${ccsResult.nodesCreated} nodes imported from .context/index.md`
+          )
+        );
+      } else {
+        console.log(chalk.dim("   --from-ccs: no .context/index.md found, skipping"));
+      }
     }
   });
 
@@ -255,7 +272,13 @@ program
       if (denied > 0 && filled === 0) filled = 1;
       const bar = "▰".repeat(filled) + "▱".repeat(barWidth - filled);
 
-      console.log(JSON.stringify({ label: `⚡engram ${formatted} saved ${bar} ${hitRate}%` }));
+      // Append component status if any components are active
+      const status = getComponentStatus(resolvedPath);
+      const statusSuffix = formatHudStatus(status);
+      const label = statusSuffix
+        ? `⚡engram ${formatted} saved ${bar} ${hitRate}% | ${statusSuffix}`
+        : `⚡engram ${formatted} saved ${bar} ${hitRate}%`;
+      console.log(JSON.stringify({ label }));
     } catch {
       console.log('{"label":"⚡engram"}');
     }
@@ -449,6 +472,75 @@ program
       );
     }
   );
+
+// ── cursor MDC generator ─────────────────────────────────────────────────────
+program
+  .command("gen-mdc")
+  .description("Generate .cursor/rules/engram-context.mdc from knowledge graph")
+  .option("-p, --project <path>", "Project directory", ".")
+  .option("--watch", "Regenerate on graph changes")
+  .action(async (opts: { project: string; watch?: boolean }) => {
+    const { generateCursorMdc } = await import("./generators/cursor-mdc.js");
+    const result = await generateCursorMdc(opts.project);
+    console.log(
+      chalk.green(
+        `✅ Generated ${result.filePath} (${result.sections} sections, ${result.nodes} nodes)`
+      )
+    );
+    if (opts.watch) {
+      watchProject(pathResolve(opts.project), {
+        onReindex: async () => {
+          const r = await generateCursorMdc(opts.project);
+          console.log(chalk.dim(`  ↻ Regenerated MDC (${r.nodes} nodes)`));
+        },
+        onError: (err) => console.error(chalk.red(err.message)),
+        onReady: () => console.log(chalk.dim("  Watching for changes...")),
+      });
+      await new Promise(() => {}); // Keep alive
+    }
+  });
+
+// ── CCS exporter ─────────────────────────────────────────────────────────────
+program
+  .command("gen-ccs")
+  .description("Export knowledge graph as .context/index.md (CCS format)")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (opts: { project: string }) => {
+    const { exportCcs } = await import("./ccs/exporter.js");
+    const result = await exportCcs(pathResolve(opts.project));
+    console.log(
+      chalk.green(
+        `✅ Generated ${result.filePath} (${result.sectionsWritten} sections, ${result.nodesExported} nodes)`
+      )
+    );
+  });
+
+// ── aider context generator ──────────────────────────────────────────────────
+program
+  .command("gen-aider")
+  .description("Generate .aider-context.md from knowledge graph")
+  .option("-p, --project <path>", "Project directory", ".")
+  .option("--watch", "Regenerate on graph changes")
+  .action(async (opts: { project: string; watch?: boolean }) => {
+    const { generateAiderContext } = await import("./generators/aider-context.js");
+    const result = await generateAiderContext(pathResolve(opts.project));
+    console.log(
+      chalk.green(
+        `✅ Generated ${result.filePath} (${result.sections} sections, ${result.nodes} nodes)`
+      )
+    );
+    if (opts.watch) {
+      watchProject(pathResolve(opts.project), {
+        onReindex: async () => {
+          const r = await generateAiderContext(opts.project);
+          console.log(chalk.dim(`  ↻ Regenerated .aider-context.md (${r.nodes} nodes)`));
+        },
+        onError: (err) => console.error(chalk.red(err.message)),
+        onReady: () => console.log(chalk.dim("  Watching for changes...")),
+      });
+      await new Promise(() => {}); // Keep alive
+    }
+  });
 
 // ── Sentinel hook commands (v0.3.0) ─────────────────────────────────────────
 
@@ -1091,5 +1183,163 @@ program
       );
     }
   );
+
+program
+  .command("stress-test")
+  .description("Run stress tests: memory, concurrency, large-graph, hook-log replay")
+  .option("--reads <n>", "Rapid-reads test: call resolveRichPacket N times", parseInt)
+  .option("--providers", "Concurrency test: 50 parallel resolveRichPacket calls")
+  .option("--large-graph", "Large-graph test: insert N synthetic nodes and query")
+  .option("--nodes <n>", "Node count for --large-graph (default 1000)", parseInt)
+  .option("--replay <path>", "Hook-log replay: path to hook-log.jsonl")
+  .option("--limit <n>", "Entry limit for --replay (default 500)", parseInt)
+  .action(async (opts: {
+    reads?: number;
+    providers?: boolean;
+    largeGraph?: boolean;
+    nodes?: number;
+    replay?: string;
+    limit?: number;
+  }) => {
+    // Invoke stress-test via subprocess to avoid rootDir constraint
+    // (bench/ is outside src/ rootDir)
+    const { execFileSync } = await import("node:child_process");
+    const args = ["bench/stress-test.ts"];
+    if (opts.reads) args.push("--reads", String(opts.reads));
+    if (opts.providers) args.push("--providers");
+    if (opts.largeGraph) args.push("--large-graph");
+    if (opts.nodes) args.push("--nodes", String(opts.nodes));
+    if (opts.replay) args.push("--replay", opts.replay);
+    if (opts.limit) args.push("--limit", String(opts.limit));
+    try {
+      execFileSync("npx", ["tsx", ...args], { stdio: "inherit", cwd: join(dirname(import.meta.url.replace("file://", "")), "..") });
+    } catch {
+      process.exit(1);
+    }
+  });
+
+program
+  .command("server")
+  .description("Start engram HTTP REST server (binds to 127.0.0.1 only)")
+  .option("--http", "Enable HTTP server (default)")
+  .option("--port <port>", "HTTP port", "7337")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (opts: { http?: boolean; port: string; project: string }) => {
+    const { startHttpServer } = await import("./server/index.js");
+    await startHttpServer(pathResolve(opts.project), parseInt(opts.port, 10));
+  });
+
+program
+  .command("context-server")
+  .description("Start Zed-compatible context server (JSON-RPC over stdio)")
+  .action(async () => {
+    const { execFileSync } = await import("node:child_process");
+    try {
+      execFileSync("npx", ["tsx", "adapters/zed/index.ts"], {
+        stdio: "inherit",
+        cwd: join(dirname(import.meta.url.replace("file://", "")), ".."),
+      });
+    } catch {
+      process.exit(1);
+    }
+  });
+
+/**
+ * engram tune — analyse hook-log.jsonl and propose (or apply) changes
+ * to the per-project config (.engram/config.json).
+ */
+program
+  .command("tune")
+  .description("Analyze hook-log and propose provider config changes")
+  .option("-p, --project <path>", "Project directory", ".")
+  .option("--dry-run", "Show proposed changes without applying (default)")
+  .option("--apply", "Apply proposed changes to .engram/config.json")
+  .action(async (opts: { project: string; dryRun?: boolean; apply?: boolean }) => {
+    const { analyzeTuning, applyTuning } = await import("./tuner/index.js");
+    const proposal = analyzeTuning(pathResolve(opts.project));
+
+    if (proposal.changes.length === 0) {
+      console.log(
+        chalk.dim(
+          `Analyzed ${proposal.entriesAnalyzed} entries (${proposal.daysSpanned} days) — no changes suggested.`
+        )
+      );
+      return;
+    }
+
+    console.log(
+      chalk.bold(
+        `Analyzing ${proposal.entriesAnalyzed} hook-log entries from last ${proposal.daysSpanned} days...\n`
+      )
+    );
+    console.log(chalk.bold("Proposed changes:"));
+    for (const c of proposal.changes) {
+      console.log(
+        `  ${c.field}: ${chalk.red(String(c.current))} → ${chalk.green(String(c.proposed))} — ${chalk.dim(c.reason)}`
+      );
+    }
+
+    if (opts.apply) {
+      applyTuning(pathResolve(opts.project), proposal);
+      console.log(chalk.green("\n✅ Changes applied to .engram/config.json"));
+    } else {
+      console.log(chalk.dim("\nRun with --apply to write these changes."));
+    }
+  });
+
+// ── db: schema versioning and migration management ────────────────────────────
+const dbCmd = program.command("db").description("Database management");
+
+dbCmd
+  .command("status")
+  .description("Show schema version and migration status")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (opts: { project: string }) => {
+    const { getStore } = await import("./core.js");
+    const { CURRENT_SCHEMA_VERSION, getSchemaVersion } = await import("./db/migrate.js");
+    const store = await getStore(pathResolve(opts.project));
+    try {
+      const version = getSchemaVersion((store as unknown as { db: Parameters<typeof getSchemaVersion>[0] }).db);
+      const pending = CURRENT_SCHEMA_VERSION - version;
+      console.log(`Schema version: ${version} (current: ${CURRENT_SCHEMA_VERSION})`);
+      if (pending > 0) {
+        console.log(chalk.yellow(`${pending} pending migration(s). Run 'engram db migrate' to update.`));
+      } else {
+        console.log(chalk.green("Up to date."));
+      }
+    } finally {
+      store.close();
+    }
+  });
+
+dbCmd
+  .command("migrate")
+  .description("Run pending schema migrations")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (opts: { project: string }) => {
+    const { getStore } = await import("./core.js");
+    const { runMigrations } = await import("./db/migrate.js");
+    const store = await getStore(pathResolve(opts.project));
+    try {
+      const dbPath = join(pathResolve(opts.project), ".engram", "graph.db");
+      const result = runMigrations(
+        (store as unknown as { db: Parameters<typeof runMigrations>[0] }).db,
+        dbPath
+      );
+      store.save();
+      if (result.migrationsRun === 0) {
+        console.log(chalk.green("Already up to date."));
+      } else {
+        console.log(
+          chalk.green(`Migrated v${result.fromVersion} → v${result.toVersion} (${result.migrationsRun} migrations)`)
+        );
+        if (result.backedUp) {
+          console.log(chalk.dim("Backup created."));
+        }
+      }
+    } finally {
+      store.close();
+    }
+  });
 
 program.parse();

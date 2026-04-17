@@ -19,21 +19,26 @@ import type {
   ProviderResult,
 } from "./types.js";
 import { PROVIDER_PRIORITY } from "./types.js";
+import { astProvider } from "./ast.js";
 import { structureProvider } from "./engram-structure.js";
 import { mistakesProvider } from "./engram-mistakes.js";
 import { gitProvider } from "./engram-git.js";
 import { mempalaceProvider } from "./mempalace.js";
 import { context7Provider } from "./context7.js";
 import { obsidianProvider } from "./obsidian.js";
+import { lspProvider } from "./lsp.js";
+import { readConfig } from "../tuner/config.js";
 
 /** All registered providers in resolution order. */
 const ALL_PROVIDERS: readonly ContextProvider[] = [
+  astProvider,
   structureProvider,
   mistakesProvider,
   gitProvider,
   mempalaceProvider,
   context7Provider,
   obsidianProvider,
+  lspProvider,
 ];
 
 /** Maximum total tokens for the assembled rich packet. */
@@ -97,20 +102,29 @@ export async function resolveRichPacket(
 
   if (results.length === 0) return null;
 
+  // When engram:ast succeeds (confidence 1.0), drop the lower-confidence
+  // engram:structure result to avoid duplicate structural content.
+  const hasAst = results.some((r) => r.provider === "engram:ast");
+  const deduped = hasAst
+    ? results.filter((r) => r.provider !== "engram:structure")
+    : results;
+
   // Sort by priority order
-  const sorted = results.sort((a, b) => {
+  const sorted = deduped.sort((a, b) => {
     const aIdx = PROVIDER_PRIORITY.indexOf(a.provider);
     const bIdx = PROVIDER_PRIORITY.indexOf(b.provider);
     return (aIdx === -1 ? 99 : aIdx) - (bIdx === -1 ? 99 : bIdx);
   });
 
-  // Assemble within budget
+  // Assemble within budget (config-driven, falls back to compile-time constant)
+  const config = readConfig(context.projectRoot);
+  const budget = config.totalTokenBudget;
   const sections: string[] = [];
   let totalTokens = 0;
 
   for (const result of sorted) {
     const sectionTokens = estimateTokens(result.content);
-    if (totalTokens + sectionTokens > TOTAL_TOKEN_BUDGET) {
+    if (totalTokens + sectionTokens > budget) {
       // Budget exceeded — skip remaining providers
       break;
     }

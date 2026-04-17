@@ -22,7 +22,9 @@
     "dev": "tsup --watch",
     "test": "vitest",
     "lint": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "bench": "tsx bench/runner.ts",
+    "stress": "tsx bench/stress-test.ts"
   },
   "keywords": [
     "structural-code-graph",
@@ -55,7 +57,13 @@
   "dependencies": {
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
-"sql.js": "^1.14.1"
+    "sql.js": "^1.14.1",
+    "tree-sitter-go": "^0.25.0",
+    "tree-sitter-javascript": "^0.25.0",
+    "tree-sitter-python": "^0.25.0",
+    "tree-sitter-rust": "^0.24.0",
+    "tree-sitter-typescript": "^0.23.2",
+    "web-tree-sitter": "^0.26.8"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
