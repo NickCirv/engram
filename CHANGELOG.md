@@ -4,29 +4,73 @@ All notable changes to engram are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — v2.0 Phase 1 "Foundation"
+## [2.0.0] — 2026-04-17 — "Ecosystem"
 
-### Added
+The biggest release since v1.0.0. Completes the v2.0 roadmap Phases 1–4:
+Foundation, Web Dashboard, Integration Expansion, and Solidification.
+640 tests (up from 579). All changes backward-compatible with v1.x graph
+files — existing `.engram/graph.db` files auto-migrate to schema v7.
+
+### Added — Phase 3 (Integration Expansion)
+
+- **`engram gen-windsurfrules`** — generate `.windsurfrules` for Windsurf
+  (Codeium) IDE. Plain markdown (no frontmatter), auto-picked-up by Windsurf
+  on every chat session. Supports `--watch` for live regeneration on graph
+  changes. See `docs/integrations/README.md`.
+- **Integration docs**: `docs/integrations/neovim.md` (codecompanion +
+  avante.nvim via mcphub), `docs/integrations/cursor-mcp.md` (Cursor's
+  native MCP support alongside the MDC path), `docs/integrations/emacs.md`
+  (gptel + gptel-mcp), plus a new `docs/integrations/README.md` index that
+  maps every supported IDE to its mechanism.
+
+### Added — Phase 4 (Solidification)
+
+- **Provider plugin system** — third-party context providers installable
+  at `~/.engram/plugins/*.mjs`. Each plugin default-exports a
+  `ContextProviderPlugin` object and is dynamically loaded by the resolver.
+  Validation-before-install refuses malformed plugins; duplicate names
+  can't shadow built-ins. New CLI:
+  - `engram plugin list` — show installed plugins with tier/budget/version
+  - `engram plugin install <file.mjs>` — validate + copy into plugins dir
+  - `engram plugin remove <filename>`
+- **`engram cache` CLI namespace** — inspect and manage the context cache:
+  - `engram cache stats` — hit rate, entries per layer, hot file count
+  - `engram cache clear` — flush all layers
+  - `engram cache warm` — pre-warm hot files from access frequency
+- **Schema rollback** — `engram db rollback --to <version>` reverts the
+  schema with automatic backup at `<dbPath>.bak-v<fromVersion>`. Requires
+  explicit `--yes` confirmation (data loss). Rollback is in-session only;
+  reopen auto-migrates forward again by design — the backup is the
+  recovery path for pinning an older version.
+- **Schema v7** — adds `query_cache` and `pattern_cache` tables with
+  `idx_query_cache_file` index. Retroactive DOWN migrations defined for
+  versions 1–7 so any version is rollback-target-safe.
+
+### Added — Phase 1 (Foundation)
 
 - **Tree-sitter grammar bundling** — 6 WASM grammar files (TypeScript, TSX,
   JavaScript, Python, Go, Rust) now ship inside the npm package at
   `dist/grammars/`. The `engram:ast` provider works out of the box for npm
   users without needing local `node_modules` tree-sitter packages.
-  New: `scripts/bundle-grammars.ts`, `prepublishOnly` runs it after build.
-- **Incremental indexing** — `init()` accepts `{ incremental: true }` to skip
-  files whose mtime hasn't changed since last index. File mtimes persisted in
-  the stats table. On a 5-file project with 1 change: 4 files skipped.
+  New: `scripts/bundle-grammars.mjs` (pure Node ESM, no tsx dep).
+  `npm run build` bundles them automatically; `build:nogrammars` as escape hatch.
+- **Incremental indexing** — `init()` accepts `{ incremental: true }` and the
+  CLI accepts `--incremental` to skip files whose mtime hasn't changed since
+  last index. File mtimes persisted as JSON in the stats table. On engram's
+  own source (117 TS files): 53ms vs 244ms full init — **78% faster**.
 - **`.engramignore` support** — gitignore-like syntax for excluding directories
   and files from indexing. Loaded from project root.
-- **Memory cache system** (`src/intelligence/cache.ts`) — 3-layer compound
-  savings engine:
+- **Memory cache system** (`src/intelligence/cache.ts`, ~330 LOC) — 3-layer
+  compound savings engine:
   - **Query result cache** — resolved context packets per file, SQLite-backed
     + in-memory LRU (100 entries). Invalidated on file mtime change.
+    Benchmarked at 23μs/op, 99% hit rate under 10k random reads.
   - **Pattern cache** — structural query answers memoized with graph version
     tracking. LRU (50 entries). Auto-invalidates on graph mutation.
   - **Hot file cache** — `warmHotFiles()` pre-loads top-N most-accessed files
     at SessionStart for zero first-hit latency.
-- **9 new HTTP API endpoints** for the upcoming web dashboard:
+  - `engram cache` CLI namespace (stats/clear/warm) — planned for Phase 4.
+- **9 new HTTP API endpoints** serving the dashboard + external integrations:
   - `GET /api/hook-log` — paginated hook log entries
   - `GET /api/hook-log/summary` — aggregated event/tool/decision stats
   - `GET /api/tokens` — cumulative token savings
@@ -35,17 +79,48 @@ All notable changes to engram are documented here. Format based on
   - `GET /api/cache/stats` — cache hit/miss rates, entry counts
   - `GET /api/graph/nodes` — paginated graph nodes
   - `GET /api/graph/god-nodes` — top-connected entities
-  - `GET /api/sse` — Server-Sent Events for real-time updates
+  - `GET /api/sse` — Server-Sent Events, 1s hook-log polling, auto-cleans on
+    disconnect
+  - Load tested at 200 concurrent mixed requests in 295ms (~1.5ms/req).
+
+### Added — Phase 2 (Web Dashboard)
+
+- **Zero-dependency web dashboard at `GET /ui`** — 35KB self-contained
+  HTML/CSS/JS as TypeScript template literals. No external CDNs, no build
+  pipeline, works offline / on air-gapped machines.
+  - Security: CSP meta tag (`default-src 'self'; connect-src 'self'`) + single
+    `esc()` helper at every JS→HTML boundary defends against XSS from
+    attacker-controllable file paths/labels mined from repos.
+  - 6 tabs: Overview, Sessions, Activity (live SSE), Files, Graph (Canvas 2D
+    force-directed, ~200 LOC, handles <500 nodes at 60fps with pan/zoom/click),
+    Providers.
+  - SVG chart library (`ui-components.ts`): donut, stacked bars, sparkline,
+    cache/graph stat blocks. Zero dependencies.
+- **`engram ui` CLI command** — auto-starts the HTTP server if not running
+  (PID file check), opens the default browser to `http://127.0.0.1:7337/ui`.
+  `--no-open` flag for print-only mode.
 
 ### Changed
 
+- `npm run build` now always bundles tree-sitter grammars into `dist/grammars/`
+  (previously only `prepublishOnly` did, which masked the missing-grammar
+  scenario for anyone testing a built `dist/` locally).
+- `--incremental` flag wired into the CLI (previously API-only and undiscoverable).
 - Default skip directories expanded: added `.next`, `.nuxt`, `coverage`,
   `target`, `venv`, `.venv`, `.cache`, `.turbo`, `.output`, `.git`.
 - `extractFile()` now returns `lineCount` from content already parsed,
   eliminating a redundant `readFileSync` per file during extraction.
 - `GraphStore` extended with `runSql()`, `prepare()` (public), and
   `removeNodesForFile()` for incremental mode and cache module.
-- Test count: 579 → 603 (+24 tests: 7 incremental + 17 cache).
+- Test count: 579 → 640 (+61 tests: 7 incremental + 17 cache + 15 API + 6
+  windsurf + 5 rollback + 11 plugin-loader).
+
+### Fixed
+
+- `dist/grammars/` was empty after `npm run build` alone — only populated by
+  `prepublishOnly`. Masked in dev by `grammar-loader.ts` falling back to
+  `node_modules/tree-sitter-*/`, but shipped broken to anyone running `dist/`
+  locally after build. Root cause: tsup's `clean: true` wiped the dir.
 
 ## [1.0.0] — 2026-04-17 — "Protocol"
 

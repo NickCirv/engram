@@ -29,8 +29,8 @@ import { obsidianProvider } from "./obsidian.js";
 import { lspProvider } from "./lsp.js";
 import { readConfig } from "../tuner/config.js";
 
-/** All registered providers in resolution order. */
-const ALL_PROVIDERS: readonly ContextProvider[] = [
+/** Built-in providers (first-party, always available). */
+const BUILTIN_PROVIDERS: readonly ContextProvider[] = [
   astProvider,
   structureProvider,
   mistakesProvider,
@@ -40,6 +40,24 @@ const ALL_PROVIDERS: readonly ContextProvider[] = [
   obsidianProvider,
   lspProvider,
 ];
+
+/** Names of built-in providers. User plugins can't shadow these. */
+const BUILTIN_NAMES = new Set(BUILTIN_PROVIDERS.map((p) => p.name));
+
+/**
+ * Full provider list = built-ins + user plugins (deduped against built-in
+ * names). Loaded lazily via getLoadedPlugins(). Safe: a broken plugin
+ * can never break engram — validation is in plugin-loader.ts.
+ */
+async function getAllProviders(): Promise<readonly ContextProvider[]> {
+  const { getLoadedPlugins } = await import("./plugin-loader.js");
+  const { loaded } = await getLoadedPlugins();
+  const safePlugins = loaded.filter((p) => !BUILTIN_NAMES.has(p.name));
+  return [...BUILTIN_PROVIDERS, ...safePlugins];
+}
+
+/** Back-compat alias — built-ins only. Plugins flow through getAllProviders(). */
+const ALL_PROVIDERS: readonly ContextProvider[] = BUILTIN_PROVIDERS;
 
 /** Maximum total tokens for the assembled rich packet. */
 const TOTAL_TOKEN_BUDGET = 600;
@@ -77,8 +95,17 @@ export async function resolveRichPacket(
 ): Promise<RichPacket | null> {
   const start = Date.now();
 
-  // Filter to enabled + available providers
-  const providers = ALL_PROVIDERS.filter((p) => {
+  // Filter to enabled + available providers.
+  // Use getAllProviders() so installed plugins participate; falls back to
+  // BUILTIN_PROVIDERS silently if plugin loading fails.
+  let allProviders: readonly ContextProvider[];
+  try {
+    allProviders = await getAllProviders();
+  } catch {
+    allProviders = BUILTIN_PROVIDERS;
+  }
+
+  const providers = allProviders.filter((p) => {
     if (enabledProviders && !enabledProviders.includes(p.name)) return false;
     return true;
   });
@@ -129,8 +156,8 @@ export async function resolveRichPacket(
       break;
     }
 
-    // Find the provider's label
-    const provider = ALL_PROVIDERS.find((p) => p.name === result.provider);
+    // Find the provider's label — look up in the full list (built-ins + plugins)
+    const provider = allProviders.find((p) => p.name === result.provider);
     const label = provider?.label ?? result.provider.toUpperCase();
     const cacheTag = result.cached ? ", cached" : "";
 

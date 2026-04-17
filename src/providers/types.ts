@@ -110,6 +110,23 @@ export interface ContextProvider {
   isAvailable(): Promise<boolean>;
 }
 
+/**
+ * Third-party provider plugin. Extends ContextProvider with metadata
+ * so the CLI can list installed plugins and the resolver can tell them
+ * apart from built-ins.
+ *
+ * Plugins live at `~/.engram/plugins/<name>.mjs` and default-export an
+ * object matching this interface.
+ */
+export interface ContextProviderPlugin extends ContextProvider {
+  /** Semver string for compatibility tracking. */
+  readonly version: string;
+  /** One-line description shown by `engram plugin list`. */
+  readonly description?: string;
+  /** Optional author attribution. */
+  readonly author?: string;
+}
+
 /** Provider priority order (highest first). Used when total output exceeds budget. */
 export const PROVIDER_PRIORITY: readonly string[] = [
   "engram:ast",

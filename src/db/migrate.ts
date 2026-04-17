@@ -15,7 +15,34 @@ export interface MigrationResult {
 }
 
 /** Current schema version — bump this when adding new migrations. */
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
+
+export interface RollbackResult {
+  readonly fromVersion: number;
+  readonly toVersion: number;
+  readonly migrationsReverted: number;
+  readonly backedUp: boolean;
+}
+
+/**
+ * Down migrations — reverse of `MIGRATIONS`.
+ * Only migrations that create new tables or columns have a DOWN migration.
+ * No-op migrations (SELECT 1) have no-op rollbacks. Dropping tables is
+ * destructive — we always back up the DB first.
+ *
+ * Callers MUST explicitly request rollback via `rollback()` below; it's never
+ * automatic. Forward migrations are append-only and idempotent.
+ */
+const DOWN_MIGRATIONS: Record<number, string> = {
+  7: `DROP TABLE IF EXISTS query_cache; DROP TABLE IF EXISTS pattern_cache;`,
+  6: `DROP TABLE IF EXISTS engram_config;`,
+  5: `DROP TABLE IF EXISTS provider_cache;`,
+  4: `SELECT 1;`, // hook-log is JSONL, no SQL rollback
+  3: `SELECT 1;`, // skills miner — no schema change
+  2: `SELECT 1;`, // mistake memory — no schema change
+  // 1 → 0 drops the entire schema. We require `engram init` for that.
+  1: `DROP TABLE IF EXISTS stats; DROP TABLE IF EXISTS edges; DROP TABLE IF EXISTS nodes;`,
+};
 
 /**
  * Migration definitions — each runs only once, in order.
@@ -82,6 +109,24 @@ CREATE TABLE IF NOT EXISTS engram_config (
   value TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );`,
+
+  // v2.0.0: Memory cache tables — query_cache + pattern_cache
+  7: `
+CREATE TABLE IF NOT EXISTS query_cache (
+  key TEXT PRIMARY KEY,
+  result TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  file_mtime REAL NOT NULL,
+  created_at INTEGER NOT NULL,
+  hit_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS pattern_cache (
+  pattern TEXT PRIMARY KEY,
+  result TEXT NOT NULL,
+  graph_version INTEGER NOT NULL,
+  hit_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_query_cache_file ON query_cache(file_path);`,
 };
 
 type ExecDb = { exec: (sql: string) => Array<{ values: unknown[][] }> };
@@ -147,4 +192,81 @@ export function runMigrations(db: RunDb, dbPath: string): MigrationResult {
   db.run(`INSERT INTO schema_version (version) VALUES (?)`, [CURRENT_SCHEMA_VERSION]);
 
   return { fromVersion, toVersion: CURRENT_SCHEMA_VERSION, migrationsRun, backedUp };
+}
+
+/**
+ * Revert schema to an earlier version by running DOWN migrations in reverse.
+ *
+ * Always creates a backup at `<dbPath>.bak-v<fromVersion>` before rolling
+ * back — table drops are irreversible and a user may want to inspect the
+ * backup later.
+ *
+ * Throws if targetVersion is out of range. Rollback to version 0 is allowed
+ * and drops the entire schema.
+ */
+export function rollback(
+  db: RunDb,
+  dbPath: string,
+  targetVersion: number
+): RollbackResult {
+  const fromVersion = getSchemaVersion(db as unknown as ExecDb);
+
+  if (targetVersion < 0 || targetVersion > CURRENT_SCHEMA_VERSION) {
+    throw new Error(
+      `Invalid target version ${targetVersion}. Must be 0..${CURRENT_SCHEMA_VERSION}.`
+    );
+  }
+  if (targetVersion > fromVersion) {
+    throw new Error(
+      `Cannot roll back to v${targetVersion}: current is v${fromVersion}. ` +
+        `Use 'engram db migrate' to move forward.`
+    );
+  }
+  if (targetVersion === fromVersion) {
+    return {
+      fromVersion,
+      toVersion: fromVersion,
+      migrationsReverted: 0,
+      backedUp: false,
+    };
+  }
+
+  // Always back up before rolling back
+  let backedUp = false;
+  if (existsSync(dbPath)) {
+    const backupPath = `${dbPath}.bak-v${fromVersion}`;
+    try {
+      copyFileSync(dbPath, backupPath);
+      backedUp = true;
+    } catch {
+      // Backup failed — continue but note it
+    }
+  }
+
+  const dbExec = db as unknown as ExecDb;
+
+  // Run down migrations from current → target, in reverse order
+  let migrationsReverted = 0;
+  for (let v = fromVersion; v > targetVersion; v--) {
+    const sql = DOWN_MIGRATIONS[v];
+    if (sql) {
+      dbExec.exec(sql);
+      migrationsReverted++;
+    }
+  }
+
+  // Persist the new (lower) version
+  if (targetVersion === 0) {
+    dbExec.exec(`DROP TABLE IF EXISTS schema_version`);
+  } else {
+    dbExec.exec(`DELETE FROM schema_version`);
+    db.run(`INSERT INTO schema_version (version) VALUES (?)`, [targetVersion]);
+  }
+
+  return {
+    fromVersion,
+    toVersion: targetVersion,
+    migrationsReverted,
+    backedUp,
+  };
 }

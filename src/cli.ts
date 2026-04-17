@@ -551,6 +551,33 @@ program
     }
   });
 
+// ── Windsurf (Codeium) rules generator ──────────────────────────────────────
+program
+  .command("gen-windsurfrules")
+  .description("Generate .windsurfrules from knowledge graph (Windsurf IDE)")
+  .option("-p, --project <path>", "Project directory", ".")
+  .option("--watch", "Regenerate on graph changes")
+  .action(async (opts: { project: string; watch?: boolean }) => {
+    const { generateWindsurfRules } = await import("./generators/windsurf-rules.js");
+    const result = await generateWindsurfRules(pathResolve(opts.project));
+    console.log(
+      chalk.green(
+        `✅ Generated ${result.filePath} (${result.sections} sections, ${result.nodes} nodes)`
+      )
+    );
+    if (opts.watch) {
+      watchProject(pathResolve(opts.project), {
+        onReindex: async () => {
+          const r = await generateWindsurfRules(opts.project);
+          console.log(chalk.dim(`  ↻ Regenerated .windsurfrules (${r.nodes} nodes)`));
+        },
+        onError: (err) => console.error(chalk.red(err.message)),
+        onReady: () => console.log(chalk.dim("  Watching for changes...")),
+      });
+      await new Promise(() => {}); // Keep alive
+    }
+  });
+
 // ── Sentinel hook commands (v0.3.0) ─────────────────────────────────────────
 
 /**
@@ -1412,6 +1439,284 @@ dbCmd
         if (result.backedUp) {
           console.log(chalk.dim("Backup created."));
         }
+      }
+    } finally {
+      store.close();
+    }
+  });
+
+dbCmd
+  .command("rollback")
+  .description("Roll back to an earlier schema version (DESTRUCTIVE — always backs up first)")
+  .option("-p, --project <path>", "Project directory", ".")
+  .option("--to <version>", "Target schema version (0 drops all tables)")
+  .option("--yes", "Skip confirmation prompt")
+  .action(async (opts: { project: string; to?: string; yes?: boolean }) => {
+    if (opts.to === undefined) {
+      console.error(chalk.red("Required: --to <version>"));
+      console.log(chalk.dim("Run 'engram db status' to see current version."));
+      process.exit(1);
+    }
+    const target = parseInt(opts.to, 10);
+    if (isNaN(target)) {
+      console.error(chalk.red(`Invalid version: ${opts.to}`));
+      process.exit(1);
+    }
+
+    const { getStore } = await import("./core.js");
+    const { rollback, getSchemaVersion } = await import("./db/migrate.js");
+    const store = await getStore(pathResolve(opts.project));
+    try {
+      const dbPath = join(pathResolve(opts.project), ".engram", "graph.db");
+      const current = getSchemaVersion(
+        (store as unknown as { db: Parameters<typeof getSchemaVersion>[0] }).db
+      );
+
+      if (target === current) {
+        console.log(chalk.green(`Already at v${target}.`));
+        return;
+      }
+      if (target > current) {
+        console.error(
+          chalk.red(`Cannot roll back to v${target}: current is v${current}.`)
+        );
+        console.log(chalk.dim("Use 'engram db migrate' to move forward."));
+        process.exit(1);
+      }
+
+      if (!opts.yes) {
+        console.log(
+          chalk.yellow(
+            `⚠  This will roll back from v${current} → v${target}.`
+          )
+        );
+        console.log(
+          chalk.yellow(
+            `   Tables created after v${target} will be DROPPED (data loss).`
+          )
+        );
+        console.log(chalk.dim(`   A backup will be saved to ${dbPath}.bak-v${current}`));
+        console.log(chalk.dim(`   Re-run with --yes to confirm.`));
+        process.exit(1);
+      }
+
+      const result = rollback(
+        (store as unknown as { db: Parameters<typeof rollback>[0] }).db,
+        dbPath,
+        target
+      );
+      store.save();
+      console.log(
+        chalk.green(
+          `✓ Rolled back v${result.fromVersion} → v${result.toVersion} (${result.migrationsReverted} migrations reverted)`
+        )
+      );
+      if (result.backedUp) {
+        console.log(chalk.dim(`  Backup: ${dbPath}.bak-v${result.fromVersion}`));
+      }
+    } finally {
+      store.close();
+    }
+  });
+
+// ── plugin: manage third-party context provider plugins ───────────────────────
+const pluginCmd = program
+  .command("plugin")
+  .description("Manage context provider plugins");
+
+pluginCmd
+  .command("list")
+  .description("List installed provider plugins")
+  .action(async () => {
+    const { loadPlugins, PLUGINS_DIR, ensurePluginsDir } = await import("./providers/plugin-loader.js");
+    ensurePluginsDir();
+    const { loaded, failed } = await loadPlugins();
+
+    if (loaded.length === 0 && failed.length === 0) {
+      console.log(chalk.dim(`No plugins installed.`));
+      console.log(chalk.dim(`Install with: engram plugin install <file.mjs>`));
+      console.log(chalk.dim(`Plugins directory: ${PLUGINS_DIR}`));
+      return;
+    }
+
+    if (loaded.length > 0) {
+      console.log(chalk.bold(`Installed plugins (${loaded.length})`));
+      console.log(chalk.dim("───────────────────────────────────"));
+      for (const p of loaded) {
+        const tierLabel = p.tier === 1 ? "internal" : "external";
+        const descr = p.description ? ` — ${p.description}` : "";
+        console.log(
+          `  ${chalk.green("●")} ${chalk.bold(p.name)} ${chalk.dim(`v${p.version}`)} ` +
+            chalk.dim(`[${tierLabel}, ${p.tokenBudget}tok budget]`)
+        );
+        if (descr) console.log(`    ${chalk.dim(descr.trim())}`);
+      }
+    }
+
+    if (failed.length > 0) {
+      console.log();
+      console.log(chalk.yellow(`Failed to load (${failed.length}):`));
+      for (const f of failed) {
+        console.log(`  ${chalk.red("✗")} ${f.file} ${chalk.dim(`— ${f.reason}`)}`);
+      }
+    }
+  });
+
+pluginCmd
+  .command("install")
+  .description("Install a plugin by copying its .mjs file into ~/.engram/plugins/")
+  .argument("<file>", "Path to plugin .mjs file")
+  .action(async (file: string) => {
+    const { copyFileSync, statSync } = await import("node:fs");
+    const { basename } = await import("node:path");
+    const { PLUGINS_DIR, ensurePluginsDir, validatePlugin } = await import("./providers/plugin-loader.js");
+    const { pathToFileURL } = await import("node:url");
+
+    const absPath = pathResolve(file);
+    if (!existsSync(absPath)) {
+      console.error(chalk.red(`File not found: ${absPath}`));
+      process.exit(1);
+    }
+    if (!statSync(absPath).isFile()) {
+      console.error(chalk.red(`Not a file: ${absPath}`));
+      process.exit(1);
+    }
+    if (!absPath.endsWith(".mjs") && !absPath.endsWith(".js")) {
+      console.error(chalk.red(`Plugin must be .mjs or .js (got ${absPath})`));
+      process.exit(1);
+    }
+
+    // Validate shape before copying — refuse to install a broken plugin
+    try {
+      const mod = (await import(pathToFileURL(absPath).href)) as unknown;
+      const { plugin, reason } = validatePlugin(mod);
+      if (!plugin) {
+        console.error(chalk.red(`Invalid plugin: ${reason}`));
+        process.exit(1);
+      }
+      console.log(
+        chalk.dim(`Validated ${plugin.name} v${plugin.version} (tier ${plugin.tier})`)
+      );
+    } catch (e) {
+      console.error(chalk.red(`Failed to load plugin: ${(e as Error).message}`));
+      process.exit(1);
+    }
+
+    ensurePluginsDir();
+    const destName = basename(absPath);
+    const destPath = join(PLUGINS_DIR, destName);
+    copyFileSync(absPath, destPath);
+    console.log(chalk.green(`✓ Installed: ${destPath}`));
+  });
+
+pluginCmd
+  .command("remove")
+  .description("Remove an installed plugin by filename")
+  .argument("<filename>", "Plugin filename (e.g., my-provider.mjs)")
+  .action(async (filename: string) => {
+    const { PLUGINS_DIR } = await import("./providers/plugin-loader.js");
+    const target = join(PLUGINS_DIR, filename);
+    if (!existsSync(target)) {
+      console.error(chalk.red(`No such plugin: ${filename}`));
+      console.log(chalk.dim(`Plugins directory: ${PLUGINS_DIR}`));
+      process.exit(1);
+    }
+    unlinkSync(target);
+    console.log(chalk.green(`✓ Removed: ${filename}`));
+  });
+
+// ── cache: inspect and manage the context cache ───────────────────────────────
+const cacheCmd = program
+  .command("cache")
+  .description("Inspect and manage the context cache");
+
+cacheCmd
+  .command("stats")
+  .description("Show cache hit rate, entries, and LRU sizes")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (opts: { project: string }) => {
+    const { getStore } = await import("./core.js");
+    const { getContextCache, ContextCache } = await import("./intelligence/cache.js");
+    const store = await getStore(pathResolve(opts.project));
+    try {
+      ContextCache.ensureTables(store);
+      const cache = getContextCache();
+      const s = cache.getStats(store);
+
+      const hitRatePct = (s.hitRate * 100).toFixed(1);
+      const totalOps = s.totalHits + s.totalMisses;
+
+      console.log(chalk.bold("Cache stats"));
+      console.log(chalk.dim("───────────────────────────────────"));
+      console.log(
+        `  ${chalk.dim("Hit rate")}      ${chalk.green(chalk.bold(hitRatePct + "%"))}  ${chalk.dim(
+          `(${s.totalHits} hits / ${totalOps} ops)`
+        )}`
+      );
+      console.log(
+        `  ${chalk.dim("Query cache")}   ${chalk.bold(String(s.queryEntries))} entries, ${chalk.green(
+          String(s.queryHits)
+        )} hits, ${chalk.dim(String(s.queryMisses) + " miss")}`
+      );
+      console.log(
+        `  ${chalk.dim("Pattern cache")} ${chalk.bold(String(s.patternEntries))} entries, ${chalk.green(
+          String(s.patternHits)
+        )} hits, ${chalk.dim(String(s.patternMisses) + " miss")}`
+      );
+      console.log(
+        `  ${chalk.dim("Hot files")}     ${chalk.bold(String(s.hotFileCount))} warmed`
+      );
+    } finally {
+      store.close();
+    }
+  });
+
+cacheCmd
+  .command("clear")
+  .description("Flush all cache layers (query, pattern, hot files)")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (opts: { project: string }) => {
+    const { getStore } = await import("./core.js");
+    const { getContextCache, ContextCache } = await import("./intelligence/cache.js");
+    const store = await getStore(pathResolve(opts.project));
+    try {
+      ContextCache.ensureTables(store);
+      const cache = getContextCache();
+      const before = cache.getStats(store);
+      cache.clearAll(store);
+      store.save();
+      console.log(
+        chalk.green(
+          `✓ Cleared ${before.queryEntries} query entries, ${before.patternEntries} pattern entries`
+        )
+      );
+    } finally {
+      store.close();
+    }
+  });
+
+cacheCmd
+  .command("warm")
+  .description("Pre-warm hot file cache from access frequency (top-N)")
+  .option("-p, --project <path>", "Project directory", ".")
+  .option("-n, --limit <n>", "Number of files to warm", "20")
+  .action(async (opts: { project: string; limit: string }) => {
+    const { getStore } = await import("./core.js");
+    const { getContextCache, ContextCache } = await import("./intelligence/cache.js");
+    const store = await getStore(pathResolve(opts.project));
+    try {
+      ContextCache.ensureTables(store);
+      const cache = getContextCache();
+      const topN = parseInt(opts.limit, 10) || 20;
+      const count = cache.warmHotFiles(store, pathResolve(opts.project), topN);
+      if (count === 0) {
+        console.log(
+          chalk.dim(
+            "No files to warm. Cache is empty — run a few Read-intercepted sessions first."
+          )
+        );
+      } else {
+        console.log(chalk.green(`✓ Warmed ${count} hot file${count === 1 ? "" : "s"} into LRU`));
       }
     } finally {
       store.close();
