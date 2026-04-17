@@ -4,6 +4,38 @@ All notable changes to engram are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] — 2026-04-17 — Windows CI + favicon route
+
+Patch release fixing two issues caught immediately after v2.0.0 shipped.
+
+### Fixed
+
+- **Windows cross-platform bug in the plugin loader.** `PLUGINS_DIR` was a
+  module-load-time constant that baked in `homedir()` at import time. Windows
+  uses `USERPROFILE` while Unix uses `HOME`, and a frozen constant meant any
+  runtime override (tests, future `--plugins-dir` flag, programmatic use)
+  couldn't take effect without a module reload. Windows CI failed on the
+  plugin-loader tests because `process.env.HOME` mutation had no effect.
+  Fixed by introducing `getPluginsDir()` that resolves on every call, and
+  accepting an optional `dir` parameter on `loadPlugins()`,
+  `getLoadedPlugins()`, and `ensurePluginsDir()`. The `PLUGINS_DIR` constant
+  is retained for back-compat but runtime paths now go through the getter.
+- **`/favicon.ico` returning 404 for clients that ignore `<link rel="icon">`.**
+  Added an explicit `GET /favicon.ico` route to the HTTP server that serves
+  a 238-byte inline SVG favicon with `Cache-Control: public, max-age=86400`.
+  The dashboard HTML still inlines the same favicon via `<link>` so modern
+  browsers avoid the request entirely.
+
+### Changed
+
+- Test count: 640 → 641 (+1 for the "plugins directory does not exist"
+  branch of `loadPlugins()`).
+
+### CI
+
+- Verified green on GitHub Actions matrix: Ubuntu + Windows × Node 20 + 22.
+  Commit `7c6001c`.
+
 ## [2.0.0] — 2026-04-17 — "Ecosystem"
 
 The biggest release since v1.0.0. Completes the v2.0 roadmap Phases 1–4:
