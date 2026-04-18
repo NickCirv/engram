@@ -4,6 +4,43 @@ All notable changes to engram are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`engram watch` now prunes graph nodes when watched files are deleted
+  or renamed** ([#9](https://github.com/NickCirv/engram/issues/9),
+  [#12](https://github.com/NickCirv/engram/pull/12)). Previously the
+  watcher only subscribed to `change` events, silently ignoring the
+  `rename` events that `fs.watch` fires for create/unlink across all
+  platforms. Deletions left stale nodes in the graph until the next
+  `engram init`; renames produced duplicate nodes under the old and new
+  `sourceFile` paths. Thanks [@gabiudrescu](https://github.com/gabiudrescu).
+
+### Added
+
+- **`syncFile(absPath, root)`** exported from `src/watcher.ts` — the shared
+  "exists → reindex; gone (and was indexed) → prune" primitive reused by
+  the upcoming `engram reindex` CLI subcommand ([#8](https://github.com/NickCirv/engram/issues/8)).
+  Returns a discriminated `SyncResult` (`indexed` | `pruned` | `skipped`).
+- **`GraphStore.countBySourceFile(relPath)`** — noise-reduction gate so
+  `onDelete` only fires for files the graph actually indexed.
+- **`onDelete` callback on `WatchOptions`** — fires with `(filePath, prunedCount)`
+  when the watcher prunes a deleted file's nodes.
+- **`× <path> pruned (N nodes)`** log line in `engram watch`, distinct from
+  the existing green `↻` reindex line.
+- **`gen-cursor --watch`, `gen-aider --watch`, `gen-windsurfrules --watch`**
+  now regenerate their output files on source-file delete (not just on
+  reindex), so generated artifacts no longer keep stale references to
+  deleted sources.
+
+### Notes
+
+- Directory deletion (`rm -rf src/foo`) is intentionally not handled by the
+  watcher — `fs.watch` fires a single rename event on the directory path
+  with no per-file information. A full `engram init` handles that case
+  today; per-file directory-prefix pruning is tracked for v2.2.
+
 ## [2.0.2] — 2026-04-18 — Security hotfix: HTTP server auth & CORS
 
 **This is a security release. Upgrade immediately if you run `engram server`
