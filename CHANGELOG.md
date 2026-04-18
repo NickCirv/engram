@@ -8,6 +8,18 @@ All notable changes to engram are documented here. Format based on
 
 ### Fixed
 
+- **Windows CI flake on `tests/intercept/stats.test.ts > formatStatsSummary`.**
+  The test intermittently timed out at 5000ms on Windows Node 22 runners.
+  Root cause: `Number.prototype.toLocaleString()` on line 152 of
+  `src/intercept/stats.ts` — first-call ICU init on Windows Node can take
+  multiple seconds in GitHub Actions VMs. Replaced with a locale-independent
+  `formatThousands()` regex helper. Deterministic performance + no
+  locale-dependent output (previously `"2,400"` on en-US but `"2.400"` on
+  de-DE, which would have broken user-facing CLI output on non-en-US
+  shells). Added `vitest.config.ts` with CI-only `retry: 1` +
+  `testTimeout: 15000ms` as defense-in-depth against any other cold-worker
+  flake.
+
 - **`engram watch` now prunes graph nodes when watched files are deleted
   or renamed** ([#9](https://github.com/NickCirv/engram/issues/9),
   [#12](https://github.com/NickCirv/engram/pull/12)). Previously the
