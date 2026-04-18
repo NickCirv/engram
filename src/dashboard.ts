@@ -21,6 +21,7 @@ import {
   summarizeHookLog,
   ESTIMATED_TOKENS_PER_READ_DENY,
 } from "./intercept/stats.js";
+import { formatThousands } from "./graph/render-utils.js";
 import type { HookLogEntry } from "./intelligence/hook-log.js";
 
 const AMBER = chalk.hex("#d97706");
@@ -37,10 +38,14 @@ function bar(pct: number, width: number = 20): string {
   return AMBER("█".repeat(filled)) + DIM("░".repeat(empty));
 }
 
-/** Format number with thousands separator. */
-function fmt(n: number): string {
-  return n.toLocaleString();
-}
+/**
+ * Format number with thousands separator.
+ *
+ * Thin alias over the shared `formatThousands` helper — kept for ergonomics
+ * in the many template literals below where `${fmt(x)}` reads better than
+ * `${formatThousands(x)}`.
+ */
+const fmt = formatThousands;
 
 /** Get top N files by interception count. */
 function topFiles(

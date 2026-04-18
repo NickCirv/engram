@@ -4,7 +4,7 @@
  * Tools: query_graph, god_nodes, graph_stats, shortest_path, benchmark
  */
 import { query, path, godNodes, stats, benchmark, mistakes } from "./core.js";
-import { truncateGraphemeSafe } from "./graph/render-utils.js";
+import { truncateGraphemeSafe, formatThousands } from "./graph/render-utils.js";
 import { MAX_MISTAKE_LABEL_CHARS } from "./graph/query.js";
 
 // ─── Numeric arg coercion ───────────────────────────────────────────────────
@@ -135,8 +135,8 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
     case "benchmark": {
       const b = await benchmark(PROJECT_ROOT);
       return [
-        `Full corpus: ~${b.naiveFullCorpus.toLocaleString()} tokens`,
-        `Avg graph query: ~${b.avgQueryTokens.toLocaleString()} tokens`,
+        `Full corpus: ~${formatThousands(b.naiveFullCorpus)} tokens`,
+        `Avg graph query: ~${formatThousands(b.avgQueryTokens)} tokens`,
         `Reduction vs full corpus: ${b.reductionVsFull}x`,
         `Reduction vs relevant files: ${b.reductionVsRelevant}x`,
         "",

@@ -24,6 +24,7 @@ import {
   mistakes,
 } from "./core.js";
 import { install as installHooks, uninstall as uninstallHooks, status as hooksStatus } from "./hooks.js";
+import { formatThousands } from "./graph/render-utils.js";
 import { autogen } from "./autogen.js";
 import { dispatchHook } from "./intercept/dispatch.js";
 import { watchProject } from "./watcher.js";
@@ -84,7 +85,7 @@ program
         chalk.dim(` (${result.timeMs}ms, 0 tokens used)`)
     );
     console.log(
-      `   ${chalk.bold(String(result.nodes))} nodes, ${chalk.bold(String(result.edges))} edges from ${chalk.bold(String(result.fileCount))} files (${result.totalLines.toLocaleString()} lines)`
+      `   ${chalk.bold(String(result.nodes))} nodes, ${chalk.bold(String(result.edges))} edges from ${chalk.bold(String(result.fileCount))} files (${formatThousands(result.totalLines)} lines)`
     );
     if (result.incremental && result.skippedFiles && result.skippedFiles > 0) {
       console.log(chalk.dim(`   ${result.skippedFiles} unchanged files skipped (incremental mode)`));
@@ -101,7 +102,7 @@ program
         chalk.cyan(`\n📊 Token savings: ${chalk.bold(bench.reductionVsRelevant + "x")} fewer tokens vs relevant files (${bench.reductionVsFull}x vs full corpus)`)
       );
       console.log(
-        chalk.dim(`   Full corpus: ~${bench.naiveFullCorpus.toLocaleString()} tokens | Graph query: ~${bench.avgQueryTokens.toLocaleString()} tokens`)
+        chalk.dim(`   Full corpus: ~${formatThousands(bench.naiveFullCorpus)} tokens | Graph query: ~${formatThousands(bench.avgQueryTokens)} tokens`)
       );
     }
 
@@ -375,8 +376,8 @@ program
 
     if (bench.naiveFullCorpus > 0) {
       console.log(`\n  ${chalk.cyan("Token savings:")}`);
-      console.log(`    Full corpus:   ~${bench.naiveFullCorpus.toLocaleString()} tokens`);
-      console.log(`    Avg query:     ~${bench.avgQueryTokens.toLocaleString()} tokens`);
+      console.log(`    Full corpus:   ~${formatThousands(bench.naiveFullCorpus)} tokens`);
+      console.log(`    Avg query:     ~${formatThousands(bench.avgQueryTokens)} tokens`);
       console.log(`    vs relevant:   ${chalk.bold.cyan(bench.reductionVsRelevant + "x")} fewer tokens`);
       console.log(`    vs full:       ${chalk.bold.cyan(bench.reductionVsFull + "x")} fewer tokens`);
     }
@@ -436,8 +437,8 @@ program
   .action(async (opts: { project: string }) => {
     const result = await benchmark(opts.project);
     console.log(chalk.bold("\n⚡ engram token reduction benchmark\n"));
-    console.log(`  Full corpus:     ~${result.naiveFullCorpus.toLocaleString()} tokens`);
-    console.log(`  Avg graph query: ~${result.avgQueryTokens.toLocaleString()} tokens`);
+    console.log(`  Full corpus:     ~${formatThousands(result.naiveFullCorpus)} tokens`);
+    console.log(`  Avg graph query: ~${formatThousands(result.avgQueryTokens)} tokens`);
     console.log(`  vs relevant:     ${chalk.bold.green(result.reductionVsRelevant + "x")} fewer tokens`);
     console.log(`  vs full corpus:  ${chalk.bold.green(result.reductionVsFull + "x")} fewer tokens\n`);
     for (const pq of result.perQuestion) {

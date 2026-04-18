@@ -8,17 +8,29 @@ All notable changes to engram are documented here. Format based on
 
 ### Fixed
 
-- **Windows CI flake on `tests/intercept/stats.test.ts > formatStatsSummary`.**
-  The test intermittently timed out at 5000ms on Windows Node 22 runners.
-  Root cause: `Number.prototype.toLocaleString()` on line 152 of
-  `src/intercept/stats.ts` — first-call ICU init on Windows Node can take
-  multiple seconds in GitHub Actions VMs. Replaced with a locale-independent
-  `formatThousands()` regex helper. Deterministic performance + no
-  locale-dependent output (previously `"2,400"` on en-US but `"2.400"` on
-  de-DE, which would have broken user-facing CLI output on non-en-US
-  shells). Added `vitest.config.ts` with CI-only `retry: 1` +
-  `testTimeout: 15000ms` as defense-in-depth against any other cold-worker
-  flake.
+- **Locale-independent number formatting across the codebase.** All 10
+  `Number.prototype.toLocaleString()` callsites in `src/cli.ts`,
+  `src/serve.ts`, `src/dashboard.ts`, and `src/intercept/stats.ts` have
+  been migrated to a shared `formatThousands()` helper in
+  `src/graph/render-utils.ts`. Two wins:
+
+  1. **Deterministic performance.** First-call ICU init on Windows Node
+     has been observed to take multiple seconds in GitHub Actions VMs,
+     flaking tests at the 5000ms default timeout (seen on
+     `tests/intercept/stats.test.ts > formatStatsSummary` post-merge on
+     `9f99f5b`). The regex-based helper runs in microseconds with no
+     ICU dependency.
+  2. **Locale independence.** `toLocaleString()` emits `"1,234"` on
+     en-US but `"1.234"` on de-DE and `"1 234"` on fr-FR, giving users
+     running engram in non-US shells inconsistent output. All CLI +
+     MCP server + dashboard numbers now render with commas regardless
+     of system locale.
+
+  Added `tests/render-utils.test.ts > formatThousands` — 6 tests
+  covering single-digit, multi-group, negative, and locale-stable cases.
+  Also added `vitest.config.ts` with CI-only `retry: 1` +
+  `testTimeout: 15000ms` as defense-in-depth against other cold-worker
+  flakes.
 
 - **`engram watch` now prunes graph nodes when watched files are deleted
   or renamed** ([#9](https://github.com/NickCirv/engram/issues/9),

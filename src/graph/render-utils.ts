@@ -50,3 +50,27 @@ export function truncateGraphemeSafe(s: string, max: number): string {
   if (code >= 0xD800 && code <= 0xDBFF) cut--;
   return s.slice(0, cut) + "…";
 }
+
+/**
+ * Format an integer with comma thousands separators. Locale-independent
+ * and deterministic — always emits `"1,234,567"` regardless of system
+ * locale.
+ *
+ * Why not `Number.prototype.toLocaleString()`?
+ *   1. **Performance.** First-call ICU init on Windows Node has been
+ *      observed to take multiple seconds in CI VMs, flaking tests with
+ *      tight (5000ms) timeouts.
+ *   2. **Correctness.** `toLocaleString()` emits `"1,234"` on en-US but
+ *      `"1.234"` on de-DE — users running engram in a non-US locale
+ *      would see inconsistent CLI output, and any test asserting
+ *      `toContain("1,234")` would fail under a CI runner with a
+ *      European locale.
+ *
+ * Handles negative numbers correctly (`-1234 → "-1,234"`) and preserves
+ * the integer portion untouched for inputs that already stringify with
+ * exponents or decimals (the regex only touches contiguous digit runs
+ * anchored by word boundaries).
+ */
+export function formatThousands(n: number): string {
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}

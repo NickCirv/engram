@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sliceGraphemeSafe, truncateGraphemeSafe } from "../src/graph/render-utils.js";
+import { sliceGraphemeSafe, truncateGraphemeSafe, formatThousands } from "../src/graph/render-utils.js";
 
 describe("sliceGraphemeSafe", () => {
   it("returns the string unchanged when it fits", () => {
@@ -97,5 +97,46 @@ describe("truncateGraphemeSafe", () => {
   it("handles empty input", () => {
     expect(truncateGraphemeSafe("", 10)).toBe("");
     expect(truncateGraphemeSafe("", 0)).toBe("");
+  });
+});
+
+describe("formatThousands", () => {
+  it("returns single-digit numbers unchanged", () => {
+    expect(formatThousands(0)).toBe("0");
+    expect(formatThousands(7)).toBe("7");
+  });
+
+  it("returns 2- and 3-digit numbers unchanged", () => {
+    expect(formatThousands(42)).toBe("42");
+    expect(formatThousands(999)).toBe("999");
+  });
+
+  it("inserts a comma at the thousands boundary", () => {
+    expect(formatThousands(1000)).toBe("1,000");
+    expect(formatThousands(1234)).toBe("1,234");
+    expect(formatThousands(9999)).toBe("9,999");
+  });
+
+  it("inserts commas in multi-group numbers", () => {
+    expect(formatThousands(10_000)).toBe("10,000");
+    expect(formatThousands(123_456)).toBe("123,456");
+    expect(formatThousands(1_234_567)).toBe("1,234,567");
+    expect(formatThousands(999_999_999)).toBe("999,999,999");
+  });
+
+  it("handles negative numbers", () => {
+    expect(formatThousands(-1234)).toBe("-1,234");
+    expect(formatThousands(-1_000_000)).toBe("-1,000,000");
+  });
+
+  it("is locale-independent (no difference under a foreign LANG)", () => {
+    // The regex-based formatter uses only `\d` and `\B` with no locale
+    // sensitivity, so output must match on any system locale. This test
+    // doesn't actually change the locale (platform-dependent), but locks
+    // in the expected output so any future migration back to
+    // `toLocaleString` would fail here.
+    expect(formatThousands(1234)).toBe("1,234");
+    expect(formatThousands(1234)).not.toBe("1.234");
+    expect(formatThousands(1234)).not.toBe("1 234");
   });
 });

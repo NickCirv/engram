@@ -7,6 +7,7 @@
  * any I/O.
  */
 import type { HookLogEntry } from "../intelligence/hook-log.js";
+import { formatThousands } from "../graph/render-utils.js";
 
 /**
  * Averaged token estimate per intercepted Read. This is the difference
@@ -15,20 +16,6 @@ import type { HookLogEntry } from "../intelligence/hook-log.js";
  * real hook-log data once measurements are available.
  */
 export const ESTIMATED_TOKENS_PER_READ_DENY = 1200;
-
-/**
- * Locale-independent thousands separator. We explicitly avoid
- * `Number.prototype.toLocaleString()` because:
- *   1. First-call ICU init on Windows Node has been observed to take
- *      multiple seconds, causing the `formatStatsSummary > includes total
- *      invocation count` test to flake at the 5000ms vitest default.
- *   2. Output varies by system locale (`"2,400"` on en-US vs `"2.400"` in
- *      de-DE) — a latent CI-locale footgun for the `toContain("2,400")`
- *      assertion downstream and inconsistent UX for users.
- */
-function formatThousands(n: number): string {
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
 
 /**
  * Fully-computed summary of a hook log span.
