@@ -158,6 +158,20 @@ export class GraphStore {
     }
   }
 
+  countBySourceFile(sourceFile: string): number {
+    const stmt = this.db.prepare(
+      "SELECT COUNT(*) AS n FROM nodes WHERE source_file = ?"
+    );
+    stmt.bind([sourceFile]);
+    let count = 0;
+    if (stmt.step()) {
+      const row = stmt.getAsObject() as { n: number };
+      count = Number(row.n) || 0;
+    }
+    stmt.free();
+    return count;
+  }
+
   bulkUpsert(nodes: GraphNode[], edges: GraphEdge[]): void {
     this.db.run("BEGIN TRANSACTION");
     for (const node of nodes) this.upsertNode(node);

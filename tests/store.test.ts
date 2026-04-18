@@ -237,4 +237,16 @@ describe("GraphStore", () => {
       expect(store.getStat("key")).toBeNull();
     });
   });
+
+  describe("countBySourceFile", () => {
+    it("returns the number of nodes recorded for a given source file", () => {
+      store.upsertNode(makeNode("a", { sourceFile: "src/foo.ts" }));
+      store.upsertNode(makeNode("b", { sourceFile: "src/foo.ts" }));
+      store.upsertNode(makeNode("c", { sourceFile: "src/bar.ts" }));
+
+      expect(store.countBySourceFile("src/foo.ts")).toBe(2);
+      expect(store.countBySourceFile("src/bar.ts")).toBe(1);
+      expect(store.countBySourceFile("src/never-indexed.ts")).toBe(0);
+    });
+  });
 });
