@@ -13,3 +13,6 @@ dist/
 .cursor/
 # Dated benchmark result files (TEMPLATE.csv is tracked for reference)
 bench/results/*.json
+
+# Local planning docs (not published)
+.planning/

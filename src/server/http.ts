@@ -3,8 +3,20 @@
  * Binds to 127.0.0.1 only (local privacy invariant).
  * Default port: 7337.
  *
- * Auth: if ENGRAM_API_TOKEN env var is set, all requests require
- *   Authorization: Bearer <token>. If not set, no auth required.
+ * Auth: fail-closed. Every request except /health and /favicon.ico requires
+ *   either `Authorization: Bearer <token>` or `Cookie: engram_token=<token>`.
+ *   Token is resolved from ENGRAM_API_TOKEN env var, then the persisted
+ *   ~/.engram/http-server.token file (auto-generated on first start, 0600).
+ *
+ * CORS: no wildcard. Default is no CORS headers (same-origin dashboard only).
+ *   Additional origins opt in via ENGRAM_ALLOWED_ORIGINS=a.com,b.com.
+ *
+ * Host/Origin: DNS-rebinding defense — rejects Host headers that aren't
+ *   127.0.0.1|localhost|::1 on the bound port, and Origin values not in the
+ *   same-origin or env allowlist.
+ *
+ * Content-Type: mutations (POST/PUT/DELETE) must be application/json. This
+ *   forces CORS preflight for cross-origin writes as a belt-and-braces check.
  *
  * PID file: <projectRoot>/.engram/http-server.pid — written on start,
  *   removed on shutdown. Checked by component-status.ts for HUD display.
@@ -19,6 +31,14 @@ import { getCumulativeStats } from "../intelligence/token-tracker.js";
 import { getContextCache, ContextCache } from "../intelligence/cache.js";
 import { getComponentStatus } from "../intercept/component-status.js";
 import { buildDashboardHtml } from "./ui.js";
+import {
+  getOrCreateToken,
+  isHostValid,
+  isOriginAllowed,
+  parseCookies,
+  safeEqual,
+  type TokenInfo,
+} from "./auth.js";
 
 // Read version — try both paths (works from src/ in dev and dist/ when built).
 import { createRequire } from "node:module";
@@ -40,6 +60,36 @@ const PROVIDERS = [
 ] as const;
 
 // ---------------------------------------------------------------------------
+// Server-scoped state — resolved once per createHttpServer() call.
+// ---------------------------------------------------------------------------
+
+let serverToken = "";
+let serverPort = 0;
+
+/**
+ * Snapshotted auth token resolved once at server start. Never returns
+ * empty — `createHttpServer` populates `serverToken` from
+ * `getOrCreateToken()` before accepting connections. We deliberately do
+ * NOT re-read `process.env.ENGRAM_API_TOKEN` at request time: a downstream
+ * plugin or test helper that mutates the env var mid-session could silently
+ * downgrade auth, and `getOrCreateToken`'s length gate wouldn't apply.
+ * Tests that need a specific token set the env BEFORE calling
+ * `createHttpServer`.
+ */
+function currentToken(): string {
+  return serverToken;
+}
+
+/**
+ * Build the auth cookie string. Tokens are URL-safe (hex or env-supplied
+ * >=32-char), so no percent-encoding is needed — keeping the cookie value
+ * raw means `parseCookies` round-trips exactly without asymmetric decode.
+ */
+function authCookie(token: string): string {
+  return `engram_token=${token}; HttpOnly; SameSite=Strict; Path=/`;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -53,22 +103,66 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString("utf-8");
 }
 
-function json(res: ServerResponse, status: number, data: unknown): void {
+/**
+ * Build CORS headers for a response. By default emits nothing — same-origin
+ * dashboard doesn't need them. Echoes Origin only when the request's Origin
+ * header is in the allowlist (same-origin or ENGRAM_ALLOWED_ORIGINS).
+ */
+function corsHeaders(req: IncomingMessage): Record<string, string> {
+  const origin = req.headers.origin;
+  if (!origin || !isOriginAllowed(origin, serverPort)) return {};
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Credentials": "true",
+    "Vary": "Origin",
+  };
+}
+
+function json(
+  res: ServerResponse,
+  status: number,
+  data: unknown,
+  extraHeaders: Record<string, string> = {}
+): void {
   res.writeHead(status, {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    ...extraHeaders,
   });
   res.end(JSON.stringify(data));
 }
 
+/**
+ * Fail-closed auth. Accepts `Authorization: Bearer <token>` (CLI/curl) or
+ * `Cookie: engram_token=<token>` (same-origin dashboard). Returns 401 on
+ * miss with no CORS headers so cross-origin attackers learn nothing.
+ */
 function checkAuth(req: IncomingMessage, res: ServerResponse): boolean {
-  const token = process.env.ENGRAM_API_TOKEN;
-  if (!token) return true;
-  const header = req.headers.authorization ?? "";
-  if (header === `Bearer ${token}`) return true;
+  const expected = currentToken();
+
+  const auth = req.headers.authorization ?? "";
+  if (auth.startsWith("Bearer ")) {
+    const presented = auth.slice(7).trim();
+    if (safeEqual(presented, expected)) return true;
+  }
+
+  const cookies = parseCookies(req.headers.cookie);
+  if (cookies.engram_token && safeEqual(cookies.engram_token, expected)) {
+    return true;
+  }
+
   json(res, 401, { error: "Unauthorized" });
+  return false;
+}
+
+/**
+ * Enforce application/json on mutations. Forces CORS preflight for any
+ * cross-origin writer and blocks the text/plain CSRF vector used by the
+ * issue #7 PoC against /learn.
+ */
+function requireJsonContentType(req: IncomingMessage, res: ServerResponse): boolean {
+  const ct = (req.headers["content-type"] ?? "").toLowerCase();
+  if (ct.startsWith("application/json")) return true;
+  json(res, 415, { error: "Content-Type must be application/json" });
   return false;
 }
 
@@ -348,7 +442,7 @@ const sseClients = new Set<ServerResponse>();
 let hookLogWatcher: (() => void) | null = null;
 
 function handleSSE(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   projectRoot: string
 ): void {
@@ -356,7 +450,7 @@ function handleSSE(
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
-    "Access-Control-Allow-Origin": "*",
+    ...corsHeaders(req),
   });
 
   // Send initial keepalive
@@ -429,15 +523,43 @@ function removePid(projectRoot: string): void {
 export function createHttpServer(
   projectRoot: string,
   port: number
-): Promise<void> {
+): Promise<TokenInfo> {
   return new Promise((resolve, reject) => {
     const startedAt = Date.now();
+    const tokenInfo = getOrCreateToken();
+    serverToken = tokenInfo.token;
+    serverPort = port;
 
     const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-      // CORS preflight
+      // 1. Host header validation — reject DNS rebinding and Host spoofing.
+      if (!isHostValid(req.headers.host, port)) {
+        res.writeHead(400);
+        res.end();
+        return;
+      }
+
+      // 2. Origin validation — if the request has an Origin header it must
+      //    be same-origin or in ENGRAM_ALLOWED_ORIGINS. Missing Origin is
+      //    fine (non-browser clients like curl don't send it).
+      const origin = req.headers.origin;
+      if (origin && !isOriginAllowed(origin, port)) {
+        res.writeHead(403);
+        res.end();
+        return;
+      }
+
+      // Set CORS response headers early for allowed origins; writeHead()
+      // calls downstream merge these in automatically.
+      if (origin && isOriginAllowed(origin, port)) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Access-Control-Allow-Credentials", "true");
+        res.setHeader("Vary", "Origin");
+      }
+
+      // 3. CORS preflight — origin check above already rejected foreign
+      //    origins, so any OPTIONS reaching here is same-origin or allowlisted.
       if (req.method === "OPTIONS") {
         res.writeHead(204, {
-          "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
           "Access-Control-Allow-Headers": "Authorization, Content-Type",
         });
@@ -445,15 +567,77 @@ export function createHttpServer(
         return;
       }
 
-      if (!checkAuth(req, res)) return;
-
       const url = parseUrl(req);
       const path = url.pathname;
 
+      // 4. Unauthenticated public routes — /health for monitors, favicon
+      //    for browsers that don't honor <link rel="icon">. Both return no
+      //    sensitive data.
+      if (req.method === "GET" && path === "/health") {
+        handleHealth(req, res, startedAt);
+        return;
+      }
+      if (req.method === "GET" && path === "/favicon.ico") {
+        const svg =
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+          '<rect width="100" height="100" rx="20" fill="#0a0a0b"/>' +
+          '<text x="50" y="62" font-size="56" text-anchor="middle" ' +
+          'fill="#10b981" font-family="Menlo,monospace">&#9670;</text>' +
+          '</svg>';
+        res.writeHead(200, {
+          "Content-Type": "image/svg+xml",
+          "Cache-Control": "public, max-age=86400",
+        });
+        res.end(svg);
+        return;
+      }
+
+      // 4b. Dashboard bootstrap — browsers can't send Authorization headers
+      //     on top-level navigation, so GET /ui?token=<t> exchanges the
+      //     token for an HttpOnly cookie and redirects to clean /ui.
+      //
+      //     Defence-in-depth: gate on Sec-Fetch-Site. Legitimate top-level
+      //     navigation from the CLI-launched browser sends `none` (address
+      //     bar); same-origin reload/link sends `same-origin`. Any
+      //     `cross-site` / `same-site` value means the request came from a
+      //     different origin (img/iframe/link from evil.example) and must
+      //     not be able to probe tokens. Browsers that don't send the header
+      //     fall through to the token-equality check (no regression for
+      //     older clients, tokens remain random 256-bit values).
+      if (req.method === "GET" && (path === "/ui" || path === "/ui/")) {
+        const queryToken = url.searchParams.get("token");
+        if (queryToken) {
+          const fetchSite = req.headers["sec-fetch-site"];
+          const siteOk =
+            fetchSite === undefined ||
+            fetchSite === "none" ||
+            fetchSite === "same-origin";
+          if (siteOk && safeEqual(queryToken, currentToken())) {
+            res.writeHead(302, {
+              Location: "/ui",
+              "Set-Cookie": authCookie(currentToken()),
+              "Referrer-Policy": "no-referrer",
+              "Cache-Control": "no-store",
+              "X-Content-Type-Options": "nosniff",
+            });
+            res.end();
+            return;
+          }
+        }
+      }
+
+      // 5. Auth — every remaining route requires a valid token.
+      if (!checkAuth(req, res)) return;
+
+      // 6. Content-Type enforcement on mutations. Blocks the text/plain
+      //    CSRF vector from issue #7 and forces CORS preflight for any
+      //    cross-origin writer.
+      if (req.method === "POST" || req.method === "PUT" || req.method === "DELETE") {
+        if (!requireJsonContentType(req, res)) return;
+      }
+
       try {
-        if (req.method === "GET" && path === "/health") {
-          handleHealth(req, res, startedAt);
-        } else if (req.method === "GET" && path === "/query") {
+        if (req.method === "GET" && path === "/query") {
           await handleQuery(req, res, projectRoot);
         } else if (req.method === "GET" && path === "/stats") {
           await handleStats(req, res, projectRoot);
@@ -481,26 +665,18 @@ export function createHttpServer(
         } else if (req.method === "GET" && path === "/api/sse") {
           handleSSE(req, res, projectRoot);
         } else if (req.method === "GET" && (path === "/ui" || path === "/ui/")) {
-          // Serve the dashboard SPA
+          // Serve the dashboard SPA + refresh the HttpOnly cookie so
+          // same-origin fetches from the dashboard carry auth automatically.
+          // See also the /ui?token= bootstrap branch above L589 — this path
+          // assumes auth already succeeded (via Bearer header or existing
+          // cookie); the bootstrap branch handles the first-visit case.
           res.writeHead(200, {
             "Content-Type": "text/html; charset=utf-8",
             "Cache-Control": "no-cache",
+            "Set-Cookie": authCookie(currentToken()),
+            "X-Content-Type-Options": "nosniff",
           });
           res.end(buildDashboardHtml());
-        } else if (req.method === "GET" && path === "/favicon.ico") {
-          // Inline SVG favicon (engram diamond on the dark bg). Avoids
-          // 404s from clients that don't honor the <link rel="icon"> tag.
-          const svg =
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
-            '<rect width="100" height="100" rx="20" fill="#0a0a0b"/>' +
-            '<text x="50" y="62" font-size="56" text-anchor="middle" ' +
-            'fill="#10b981" font-family="Menlo,monospace">&#9670;</text>' +
-            '</svg>';
-          res.writeHead(200, {
-            "Content-Type": "image/svg+xml",
-            "Cache-Control": "public, max-age=86400",
-          });
-          res.end(svg);
         } else {
           json(res, 404, { error: "Not found" });
         }
@@ -524,7 +700,7 @@ export function createHttpServer(
       process.on("SIGINT", cleanup);
       process.on("SIGTERM", cleanup);
 
-      resolve();
+      resolve(tokenInfo);
       // Keep the process alive — the Promise resolves once the server is
       // listening, but the server continues running until a signal arrives.
     });

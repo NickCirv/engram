@@ -20,9 +20,25 @@ export async function startHttpServer(
   projectRoot: string,
   port: number = DEFAULT_PORT
 ): Promise<void> {
-  await createHttpServer(projectRoot, port);
-  // Log after bind so port conflicts surface before the message.
-  process.stdout.write(
-    `engram HTTP server listening on http://127.0.0.1:${port}\n`
-  );
+  const tokenInfo = await createHttpServer(projectRoot, port);
+  const url = `http://127.0.0.1:${port}`;
+  process.stdout.write(`engram HTTP server listening on ${url}\n`);
+
+  // Auth banner — tell the user where their token lives so external callers
+  // (curl, scripts) can find it. Browser dashboard auths automatically via
+  // HttpOnly cookie set on GET /ui.
+  if (tokenInfo.source === "env") {
+    process.stderr.write(
+      "engram: auth token from ENGRAM_API_TOKEN env var\n"
+    );
+  } else if (tokenInfo.source === "file") {
+    process.stderr.write(
+      `engram: auth token at ${tokenInfo.path}\n`
+    );
+  } else {
+    process.stderr.write(
+      `engram: auth token generated at ${tokenInfo.path} (0600)\n` +
+      `        curl -H "Authorization: Bearer $(cat ${tokenInfo.path})" ${url}/stats\n`
+    );
+  }
 }

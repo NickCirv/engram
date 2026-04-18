@@ -23,8 +23,12 @@ function freePort(): Promise<number> {
   });
 }
 
+const TEST_TOKEN = "api-endpoints-test-token-abcdef0123456789abcdef0123456789";
+
 async function fetchJson(url: string): Promise<{ status: number; body: unknown }> {
-  const r = await fetch(url);
+  const r = await fetch(url, {
+    headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+  });
   const body = r.headers.get("content-type")?.includes("json")
     ? await r.json()
     : await r.text();
@@ -34,9 +38,9 @@ async function fetchJson(url: string): Promise<{ status: number; body: unknown }
 describe("HTTP API — dashboard endpoints", () => {
   let testDir: string;
   let port: number;
-  let serverPromise: Promise<void>;
 
   beforeAll(async () => {
+    process.env.ENGRAM_API_TOKEN = TEST_TOKEN;
     testDir = join(tmpdir(), `engram-api-${Date.now()}`);
     mkdirSync(join(testDir, "src"), { recursive: true });
     writeFileSync(
@@ -48,8 +52,7 @@ describe("HTTP API — dashboard endpoints", () => {
     port = await freePort();
 
     const { createHttpServer } = await import("../../src/server/http.js");
-    serverPromise = createHttpServer(testDir, port);
-    await serverPromise;
+    await createHttpServer(testDir, port);
 
     // Give the server a moment to fully bind
     await new Promise((r) => setTimeout(r, 50));
@@ -58,6 +61,7 @@ describe("HTTP API — dashboard endpoints", () => {
   afterAll(async () => {
     // Server is kept alive until process exit — test isolation via unique ports
     rmSync(testDir, { recursive: true, force: true });
+    delete process.env.ENGRAM_API_TOKEN;
   });
 
   describe("existing endpoints", () => {
@@ -148,7 +152,9 @@ describe("HTTP API — dashboard endpoints", () => {
 
   describe("dashboard HTML (/ui)", () => {
     it("GET /ui returns valid HTML with security headers", async () => {
-      const r = await fetch(`http://127.0.0.1:${port}/ui`);
+      const r = await fetch(`http://127.0.0.1:${port}/ui`, {
+        headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+      });
       expect(r.status).toBe(200);
       expect(r.headers.get("content-type")).toContain("text/html");
       expect(r.headers.get("cache-control")).toBe("no-cache");
@@ -161,9 +167,29 @@ describe("HTTP API — dashboard endpoints", () => {
     });
 
     it("GET /ui/ (trailing slash) also serves dashboard", async () => {
-      const r = await fetch(`http://127.0.0.1:${port}/ui/`);
+      const r = await fetch(`http://127.0.0.1:${port}/ui/`, {
+        headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+      });
       expect(r.status).toBe(200);
       expect(r.headers.get("content-type")).toContain("text/html");
+    });
+
+    it("GET /ui?token=<t> redirects and sets cookie (browser bootstrap)", async () => {
+      const r = await fetch(`http://127.0.0.1:${port}/ui?token=${TEST_TOKEN}`, {
+        redirect: "manual",
+      });
+      expect(r.status).toBe(302);
+      expect(r.headers.get("location")).toBe("/ui");
+      const sc = r.headers.get("set-cookie") ?? "";
+      expect(sc).toMatch(/engram_token=/);
+      expect(sc).toMatch(/HttpOnly/i);
+    });
+
+    it("GET /ui?token=<wrong> falls through to 401", async () => {
+      const r = await fetch(`http://127.0.0.1:${port}/ui?token=not-the-real-token`, {
+        redirect: "manual",
+      });
+      expect(r.status).toBe(401);
     });
 
     it("buildDashboardHtml produces non-empty string", () => {
@@ -178,12 +204,16 @@ describe("HTTP API — dashboard endpoints", () => {
 
   describe("error handling", () => {
     it("returns 404 for unknown routes", async () => {
-      const r = await fetch(`http://127.0.0.1:${port}/totally-bogus-route`);
+      const r = await fetch(`http://127.0.0.1:${port}/totally-bogus-route`, {
+        headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+      });
       expect(r.status).toBe(404);
     });
 
     it("returns 400 for /query without q parameter", async () => {
-      const r = await fetch(`http://127.0.0.1:${port}/query`);
+      const r = await fetch(`http://127.0.0.1:${port}/query`, {
+        headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+      });
       expect(r.status).toBe(400);
     });
   });

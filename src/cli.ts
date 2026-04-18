@@ -1277,7 +1277,7 @@ program
   .option("--no-open", "Don't launch browser, just print the URL")
   .action(async (opts: { port: string; project: string; open?: boolean }) => {
     const port = parseInt(opts.port, 10);
-    const url = `http://127.0.0.1:${port}/ui`;
+    const publicUrl = `http://127.0.0.1:${port}/ui`;
     const projectRoot = pathResolve(opts.project);
 
     // Check if server already running (PID file check)
@@ -1297,9 +1297,9 @@ program
     }
 
     if (alreadyRunning) {
-      console.log(chalk.dim(`engram server already running — opening ${url}`));
+      console.log(chalk.dim(`engram server already running — opening ${publicUrl}`));
     } else {
-      console.log(chalk.dim(`Starting engram server on ${url}...`));
+      console.log(chalk.dim(`Starting engram server on ${publicUrl}...`));
       // Spawn server as detached background process
       const { spawn } = await import("node:child_process");
       const child = spawn(
@@ -1313,7 +1313,14 @@ program
       await new Promise((r) => setTimeout(r, 500));
     }
 
-    console.log(chalk.green(`✓ Dashboard: ${url}`));
+    // Resolve the server token so we can bootstrap the browser's HttpOnly
+    // cookie via the one-shot /ui?token=<t> redirect. The token is the same
+    // one the server will accept — env var first, then the persisted file.
+    const { getOrCreateToken } = await import("./server/auth.js");
+    const { token } = getOrCreateToken();
+    const bootUrl = `${publicUrl}?token=${encodeURIComponent(token)}`;
+
+    console.log(chalk.green(`✓ Dashboard: ${publicUrl}`));
 
     if (opts.open !== false) {
       const { platform } = process;
@@ -1322,11 +1329,13 @@ program
         platform === "win32" ? "start" : "xdg-open";
       try {
         const { execFile } = await import("node:child_process");
-        execFile(opener, [url], { shell: platform === "win32" }, () => {
+        execFile(opener, [bootUrl], { shell: platform === "win32" }, () => {
           // fire-and-forget — browser launch is best-effort
         });
       } catch {
-        // Couldn't open browser, URL is already printed
+        // Couldn't open browser — print the bootstrap URL so the user
+        // can copy it into their own browser.
+        console.log(chalk.dim(`  Open manually: ${bootUrl}`));
       }
     }
   });

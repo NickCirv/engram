@@ -1,18 +1,20 @@
 /**
- * Tests for the engram HTTP REST server.
- * Starts a real server on a random port in beforeAll, closes in afterAll.
+ * Tests for the engram HTTP REST server — happy-path contract tests.
+ * Auth / CORS / DNS-rebinding / CSRF coverage lives in security.test.ts.
+ *
+ * Starts a real server on a random port in beforeAll. Every route except
+ * /health and /favicon.ico now requires a token; helpers below attach it.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createServer } from "node:http";
-import { resolve as pathResolve, join } from "node:path";
+import { join } from "node:path";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createHttpServer } from "../../src/server/http.js";
 
-// Use a temp project dir so the test doesn't pollute the real graph
 const TEST_PROJECT = mkdtempSync(join(tmpdir(), "engram-http-test-"));
+const TEST_TOKEN = "test-token-abcdef0123456789abcdef0123456789";
 
-/** Pick a free port by binding to :0 then immediately closing. */
 async function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const srv = createServer();
@@ -30,16 +32,27 @@ async function getFreePort(): Promise<number> {
 let port: number;
 let baseUrl: string;
 
-async function get(path: string, headers: Record<string, string> = {}): Promise<{ status: number; body: unknown }> {
-  const res = await fetch(`${baseUrl}${path}`, { headers });
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return { Authorization: `Bearer ${TEST_TOKEN}`, ...extra };
+}
+
+async function get(
+  path: string,
+  headers: Record<string, string> = {}
+): Promise<{ status: number; body: unknown }> {
+  const res = await fetch(`${baseUrl}${path}`, { headers: authHeaders(headers) });
   const body = await res.json();
   return { status: res.status, body };
 }
 
-async function post(path: string, body: unknown, headers: Record<string, string> = {}): Promise<{ status: number; body: unknown }> {
+async function post(
+  path: string,
+  body: unknown,
+  headers: Record<string, string> = {}
+): Promise<{ status: number; body: unknown }> {
   const res = await fetch(`${baseUrl}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: authHeaders({ "Content-Type": "application/json", ...headers }),
     body: JSON.stringify(body),
   });
   const responseBody = await res.json();
@@ -47,31 +60,29 @@ async function post(path: string, body: unknown, headers: Record<string, string>
 }
 
 beforeAll(async () => {
+  process.env.ENGRAM_API_TOKEN = TEST_TOKEN;
   mkdirSync(TEST_PROJECT, { recursive: true });
   port = await getFreePort();
   baseUrl = `http://127.0.0.1:${port}`;
-  // createHttpServer resolves once listening — no await needed on the outer
-  // start since we handle the promise ourselves to avoid blocking the test.
   await createHttpServer(TEST_PROJECT, port);
 });
 
 afterAll(() => {
-  // PID file cleanup — server will be torn down when the process exits.
-  // No explicit server.close() since createHttpServer doesn't expose the handle
-  // (the server lives for the test process lifetime, which vitest controls).
+  delete process.env.ENGRAM_API_TOKEN;
 });
 
 // ---------------------------------------------------------------------------
-// /health
+// /health — unauthenticated on purpose (uptime monitors).
 // ---------------------------------------------------------------------------
 
 describe("GET /health", () => {
-  it("returns 200 with ok:true and version", async () => {
-    const { status, body } = await get("/health");
-    expect(status).toBe(200);
-    expect((body as { ok: boolean }).ok).toBe(true);
-    expect(typeof (body as { version: string }).version).toBe("string");
-    expect(typeof (body as { uptime: number }).uptime).toBe("number");
+  it("returns 200 without a token (public health endpoint)", async () => {
+    const res = await fetch(`${baseUrl}/health`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean; version: string; uptime: number };
+    expect(body.ok).toBe(true);
+    expect(typeof body.version).toBe("string");
+    expect(typeof body.uptime).toBe("number");
   });
 });
 
@@ -143,41 +154,10 @@ describe("POST /learn", () => {
   it("returns 400 for malformed JSON", async () => {
     const res = await fetch(`${baseUrl}/learn`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: "not-json",
     });
     expect(res.status).toBe(400);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
-
-describe("Auth (ENGRAM_API_TOKEN)", () => {
-  const TOKEN = "test-secret-token-xyz";
-
-  beforeAll(() => {
-    process.env.ENGRAM_API_TOKEN = TOKEN;
-  });
-
-  afterAll(() => {
-    delete process.env.ENGRAM_API_TOKEN;
-  });
-
-  it("returns 401 when token is not provided", async () => {
-    const { status } = await get("/health");
-    expect(status).toBe(401);
-  });
-
-  it("returns 200 when correct Bearer token is provided", async () => {
-    const { status } = await get("/health", { Authorization: `Bearer ${TOKEN}` });
-    expect(status).toBe(200);
-  });
-
-  it("returns 401 when wrong token is provided", async () => {
-    const { status } = await get("/health", { Authorization: "Bearer wrong-token" });
-    expect(status).toBe(401);
   });
 });
 
