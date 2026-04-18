@@ -57,6 +57,45 @@ All notable changes to engram are documented here. Format based on
   now regenerate their output files on source-file delete (not just on
   reindex), so generated artifacts no longer keep stale references to
   deleted sources.
+- **`engram reindex <file>` CLI subcommand**
+  ([#8](https://github.com/NickCirv/engram/issues/8)) — re-indexes a
+  single file into the knowledge graph. The missing primitive for per-
+  edit freshness: Claude Code PostToolUse hooks, editor plugins, and CI
+  can now keep the graph in sync without running a long-lived watcher.
+  Reuses `syncFile()` so semantics match `engram watch`: exists →
+  reindex; missing-but-previously-indexed → prune; unsupported ext or
+  ignored directory → silent exit 0 (safe to fire on every edit). On
+  success prints a single line `engram: reindexed <file> (<N> nodes)`
+  (or `pruned`) using locale-stable `formatThousands`. `--verbose`
+  surfaces stack traces; default error output is a single stderr line.
+  Missing graph exits 1 with `engram: no graph found at <root>. Run
+  'engram init' first.`, matching `engram watch`.
+- **`formatReindexLine(result, displayPath)`** exported from
+  `src/watcher.ts` — pure formatter shared by the new subcommand. Returns
+  `null` for skipped results so callers stay silent.
+- **`engram reindex-hook` subcommand + `engram install-hook --auto-reindex`**
+  ([#8](https://github.com/NickCirv/engram/issues/8), opt-in auto-wire).
+  `reindex-hook` reads Claude Code's PostToolUse payload from stdin and
+  re-indexes `tool_input.file_path` via the shared `syncFile()` primitive.
+  Contract: ALWAYS exits 0 — malformed JSON, missing fields, non-project
+  `cwd`, and all internal errors resolve to a silent no-op so the hook
+  can never fail Claude Code's tool cycle. `install-hook --auto-reindex`
+  appends a second PostToolUse entry with matcher `Edit|Write|MultiEdit`
+  calling `engram reindex-hook`; off by default so existing users aren't
+  surprised. The new entry is recognized by `isEngramHookEntry()` so
+  `engram uninstall-hook` strips it alongside the primary intercept
+  entries. Idempotent — reinstalling with `--auto-reindex` is a no-op
+  when the entry already exists.
+- **`runReindexHook(payload)`** exported from `src/watcher.ts` — the
+  pure async handler behind the `reindex-hook` subcommand. Validates
+  payload shape, resolves project root from `cwd`, delegates to
+  `syncFile`. Swallows every error.
+- **`buildReindexHookEntry()` + `ENGRAM_REINDEX_HOOK_MATCHER`
+  (`"Edit|Write|MultiEdit"`) + `DEFAULT_ENGRAM_REINDEX_HOOK_COMMAND`
+  (`"engram reindex-hook"`)** exported from `src/intercept/installer.ts`
+  — the data primitives for the optional entry. Added
+  `InstallOptions.autoReindex` and `InstallResult.autoReindexAdded` to
+  thread the opt-in through the existing installer surface.
 
 ### Notes
 

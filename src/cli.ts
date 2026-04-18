@@ -27,7 +27,12 @@ import { install as installHooks, uninstall as uninstallHooks, status as hooksSt
 import { formatThousands } from "./graph/render-utils.js";
 import { autogen } from "./autogen.js";
 import { dispatchHook } from "./intercept/dispatch.js";
-import { watchProject } from "./watcher.js";
+import {
+  watchProject,
+  syncFile,
+  formatReindexLine,
+  runReindexHook,
+} from "./watcher.js";
 import { startDashboard } from "./dashboard.js";
 import { handleCursorBeforeReadFile } from "./intercept/cursor-adapter.js";
 import {
@@ -196,6 +201,105 @@ program
 
     // Prevent the process from exiting
     await new Promise(() => {});
+  });
+
+/**
+ * engram reindex <file> — re-index a single file into the knowledge
+ * graph. Primitive for per-edit freshness via Claude Code PostToolUse
+ * hooks, editor plugins, or CI ([#8](https://github.com/NickCirv/engram/issues/8)).
+ *
+ * Shares `syncFile()` with `engram watch`, so semantics match: exists
+ * → reindex; missing-but-previously-indexed → prune; unsupported ext or
+ * ignored dir → silent skip. Silent skips keep stdout/stderr clean so
+ * the command is safe to fire on every edit from a hook.
+ */
+program
+  .command("reindex")
+  .description("Re-index a single file into the knowledge graph")
+  .argument("<file>", "File path (absolute or relative to --project)")
+  .option("-p, --project <path>", "Project directory", ".")
+  .option("--verbose", "Print stack traces on error", false)
+  .action(
+    async (file: string, opts: { project: string; verbose: boolean }) => {
+      const root = pathResolve(opts.project);
+      if (!existsSync(join(root, ".engram", "graph.db"))) {
+        console.error(
+          `engram: no graph found at ${root}. Run 'engram init' first.`
+        );
+        process.exit(1);
+      }
+      const absFile = pathResolve(root, file);
+      try {
+        const result = await syncFile(absFile, root);
+        const line = formatReindexLine(result, file);
+        if (line !== null) console.log(line);
+        process.exitCode = 0;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`engram: ${msg}`);
+        if (opts.verbose && err instanceof Error && err.stack) {
+          console.error(err.stack);
+        }
+        process.exit(1);
+      }
+    }
+  );
+
+/**
+ * engram reindex-hook — PostToolUse hook entry point for the optional
+ * auto-reindex wiring ([#8](https://github.com/NickCirv/engram/issues/8)).
+ * Reads Claude Code's JSON payload from stdin, extracts
+ * `tool_input.file_path`, and delegates to `syncFile` (via
+ * `runReindexHook`). ALWAYS exits 0 — never blocks the hook.
+ *
+ * Shape contract matches `engram intercept`: bounded stdin read with a
+ * 3s watchdog, swallows parse errors, and sets `process.exitCode = 0`
+ * without calling `process.exit` so sql.js's WASM handle can drain
+ * cleanly (see the note on `intercept`).
+ */
+program
+  .command("reindex-hook")
+  .description(
+    "PostToolUse hook entry point: reads JSON from stdin, reindexes tool_input.file_path (always exits 0)"
+  )
+  .action(async () => {
+    const stdinTimeout = setTimeout(() => {
+      process.exit(0);
+    }, 3000);
+    stdinTimeout.unref();
+
+    let input = "";
+    let stdinFailed = false;
+    try {
+      for await (const chunk of process.stdin) {
+        input += chunk;
+        if (input.length > 1_000_000) break;
+      }
+    } catch {
+      stdinFailed = true;
+    }
+    clearTimeout(stdinTimeout);
+
+    if (stdinFailed || !input.trim()) {
+      process.exitCode = 0;
+      return;
+    }
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(input);
+    } catch {
+      process.exitCode = 0;
+      return;
+    }
+
+    try {
+      await runReindexHook(payload);
+    } catch {
+      // runReindexHook already swallows errors; this is belt-and-braces.
+    }
+
+    process.exitCode = 0;
   });
 
 program
@@ -765,11 +869,17 @@ program
   .option("--scope <scope>", "local | project | user", "local")
   .option("--dry-run", "Show diff without writing", false)
   .option("-p, --project <path>", "Project directory", ".")
+  .option(
+    "--auto-reindex",
+    "Also register a PostToolUse Edit|Write|MultiEdit entry calling 'engram reindex-hook' (keeps graph fresh after every edit, #8)",
+    false
+  )
   .action(
     async (opts: {
       scope: string;
       dryRun: boolean;
       project: string;
+      autoReindex: boolean;
     }) => {
       const settingsPath = resolveSettingsPath(opts.scope, opts.project);
       if (!settingsPath) {
@@ -802,14 +912,25 @@ program
         }
       }
 
-      const result = installEngramHooks(existing);
+      const result = installEngramHooks(existing, undefined, {
+        autoReindex: opts.autoReindex,
+      });
 
       console.log(
         chalk.bold(`\n📌 engram install-hook (scope: ${opts.scope})`)
       );
       console.log(chalk.dim(`   Target: ${settingsPath}`));
+      if (opts.autoReindex) {
+        console.log(
+          chalk.dim("   Auto-reindex: enabled (engram reindex-hook)")
+        );
+      }
 
-      if (result.added.length === 0 && !result.statusLineAdded) {
+      if (
+        result.added.length === 0 &&
+        !result.statusLineAdded &&
+        !result.autoReindexAdded
+      ) {
         console.log(
           chalk.yellow(
             `\n   All engram hooks already installed (${result.alreadyPresent.join(", ")}).`
@@ -867,6 +988,13 @@ program
       if (result.statusLineAdded) {
         console.log(
           chalk.green("   ✅ StatusLine: engram hud-label (HUD visible in Claude Code)")
+        );
+      }
+      if (result.autoReindexAdded) {
+        console.log(
+          chalk.green(
+            "   ✅ PostToolUse: engram reindex-hook (matcher: Edit|Write|MultiEdit)"
+          )
         );
       }
       if (result.alreadyPresent.length > 0) {

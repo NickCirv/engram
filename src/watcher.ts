@@ -19,6 +19,8 @@ import { resolve, relative, extname, join, sep } from "node:path";
 import { extractFile } from "./miners/ast-miner.js";
 import { toPosixPath } from "./graph/path-utils.js";
 import { getStore, getDbPath } from "./core.js";
+import { formatThousands } from "./graph/render-utils.js";
+import { findProjectRoot, isValidCwd } from "./intercept/context.js";
 
 /** Extensions the AST miner can handle. */
 const WATCHABLE_EXTENSIONS = new Set([
@@ -99,6 +101,64 @@ export async function syncFile(
     return { action: "indexed", count: nodes.length };
   } finally {
     store.close();
+  }
+}
+
+/**
+ * Format the CLI output line for a `SyncResult`. Returns `null` for
+ * skipped results so the caller can stay silent (AC 4 in #8 — safe to
+ * fire as a PostToolUse hook on every edit without producing noise).
+ */
+export function formatReindexLine(
+  result: SyncResult,
+  displayPath: string
+): string | null {
+  if (result.action === "indexed") {
+    return `engram: reindexed ${displayPath} (${formatThousands(result.count)} nodes)`;
+  }
+  if (result.action === "pruned") {
+    return `engram: pruned ${displayPath} (${formatThousands(result.count)} nodes)`;
+  }
+  return null;
+}
+
+/**
+ * Run the optional auto-reindex PostToolUse hook: parse a Claude Code
+ * payload, resolve the project root from `cwd`, and sync the file at
+ * `tool_input.file_path`. Never throws — every error path resolves to
+ * a silent no-op so the hook can never fail Claude Code's tool cycle
+ * (maintainer's contract on #8).
+ *
+ * Accepts `unknown` because stdin has not yet been validated. Returns
+ * nothing; the effect is a graph mutation (or no-op).
+ */
+export async function runReindexHook(payload: unknown): Promise<void> {
+  try {
+    if (payload === null || typeof payload !== "object") return;
+    const p = payload as {
+      cwd?: unknown;
+      tool_input?: unknown;
+    };
+
+    const cwd = p.cwd;
+    if (typeof cwd !== "string" || !isValidCwd(cwd)) return;
+
+    const toolInput = p.tool_input;
+    if (toolInput === null || typeof toolInput !== "object") return;
+    const filePath = (toolInput as Record<string, unknown>).file_path;
+    if (typeof filePath !== "string" || filePath.length === 0) return;
+
+    // Resolve the file against cwd when it's relative, then walk UP from
+    // the file's location — not cwd. A Claude Code session cwd may sit
+    // above (or beside) the engram-initialized project that owns the
+    // edited file (e.g. multi-project parent, monorepo subtree).
+    const absPath = resolve(cwd, filePath);
+    const projectRoot = findProjectRoot(absPath);
+    if (projectRoot === null) return;
+
+    await syncFile(absPath, projectRoot);
+  } catch {
+    // Swallow everything — a hook is never allowed to fail.
   }
 }
 

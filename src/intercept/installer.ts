@@ -44,6 +44,20 @@ export const ENGRAM_PRETOOL_MATCHER = "Read|Edit|Write|Bash";
 export const DEFAULT_ENGRAM_COMMAND = "engram intercept";
 
 /**
+ * Matcher for the optional auto-reindex PostToolUse entry installed by
+ * `engram install-hook --auto-reindex` (#8). Broader than the issue's
+ * initial `Edit|Write` because MultiEdit also produces file writes.
+ */
+export const ENGRAM_REINDEX_HOOK_MATCHER = "Edit|Write|MultiEdit";
+
+/**
+ * Default command for the optional auto-reindex PostToolUse entry.
+ * Reads Claude Code's PostToolUse payload from stdin and re-indexes
+ * `tool_input.file_path`. Always exits 0 — never blocks a hook.
+ */
+export const DEFAULT_ENGRAM_REINDEX_HOOK_COMMAND = "engram reindex-hook";
+
+/**
  * Default per-invocation timeout in seconds. Kept short (5s) because
  * the Sentinel handlers should complete in well under 500ms each;
  * anything slower is a bug and the hook should fall through rather
@@ -129,6 +143,24 @@ export function buildEngramHookEntries(
 }
 
 /**
+ * Build the optional auto-reindex PostToolUse entry (#8). Off by default
+ * when `engram install-hook` runs; added when the user passes
+ * `--auto-reindex` so existing installs aren't disturbed.
+ *
+ * Recognized by `isEngramHookEntry()` so `engram uninstall-hook` strips
+ * it alongside the primary `engram intercept` entries.
+ */
+export function buildReindexHookEntry(
+  command: string = DEFAULT_ENGRAM_REINDEX_HOOK_COMMAND,
+  timeout: number = DEFAULT_HOOK_TIMEOUT_SEC
+): HookEntry {
+  return {
+    matcher: ENGRAM_REINDEX_HOOK_MATCHER,
+    hooks: [{ type: "command", command, timeout }],
+  };
+}
+
+/**
  * Check whether a hook entry is engram-owned (based on command string
  * inspection). Used to detect existing installs and target uninstalls.
  */
@@ -139,7 +171,11 @@ export function isEngramHookEntry(entry: unknown): entry is HookEntry {
   for (const h of e.hooks) {
     if (h === null || typeof h !== "object") continue;
     const cmd = (h as HookCommand).command;
-    if (typeof cmd === "string" && cmd.includes("engram intercept")) {
+    if (typeof cmd !== "string") continue;
+    if (
+      cmd.includes("engram intercept") ||
+      cmd.includes("engram reindex-hook")
+    ) {
       return true;
     }
   }
@@ -158,6 +194,21 @@ export interface InstallResult {
   readonly alreadyPresent: readonly EngramHookEvent[];
   /** Whether a statusLine entry was added for `engram hud-label`. */
   readonly statusLineAdded: boolean;
+  /**
+   * Whether the optional `engram reindex-hook` PostToolUse entry was
+   * added this run (#8, opt-in via `--auto-reindex`). `false` when the
+   * option was disabled OR when the entry was already present.
+   */
+  readonly autoReindexAdded: boolean;
+}
+
+/** Options for `installEngramHooks`. */
+export interface InstallOptions {
+  /**
+   * Also register the optional `engram reindex-hook` PostToolUse entry
+   * (#8). Off by default so existing users aren't surprised.
+   */
+  readonly autoReindex?: boolean;
 }
 
 /**
@@ -169,7 +220,8 @@ export interface InstallResult {
  */
 export function installEngramHooks(
   settings: ClaudeCodeSettings,
-  command: string = DEFAULT_ENGRAM_COMMAND
+  command: string = DEFAULT_ENGRAM_COMMAND,
+  options: InstallOptions = {}
 ): InstallResult {
   const entries = buildEngramHookEntries(command);
   const added: EngramHookEvent[] = [];
@@ -186,14 +238,34 @@ export function installEngramHooks(
 
   for (const event of ENGRAM_HOOK_EVENTS) {
     const eventArr = hooksClone[event] ?? [];
-    const hasEngram = eventArr.some((e) => isEngramHookEntry(e));
-    if (hasEngram) {
+    // Idempotence check targets the PRIMARY intercept entry specifically.
+    // Using `isEngramHookEntry` here would false-positive once the
+    // opt-in reindex-hook entry lands, causing install to skip adding
+    // the missing intercept entry.
+    const hasIntercept = eventArr.some((e) =>
+      entryContainsCommand(e, "engram intercept")
+    );
+    if (hasIntercept) {
       alreadyPresent.push(event);
       hooksClone[event] = eventArr;
       continue;
     }
     hooksClone[event] = [...eventArr, entries[event]];
     added.push(event);
+  }
+
+  // Optional auto-reindex entry — appended as a SECOND PostToolUse entry
+  // so it's orthogonal to the observer. Idempotent.
+  let autoReindexAdded = false;
+  if (options.autoReindex) {
+    const postToolArr = hooksClone.PostToolUse ?? [];
+    const hasReindexHook = postToolArr.some((e) =>
+      entryContainsCommand(e, "engram reindex-hook")
+    );
+    if (!hasReindexHook) {
+      hooksClone.PostToolUse = [...postToolArr, buildReindexHookEntry()];
+      autoReindexAdded = true;
+    }
   }
 
   // StatusLine: set `engram hud-label` only if no statusLine is configured.
@@ -215,7 +287,24 @@ export function installEngramHooks(
     added,
     alreadyPresent,
     statusLineAdded,
+    autoReindexAdded,
   };
+}
+
+/**
+ * True when any of the entry's commands contains the given substring.
+ * Used for targeted idempotence checks in `installEngramHooks` — each
+ * engram-owned entry has a distinguishing command, so substring match
+ * is sufficient.
+ */
+function entryContainsCommand(entry: HookEntry, substring: string): boolean {
+  if (!Array.isArray(entry.hooks)) return false;
+  for (const h of entry.hooks) {
+    if (h === null || typeof h !== "object") continue;
+    const cmd = (h as HookCommand).command;
+    if (typeof cmd === "string" && cmd.includes(substring)) return true;
+  }
+  return false;
 }
 
 /**
