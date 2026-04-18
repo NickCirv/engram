@@ -171,6 +171,13 @@ program
             chalk.dim(` (${nodeCount} nodes)`)
         );
       },
+      onDelete: (filePath, prunedCount) => {
+        console.log(
+          chalk.yellow("  × ") +
+            chalk.white(filePath) +
+            chalk.dim(` pruned (${prunedCount} nodes)`)
+        );
+      },
       onError: (err) => {
         console.error(chalk.red("  ✗ ") + err.message);
       },
@@ -502,6 +509,10 @@ program
           const r = await generateCursorMdc(opts.project);
           console.log(chalk.dim(`  ↻ Regenerated MDC (${r.nodes} nodes)`));
         },
+        onDelete: async () => {
+          const r = await generateCursorMdc(opts.project);
+          console.log(chalk.dim(`  × Regenerated MDC (${r.nodes} nodes)`));
+        },
         onError: (err) => console.error(chalk.red(err.message)),
         onReady: () => console.log(chalk.dim("  Watching for changes...")),
       });
@@ -544,6 +555,10 @@ program
           const r = await generateAiderContext(opts.project);
           console.log(chalk.dim(`  ↻ Regenerated .aider-context.md (${r.nodes} nodes)`));
         },
+        onDelete: async () => {
+          const r = await generateAiderContext(opts.project);
+          console.log(chalk.dim(`  × Regenerated .aider-context.md (${r.nodes} nodes)`));
+        },
         onError: (err) => console.error(chalk.red(err.message)),
         onReady: () => console.log(chalk.dim("  Watching for changes...")),
       });
@@ -570,6 +585,10 @@ program
         onReindex: async () => {
           const r = await generateWindsurfRules(opts.project);
           console.log(chalk.dim(`  ↻ Regenerated .windsurfrules (${r.nodes} nodes)`));
+        },
+        onDelete: async () => {
+          const r = await generateWindsurfRules(opts.project);
+          console.log(chalk.dim(`  × Regenerated .windsurfrules (${r.nodes} nodes)`));
         },
         onError: (err) => console.error(chalk.red(err.message)),
         onReady: () => console.log(chalk.dim("  Watching for changes...")),
