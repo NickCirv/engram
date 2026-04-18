@@ -1,6 +1,6 @@
 {
   "name": "engramx",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "The context spine for AI coding agents. 8 providers + pluggable context sources, 3-layer memory cache, web dashboard, multi-IDE support (Claude Code, Cursor, Continue, Zed, Aider, Windsurf, Neovim, Emacs). 88.1% measured session-level token savings. Local SQLite, zero native deps, zero cloud.",
   "repository": {
     "type": "git",

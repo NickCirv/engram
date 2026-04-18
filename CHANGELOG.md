@@ -4,6 +4,93 @@ All notable changes to engram are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] — 2026-04-18 — Security hotfix: HTTP server auth & CORS
+
+**This is a security release. Upgrade immediately if you run `engram server`
+or `engram ui`.** Credit: [@gabiudrescu](https://github.com/gabiudrescu) for
+responsible disclosure ([#7](https://github.com/NickCirv/engram/issues/7)).
+
+### Security — fixed
+
+- **Graph exfiltration + persistent prompt injection via cross-origin browser
+  tabs.** The HTTP server previously shipped with `Access-Control-Allow-Origin: *`
+  on every response and defaulted to no authentication. A malicious page the
+  developer visited could `fetch('http://127.0.0.1:7337/query')` to steal the
+  local graph, then `POST /learn` (with `Content-Type: text/plain`, a
+  CORS-safelisted content type) to persist `bug:` / `fix:` patterns that the
+  v2 Sentinel handlers later re-injected into the user's coding agent on
+  SessionStart and on every Edit/Write of the named file. Severity: High —
+  confidentiality + persistent indirect prompt injection.
+
+  **Fix (four stacked defenses):**
+  1. **Fail-closed auth.** Every route except `/health` and `/favicon.ico`
+     now requires `Authorization: Bearer <token>` or an HttpOnly
+     `engram_token` cookie. A random 64-character token is auto-generated
+     on first server start and persisted to `~/.engram/http-server.token`
+     with mode `0600`. `ENGRAM_API_TOKEN` env var still overrides.
+  2. **No wildcard CORS.** `Access-Control-Allow-Origin: *` has been removed
+     from every response. By default no CORS headers are emitted — the
+     dashboard is same-origin. Additional origins opt in via
+     `ENGRAM_ALLOWED_ORIGINS=a.com,b.com`.
+  3. **Host + Origin validation** (DNS-rebinding defense). Requests with a
+     `Host` header other than `127.0.0.1|localhost|::1` on the bound port
+     return 400. Requests with an `Origin` not in the same-origin or env
+     allowlist return 403.
+  4. **`Content-Type: application/json` enforced on mutations.** POST / PUT /
+     DELETE without `application/json` return 415. This blocks the
+     `text/plain` CSRF vector from the PoC and forces CORS preflight for
+     any cross-origin writer.
+
+- **Timing side-channel on token comparison.** The previous
+  `header === \`Bearer ${token}\`` comparison was not constant-time.
+  Replaced with a length-first, constant-time `safeEqual()`.
+
+### Added
+
+- `src/server/auth.ts` — token management (get-or-create, safeEqual, cookie
+  parsing, Host/Origin validators).
+- `tests/server/security.test.ts` — PoC-style tests covering fail-closed
+  auth (including empty Bearer / empty cookie guards), env-downgrade
+  rejection (token is snapshot at start), cookie auth, wildcard-CORS
+  absence, same-origin echo, foreign-origin 403, Host header validation
+  (including no-port rejection + case-insensitive hostname), `text/plain`
+  rejection on `/learn`, the `/ui?token=` cross-site oracle defence via
+  `Sec-Fetch-Site` gating, and the end-to-end exploit chain from #7.
+- `SECURITY.md` at repo root with disclosure policy and scope.
+- `GET /ui?token=<t>` bootstrap path for the browser dashboard. The CLI
+  passes the token once; the server exchanges it for an HttpOnly cookie via
+  a 302 redirect and strips the token from the URL. Dashboard JS never sees
+  the raw token.
+
+### Changed
+
+- `createHttpServer(projectRoot, port)` now resolves to `Promise<TokenInfo>`
+  (previously `Promise<void>`). The returned object exposes the token source
+  (env / file / generated) and the token file path. The CLI uses this to
+  print a one-time banner pointing users at `~/.engram/http-server.token`
+  when a fresh token is minted.
+- `checkAuth` rewritten as fail-closed, accepts Bearer header OR
+  `engram_token` cookie, uses constant-time comparison.
+- Server-Sent Events endpoint (`/api/sse`) no longer emits wildcard CORS and
+  inherits the same origin-allowlist behavior as every other route.
+
+### Breaking
+
+- **External callers (curl, scripts, CI probes) must now send the token.**
+  Fix the one-liner on each caller:
+  ```bash
+  curl -H "Authorization: Bearer $(cat ~/.engram/http-server.token)" \
+       http://127.0.0.1:7337/stats
+  ```
+- Requests with `Host: something-else.com` are rejected 400 even if they
+  resolve to 127.0.0.1 locally. DNS rebinding defense — intended behavior.
+- Cross-origin requests (`Origin: https://example.com`) are rejected 403
+  unless the origin is in `ENGRAM_ALLOWED_ORIGINS`. No legitimate caller
+  should be affected.
+- `/ui` navigation from the browser now requires `?token=<t>` on first visit
+  (set automatically when you run `engram ui`) or a pre-existing
+  `engram_token` cookie.
+
 ## [2.0.1] — 2026-04-17 — Windows CI + favicon route
 
 Patch release fixing two issues caught immediately after v2.0.0 shipped.
