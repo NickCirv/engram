@@ -9,13 +9,14 @@
  * network calls. Safe to run on every SessionStart or in CI.
  */
 import chalk from "chalk";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { homedir, platform, release } from "node:os";
 import {
   refreshComponentStatus,
   type ComponentHealth,
 } from "../intercept/component-status.js";
+import { cachePath, isNewer } from "../update/check.js";
 
 /** Severity buckets. */
 export type Severity = "ok" | "warn" | "fail";
@@ -78,7 +79,6 @@ function checkHook(projectRoot: string): DoctorCheck {
   for (const path of candidates) {
     if (!existsSync(path)) continue;
     try {
-      const { readFileSync } = require("node:fs") as typeof import("node:fs");
       const content = readFileSync(path, "utf-8");
       if (content.includes("engram intercept")) {
         return {
@@ -128,7 +128,6 @@ function componentToCheck(c: ComponentHealth): DoctorCheck {
 /** Check engram CLI version against the last cached registry check. */
 function checkVersion(engramVersion: string): DoctorCheck {
   try {
-    const { cachePath } = require("../update/check.js") as typeof import("../update/check.js");
     const path = cachePath();
     if (!existsSync(path)) {
       return {
@@ -137,20 +136,20 @@ function checkVersion(engramVersion: string): DoctorCheck {
         detail: `engram v${engramVersion} (no update check cached yet)`,
       };
     }
-    const { readFileSync } = require("node:fs") as typeof import("node:fs");
     const cached = JSON.parse(readFileSync(path, "utf-8")) as {
       latest?: string;
     };
-    if (typeof cached?.latest === "string" && cached.latest !== engramVersion) {
-      const { isNewer } = require("../update/check.js") as typeof import("../update/check.js");
-      if (isNewer(cached.latest, engramVersion)) {
-        return {
-          name: "version",
-          severity: "warn",
-          detail: `engram v${engramVersion} — v${cached.latest} is available`,
-          remediation: "Run `engram update` to upgrade.",
-        };
-      }
+    if (
+      typeof cached?.latest === "string" &&
+      cached.latest !== engramVersion &&
+      isNewer(cached.latest, engramVersion)
+    ) {
+      return {
+        name: "version",
+        severity: "warn",
+        detail: `engram v${engramVersion} — v${cached.latest} is available`,
+        remediation: "Run `engram update` to upgrade.",
+      };
     }
     return {
       name: "version",

@@ -4,7 +4,7 @@
  * Used by `engram setup` to decide which adapters to offer. Pure
  * file-existence probes — no network, no shell calls.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -36,7 +36,6 @@ export function detectClaudeCode(projectRoot: string): IdeDetection {
 
   let configured = false;
   try {
-    const { readFileSync } = require("node:fs") as typeof import("node:fs");
     configured = settingsCandidates
       .filter(existsSync)
       .some((p) => readFileSync(p, "utf-8").includes("engram intercept"));
@@ -99,7 +98,6 @@ export function detectContinue(): IdeDetection {
   let configured = false;
   if (installed) {
     try {
-      const { readFileSync } = require("node:fs") as typeof import("node:fs");
       configured = readFileSync(path, "utf-8").includes("engram");
     } catch {
       configured = false;

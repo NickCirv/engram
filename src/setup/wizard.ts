@@ -17,12 +17,11 @@
  */
 import chalk from "chalk";
 import readline from "node:readline/promises";
-import { existsSync } from "node:fs";
-import { join, resolve as pathResolve } from "node:path";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname, join, resolve as pathResolve } from "node:path";
+import { homedir } from "node:os";
 import { init } from "../core.js";
 import { installEngramHooks } from "../intercept/installer.js";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import { detectAllIdes } from "./detect.js";
 import { buildReport, formatReport } from "../doctor/report.js";
 
@@ -117,7 +116,7 @@ async function ensureHookInstalled(
   const scope = opts.settingsScope ?? "local";
   const settingsPath =
     scope === "user"
-      ? join(require("node:os").homedir(), ".claude", "settings.json")
+      ? join(homedir(), ".claude", "settings.json")
       : scope === "project"
         ? join(root, ".claude", "settings.json")
         : join(root, ".claude", "settings.local.json");
@@ -202,15 +201,33 @@ async function offerIdeAdapters(
     Windsurf: "engram gen-windsurfrules",
     Aider: "engram gen-aider",
   };
+
+  // Collect suggestions first so we only print the header when there's
+  // something actionable. Claude Code is handled by install-hook (step 2)
+  // so an unconfigured Claude Code here means hook-install was declined.
+  const suggested: Array<{ name: string; cmd: string }> = [];
+  for (const ide of unconfigured) {
+    const cmd = suggest[ide.name];
+    if (cmd) suggested.push({ name: ide.name, cmd });
+  }
+
+  if (suggested.length === 0) {
+    // Nothing actionable to print. Note Claude Code coverage if relevant.
+    const claudeCode = unconfigured.find((d) => d.name === "Claude Code");
+    if (claudeCode) {
+      skip("Claude Code hook declined or missing — re-run `engram install-hook`");
+    } else {
+      done("no additional adapters needed");
+    }
+    return [];
+  }
+
   console.log("");
   console.log(chalk.dim("  Next steps for detected IDEs:"));
   const run: string[] = [];
-  for (const ide of unconfigured) {
-    const cmd = suggest[ide.name];
-    if (cmd) {
-      console.log(chalk.white(`    $ ${cmd}`));
-      run.push(ide.name);
-    }
+  for (const s of suggested) {
+    console.log(chalk.white(`    $ ${s.cmd}`));
+    run.push(s.name);
   }
   return run;
 }
