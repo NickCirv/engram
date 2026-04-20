@@ -79,7 +79,11 @@ program
     "--incremental",
     "Skip unchanged files (mtime-based). Dramatically faster on re-index of large repos."
   )
-  .action(async (projectPath: string, opts: { withSkills?: string | boolean; fromCcs?: boolean; incremental?: boolean }) => {
+  .option(
+    "--with-hook",
+    "Also install the Sentinel hook into Claude Code settings.local.json (idempotent)"
+  )
+  .action(async (projectPath: string, opts: { withSkills?: string | boolean; fromCcs?: boolean; incremental?: boolean; withHook?: boolean }) => {
     console.log(chalk.dim(opts.incremental ? "🔍 Scanning changed files..." : "🔍 Scanning codebase..."));
     const result = await init(projectPath, {
       withSkills: opts.withSkills,
@@ -139,6 +143,57 @@ program
             " — auto-rebuild graph on git commit"
         )
       );
+    }
+
+    if (opts.withHook) {
+      // --with-hook shorthand: run install-hook for local scope after init.
+      // Idempotent — skips cleanly if already installed.
+      const localSettingsPath = join(
+        pathResolve(projectPath),
+        ".claude",
+        "settings.local.json"
+      );
+      let settings: ClaudeCodeSettings = {};
+      if (existsSync(localSettingsPath)) {
+        try {
+          const raw = readFileSync(localSettingsPath, "utf-8");
+          settings = raw.trim() ? (JSON.parse(raw) as ClaudeCodeSettings) : {};
+        } catch {
+          console.log(
+            chalk.yellow(
+              "\n   ⚠ --with-hook: settings.local.json is invalid JSON, skipping hook install."
+            )
+          );
+          settings = {};
+        }
+      }
+      const hookResult = installEngramHooks(settings);
+      if (hookResult.added.length > 0 || hookResult.statusLineAdded) {
+        try {
+          mkdirSync(dirname(localSettingsPath), { recursive: true });
+          writeFileSync(
+            localSettingsPath,
+            JSON.stringify(hookResult.updated, null, 2) + "\n"
+          );
+          console.log(
+            chalk.green(
+              `\n   ✅ --with-hook: installed ${hookResult.added.length} hook event${hookResult.added.length === 1 ? "" : "s"} into .claude/settings.local.json`
+            )
+          );
+        } catch (err) {
+          console.log(
+            chalk.yellow(
+              `\n   ⚠ --with-hook: write failed (${(err as Error).message})`
+            )
+          );
+        }
+      } else {
+        console.log(
+          chalk.dim(
+            "\n   --with-hook: Sentinel hook already installed, nothing to do."
+          )
+        );
+      }
     }
 
     if (opts.fromCcs) {
@@ -1882,5 +1937,253 @@ cacheCmd
       store.close();
     }
   });
+
+// ── v2.1: update + doctor + setup ─────────────────────────────────────────────
+
+/**
+ * engram update — check for and install a newer engram version via the
+ * detected package manager (npm / pnpm / yarn / bun).
+ *
+ * Zero telemetry: the one network call is an anonymous GET to
+ * registry.npmjs.org. `--check` shows "v2.1.0 available" without
+ * installing. `ENGRAM_NO_UPDATE_CHECK=1` and `$CI` disable the passive
+ * notify that runs on every other invocation.
+ */
+program
+  .command("update")
+  .description("Check for and install the latest engram release")
+  .option("--check", "Check only — do not install", false)
+  .option("--force", "Bypass 7-day throttle cache on registry check", false)
+  .option(
+    "--manager <mgr>",
+    "Override package manager detection (npm | pnpm | yarn | bun)"
+  )
+  .option("--dry-run", "Print the upgrade command without executing", false)
+  .action(
+    async (opts: {
+      check: boolean;
+      force: boolean;
+      manager?: string;
+      dryRun: boolean;
+    }) => {
+      const { checkForUpdate } = await import("./update/check.js");
+      const result = await checkForUpdate(PKG_VERSION, { force: opts.force });
+
+      if (result.skipped) {
+        if (result.fromCache === false) {
+          console.log(
+            chalk.dim("Skipped (opt-out via ENGRAM_NO_UPDATE_CHECK or $CI).")
+          );
+        } else {
+          console.log(chalk.dim("Skipped (registry unreachable)."));
+        }
+        return;
+      }
+
+      const ageMin = result.checkedAt
+        ? Math.round((Date.now() - result.checkedAt) / 60000)
+        : 0;
+      const freshness = result.fromCache
+        ? chalk.dim(` (cached ${ageMin}m ago)`)
+        : chalk.dim(" (live)");
+
+      console.log(
+        `${chalk.bold("engram")} ${chalk.dim("installed:")} v${result.current}   ${chalk.dim("latest:")} ${
+          result.latest ?? chalk.yellow("unknown")
+        }${freshness}`
+      );
+
+      if (!result.updateAvailable) {
+        console.log(chalk.green("✓ You are on the latest release."));
+        return;
+      }
+
+      console.log(
+        chalk.yellow(
+          `⬆ v${result.latest} is available — you're on v${result.current}.`
+        )
+      );
+
+      if (opts.check) {
+        console.log(chalk.dim("Run `engram update` to install it."));
+        return;
+      }
+
+      const { runUpgrade, manualCommand } = await import(
+        "./update/install.js"
+      );
+      const outcome = runUpgrade({
+        dryRun: opts.dryRun,
+        manager:
+          opts.manager === "npm" ||
+          opts.manager === "pnpm" ||
+          opts.manager === "yarn" ||
+          opts.manager === "bun"
+            ? opts.manager
+            : undefined,
+      });
+
+      if (outcome.ok) {
+        console.log(chalk.green(`✓ ${outcome.message}`));
+        if (!opts.dryRun) {
+          console.log(chalk.dim("  Run `engram --version` to verify."));
+        }
+      } else {
+        console.error(chalk.red(`✗ ${outcome.message}`));
+        if (outcome.stderrTail) {
+          console.error(chalk.dim(outcome.stderrTail));
+        }
+        console.error(chalk.dim(`  Manual: ${manualCommand()}`));
+        process.exitCode = 1;
+      }
+    }
+  );
+
+/**
+ * engram doctor — report on component health + remediation hints.
+ *
+ * Wraps component-status probes + graph-db + hook + version checks into
+ * a single human report. Exit code reflects severity (0 ok, 1 warn,
+ * 2 fail), CI-friendly.
+ */
+program
+  .command("doctor")
+  .description("Component health report with remediation hints")
+  .option("-p, --project <path>", "Project directory", ".")
+  .option("-v, --verbose", "Show remediation hints for warn/fail checks", false)
+  .option("--json", "Output JSON", false)
+  .option(
+    "--export",
+    "Redacted JSON for bug reports (same as --json with --verbose)",
+    false
+  )
+  .action(
+    async (opts: {
+      project: string;
+      verbose: boolean;
+      json: boolean;
+      export: boolean;
+    }) => {
+      const { buildReport, formatReport, exportReport } = await import(
+        "./doctor/report.js"
+      );
+      const root = pathResolve(opts.project);
+      const report = buildReport(root, PKG_VERSION);
+
+      if (opts.json || opts.export) {
+        console.log(exportReport(report));
+      } else {
+        console.log(formatReport(report, opts.verbose));
+      }
+
+      process.exitCode =
+        report.overallSeverity === "ok"
+          ? 0
+          : report.overallSeverity === "warn"
+            ? 1
+            : 2;
+    }
+  );
+
+/**
+ * engram setup — first-run wizard. One command for zero-friction install.
+ *
+ * Steps: init → install-hook → detect IDEs → doctor. Each step idempotent.
+ * `--yes` runs with defaults; `--dry-run` prints intent without acting.
+ */
+program
+  .command("setup")
+  .description("Zero-friction first-run wizard (init + install-hook + doctor)")
+  .option("-p, --project <path>", "Project directory", ".")
+  .option("-y, --yes", "Accept all defaults (non-interactive)", false)
+  .option("--dry-run", "Print what would happen without touching anything", false)
+  .option(
+    "--scope <scope>",
+    "Hook scope for install-hook step (local | project | user)",
+    "local"
+  )
+  .action(
+    async (opts: {
+      project: string;
+      yes: boolean;
+      dryRun: boolean;
+      scope: string;
+    }) => {
+      const { runSetup } = await import("./setup/wizard.js");
+      const scope =
+        opts.scope === "local" ||
+        opts.scope === "project" ||
+        opts.scope === "user"
+          ? opts.scope
+          : "local";
+      const result = await runSetup({
+        projectPath: opts.project,
+        yes: opts.yes,
+        dryRun: opts.dryRun,
+        engramVersion: PKG_VERSION,
+        settingsScope: scope,
+      });
+      process.exitCode = result.exitCode;
+    }
+  );
+
+// ── First-run hint (only for non-init, non-intercept commands) ────────────────
+// Show once per repo if there's no .engram/graph.db yet. Skipped in CI, under
+// JSON-stdout commands, and inside the hook intercept entrypoint.
+const FIRST_RUN_SILENT_CMDS = new Set([
+  "intercept",
+  "cursor-intercept",
+  "hud-label",
+  "setup",
+  "init",
+  "update",
+  "doctor",
+]);
+
+function maybePrintFirstRunHint(): void {
+  if (process.env.CI) return;
+  if (process.env.ENGRAM_NO_UPDATE_CHECK === "1") return;
+  const subcommand = process.argv[2];
+  if (!subcommand) return;
+  if (FIRST_RUN_SILENT_CMDS.has(subcommand)) return;
+
+  try {
+    const cwd = process.cwd();
+    if (existsSync(join(cwd, ".engram", "graph.db"))) return;
+
+    const sentinel = join(homedir(), ".engram", "first-run-shown");
+    if (existsSync(sentinel)) return;
+
+    mkdirSync(dirname(sentinel), { recursive: true });
+    writeFileSync(sentinel, new Date().toISOString(), "utf-8");
+
+    process.stderr.write(
+      chalk.dim("💡 ") +
+        chalk.yellow("First time in this repo?") +
+        chalk.dim(" Run ") +
+        chalk.white("engram setup") +
+        chalk.dim(" for a zero-friction install.\n")
+    );
+  } catch {
+    /* best-effort */
+  }
+}
+
+// Passive update notify — at most one line per process, never in intercept.
+function maybePrintUpdateHintSafe(): void {
+  const subcommand = process.argv[2];
+  if (!subcommand || FIRST_RUN_SILENT_CMDS.has(subcommand)) return;
+  try {
+    // Dynamic import avoids a hard dependency at bundle init time.
+    import("./update/notify.js")
+      .then((m) => m.maybePrintUpdateHint(PKG_VERSION))
+      .catch(() => {});
+  } catch {
+    /* ignore */
+  }
+}
+
+maybePrintFirstRunHint();
+maybePrintUpdateHintSafe();
 
 program.parse();
