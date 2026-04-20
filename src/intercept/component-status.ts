@@ -58,22 +58,36 @@ function checkHttp(projectRoot: string): boolean {
 
 /**
  * Check LSP availability.
- * Checks two signals (no network call — file existence only):
- *   1. `.engram/lsp-available` flag file written by the lsp provider when
- *      it successfully connects to a socket.
- *   2. Common tsserver / typescript-language-server socket paths in /tmp
- *      as a fallback for environments where the flag file hasn't been
- *      written yet (e.g. first session).
+ *
+ * Pure file-existence check — mirrors the socket candidates used by
+ * `src/providers/lsp-connection.ts::candidateSockets()`. No network,
+ * no actual socket connect.
+ *
+ * Also honors `.engram/lsp-available` as an explicit opt-in marker
+ * for environments where the socket layout differs from the defaults
+ * (e.g. custom editors, user scripts).
+ *
+ * Fixes issue #11 partial: the previous implementation relied on only
+ * two socket paths (`tsserver.sock` + `typescript-language-server.sock`)
+ * AND a `lsp-available` flag file that no code path actually writes,
+ * so `checkLsp` reported false even in working LSP environments.
  */
 function checkLsp(projectRoot: string): boolean {
-  // Primary: flag file written by lsp provider on successful connection
+  // Explicit user opt-in via marker file (preserved for compat).
   if (existsSync(join(projectRoot, ".engram", "lsp-available"))) return true;
 
-  // Fallback: well-known socket paths (use tmpdir() for cross-platform)
+  // Socket candidates — must match lsp-connection.ts::candidateSockets().
+  // Keep this list in sync with that file; see issue #11.
+  const uid = typeof process.getuid === "function" ? process.getuid() : 0;
   const tmp = tmpdir();
   const candidates = [
-    join(tmp, "tsserver.sock"),
+    join(tmp, `tsserver-${uid}.sock`),
+    join(tmp, "lsp-server.sock"),
     join(tmp, "typescript-language-server.sock"),
+    join(tmp, `pyright-${uid}.sock`),
+    join(tmp, "rust-analyzer.sock"),
+    // Legacy name kept for back-compat with older tsserver installs.
+    join(tmp, "tsserver.sock"),
   ];
   return candidates.some((c) => existsSync(c));
 }
@@ -82,17 +96,28 @@ function checkLsp(projectRoot: string): boolean {
  * Check AST (tree-sitter) availability by looking for bundled grammar
  * WASM files. In v2.0+ these ship at `dist/grammars/*.wasm` from the
  * engram install itself, regardless of the user's project layout.
+ *
+ * Fixes issue #11: when esbuild/tsup flattens the bundle, chunks land
+ * at `engramx/dist/chunk-*.js` so `here = engramx/dist`. The previous
+ * candidates (`../grammars` and `../../dist/grammars`) resolve outside
+ * the package and miss the actual grammar dir. Adding `join(here,
+ * "grammars")` as the first candidate handles this case without
+ * breaking the dev-time layout (where `here = src/intercept` and the
+ * third candidate still resolves).
+ *
+ * Candidate search order:
+ *   1. `here/grammars/`          — flattened bundle (engramx/dist/chunk-*.js)
+ *   2. `here/../grammars/`       — nested bundle (dist/intercept/)
+ *   3. `here/../../dist/grammars/` — dev-time (src/intercept/)
+ *   4. `projectRoot/node_modules/web-tree-sitter` — local npm install
  */
 function checkAst(projectRoot: string): boolean {
-  // v2.0: grammars bundled with engram at install time
   try {
-    // Resolve relative to this file's install location. Works for both
-    // local dev (src/intercept/component-status.ts → ../../dist/grammars/)
-    // and global installs (.../engramx/dist/intercept/... → ../grammars/).
     const here = dirname(fileURLToPath(import.meta.url));
     const candidates = [
-      join(here, "..", "grammars"),           // from dist/intercept/
-      join(here, "..", "..", "dist", "grammars"), // from src/intercept/ dev
+      join(here, "grammars"),                       // flattened bundle
+      join(here, "..", "grammars"),                 // nested bundle
+      join(here, "..", "..", "dist", "grammars"),   // dev-time
     ];
     for (const dir of candidates) {
       if (existsSync(dir)) return true;
