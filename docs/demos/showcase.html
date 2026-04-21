@@ -1,0 +1,1200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>engram — 24-second showcase</title>
+<meta name="description" content="HTML-native, Hyperframes-compatible scene composition. Renders to MP4 + WebM via npx hyperframes render. Live HTML player below.">
+
+<!-- Hyperframes manifest — used by `hyperframes render` -->
+<meta name="hyperframes:duration"   content="24">
+<meta name="hyperframes:fps"        content="30">
+<meta name="hyperframes:width"      content="1280">
+<meta name="hyperframes:height"     content="720">
+<meta name="hyperframes:poster"     content="./poster.svg">
+<meta name="hyperframes:captions"   content="./captions.vtt">
+<meta name="hyperframes:chapters"   content="./chapters.vtt">
+
+<link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.bunny.net/css?family=jetbrains-mono:400,500,600,700&display=swap">
+
+<style>
+  /* ----------------------------------------------------------------
+     engram — Showcase (Hyperframes-compatible)
+     ----------------------------------------------------------------
+     One source → three deliveries:
+       (a) Live interactive HTML player at the top of this page
+       (b) Hyperframes scenes (.scene[data-scene-start]) below — Hyperframes
+           reads them in order and renders to MP4 (24s @ 30fps).
+       (c) Reduced-motion storyboard (4 stacked frames + captions) when the
+           visitor's OS sets `prefers-reduced-motion: reduce`.
+     -------------------------------------------------------------- */
+
+  :root {
+    --bg:               #0a0a0a;
+    --surface:          #141414;
+    --surface-elevated: #1c1c1c;
+    --border:           rgba(255,255,255,0.08);
+    --border-strong:    rgba(255,255,255,0.16);
+
+    --text:             #e8e8e8;
+    --text-secondary:   #8a8a8a;
+    --text-dim:         #555555;
+
+    --accent:           #f59e0b;
+    --accent-warm:      #fbbf24;
+    --accent-dim:       rgba(245,158,11,0.10);
+    --accent-border:    rgba(245,158,11,0.22);
+
+    --color-success:    #34d399;
+    --color-error:      #f87171;
+    --color-info:       #60a5fa;
+
+    --radius:           8px;
+    --radius-sm:        4px;
+
+    --font-all: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: var(--font-all);
+    color: var(--text);
+    background-color: var(--bg);
+    background-image:
+      radial-gradient(circle, rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.55;
+  }
+
+  ::selection { background: var(--accent); color: #0a0a0a; }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 2.5rem 1.5rem; }
+
+  /* -------------------- Page header -------------------- */
+
+  .page-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.75rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .wordmark {
+    font-family: var(--font-all);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.5ch;
+    text-transform: lowercase;
+    text-decoration: none;
+  }
+
+  .wordmark::before {
+    content: '';
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(245,158,11,0.5);
+    transform: translateY(-1px);
+  }
+
+  .wordmark .accent { color: var(--accent); }
+
+  .breadcrumb {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .breadcrumb .accent { color: var(--accent); }
+
+  /* -------------------- Live HTML player (poster -> video) -------------------- */
+
+  .player {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin: 0 0 1rem;
+  }
+
+  .player video {
+    width: 100%; height: 100%;
+    display: block;
+    object-fit: cover;
+  }
+
+  .player .poster {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface);
+    cursor: pointer;
+    transition: opacity 0.25s var(--ease-out);
+  }
+
+  .poster img { width: 100%; height: 100%; display: block; }
+
+  .play-btn {
+    position: absolute;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px 12px 16px;
+    background: var(--accent);
+    color: #0a0a0a;
+    border: none;
+    border-radius: 999px;
+    font-family: var(--font-all);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 0 0 1px rgba(245,158,11,0.3),
+                0 8px 32px rgba(245,158,11,0.18);
+    transition: transform 0.15s var(--ease-out);
+  }
+
+  .play-btn:hover  { background: var(--accent-warm); }
+  .play-btn:active { transform: scale(0.97); }
+
+  .play-btn::before {
+    content: '';
+    width: 0; height: 0;
+    border-style: solid;
+    border-width: 6px 0 6px 9px;
+    border-color: transparent transparent transparent #0a0a0a;
+  }
+
+  /* -------------------- Chapter scrubber -------------------- */
+
+  .chapters {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+
+  .chapter {
+    background: var(--surface);
+    border: none;
+    color: var(--text-secondary);
+    padding: 0.875rem 1rem;
+    font-family: var(--font-all);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s var(--ease-out);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .chapter:hover { background: var(--surface-elevated); color: var(--text); }
+  .chapter.active { background: var(--accent-dim); color: var(--accent); }
+
+  .chapter .ts {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+  }
+
+  .chapter.active .ts { color: var(--accent); }
+
+  @media (max-width: 720px) {
+    .chapters { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* ============================================================
+     SCENES — Hyperframes reads these
+     Each .scene declares [data-scene-start] / [data-scene-end] in
+     seconds. The renderer plays them sequentially into the MP4.
+     The same DOM is used for the live in-browser preview, with
+     scenes triggered by the chapter scrubber and the play button.
+     ============================================================ */
+
+  .scenes {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle, rgba(255,255,255,0.045) 1px, transparent 1px);
+    background-size: 16px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+
+  .scene {
+    position: absolute; inset: 0;
+    padding: clamp(1.25rem, 3vw, 2.5rem);
+    display: flex; flex-direction: column;
+    opacity: 0;
+    transition: opacity 0.4s var(--ease-out);
+  }
+
+  .scene[data-active="true"]  { opacity: 1; z-index: 2; }
+  .scene[data-active="false"] { opacity: 0; pointer-events: none; }
+
+  /* Lower-third caption (baked in for the rendered MP4) */
+
+  .lower-third {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    padding: 1.25rem 1.5rem 1.5rem;
+    background: linear-gradient(to top, rgba(10,10,10,0.92), rgba(10,10,10,0));
+    color: var(--text);
+    font-family: var(--font-all);
+    font-size: clamp(13px, 1.3vw, 16px);
+    line-height: 1.4;
+    letter-spacing: -0.005em;
+    text-align: left;
+  }
+
+  .lower-third .accent { color: var(--accent); font-weight: 600; }
+
+  .scene-label {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px 4px 8px;
+    border: 1px solid var(--accent-border);
+    background: var(--accent-dim);
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 1rem;
+  }
+
+  .scene-label::before {
+    content: '';
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* -------------------- Scene 1 — Problem -------------------- */
+
+  .scene-problem {
+    flex-direction: row;
+    gap: 1.5rem;
+  }
+
+  .scene-problem .panel {
+    flex: 1.4;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.125rem 1.25rem;
+    font-size: 12.5px;
+    line-height: 1.7;
+    overflow: hidden;
+  }
+
+  .scene-problem .meter {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    justify-content: center;
+  }
+
+  .meter .label {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .meter .value {
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .meter .value.warning { color: var(--color-error); }
+
+  .meter .delta {
+    font-size: 12px;
+    color: var(--color-error);
+    letter-spacing: 0.04em;
+  }
+
+  /* read-line — agent re-reads same file repeatedly */
+  .read-line {
+    display: grid;
+    grid-template-columns: 30px 1fr 70px;
+    gap: 0.75rem;
+    padding: 4px 0;
+    border-top: 1px solid var(--border);
+    color: var(--text);
+    opacity: 0;
+  }
+
+  .read-line:first-child { border-top: none; }
+  .read-line .n   { color: var(--text-dim); }
+  .read-line .f   { color: var(--text); }
+  .read-line .s   { text-align: right; color: var(--color-error); font-weight: 600; }
+  .read-line .strike { text-decoration: line-through; opacity: 0.5; }
+
+  .scene[data-active="true"] .scene-problem .read-line:nth-child(1) { animation: read-in 0.3s 0.4s var(--ease-out) forwards; }
+  .scene[data-active="true"] .scene-problem .read-line:nth-child(2) { animation: read-in 0.3s 1.4s var(--ease-out) forwards; }
+  .scene[data-active="true"] .scene-problem .read-line:nth-child(3) { animation: read-in 0.3s 2.4s var(--ease-out) forwards; }
+  .scene[data-active="true"] .scene-problem .read-line:nth-child(4) { animation: read-in 0.3s 3.4s var(--ease-out) forwards; }
+
+  @keyframes read-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  /* Counter is JS-driven (see <script> at bottom). content: keyframes only
+     work on pseudo-elements; we use textContent updates instead so the
+     real digits are accessible to screen readers and renderers. */
+
+  /* -------------------- Scene 2 — Install -------------------- */
+
+  .scene-install {
+    justify-content: center;
+    align-items: center;
+  }
+
+  .scene-install .terminal {
+    width: min(720px, 100%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    font-size: 13.5px;
+    line-height: 1.85;
+  }
+
+  .terminal-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.5rem 0.875rem;
+    background: var(--surface-elevated);
+    border-bottom: 1px solid var(--border);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .terminal-body {
+    padding: 1.125rem 1.375rem;
+  }
+
+  .term-line {
+    display: block;
+    opacity: 0;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .term-line .prompt { color: var(--text-dim); margin-right: 0.6ch; }
+  .term-line .cmd    { color: var(--text); }
+  .term-line .arg    { color: var(--accent); }
+  .term-line .ok     { color: var(--color-success); }
+  .term-line .info   { color: var(--color-info); }
+  .term-line .dim    { color: var(--text-dim); }
+
+  .scene[data-active="true"] .scene-install .term-line:nth-child(1) { animation: term-in 0.25s 0.30s var(--ease-out) forwards; }
+  .scene[data-active="true"] .scene-install .term-line:nth-child(2) { animation: term-in 0.25s 0.95s var(--ease-out) forwards; }
+  .scene[data-active="true"] .scene-install .term-line:nth-child(3) { animation: term-in 0.25s 1.55s var(--ease-out) forwards; }
+  .scene[data-active="true"] .scene-install .term-line:nth-child(4) { animation: term-in 0.25s 2.10s var(--ease-out) forwards; }
+  .scene[data-active="true"] .scene-install .term-line:nth-child(5) { animation: term-in 0.25s 2.65s var(--ease-out) forwards; }
+  .scene[data-active="true"] .scene-install .term-line:nth-child(6) { animation: term-in 0.25s 3.30s var(--ease-out) forwards; }
+  .scene[data-active="true"] .scene-install .term-line:nth-child(7) { animation: term-in 0.25s 3.85s var(--ease-out) forwards; }
+  .scene[data-active="true"] .scene-install .term-line:nth-child(8) { animation: term-in 0.25s 4.45s var(--ease-out) forwards; }
+
+  @keyframes term-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  /* -------------------- Scene 3 — Intercept -------------------- */
+
+  .scene-intercept {
+    flex-direction: row;
+    gap: 1.25rem;
+    align-items: stretch;
+  }
+
+  .intercept-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .intercept-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.125rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 12px;
+  }
+
+  .intercept-card h4 {
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  .intercept-card .body {
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--text);
+  }
+
+  .intercept-card .body .accent { color: var(--accent); }
+  .intercept-card .body .ok     { color: var(--color-success); }
+  .intercept-card .body .dim    { color: var(--text-dim); }
+
+  .pulse {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border: 1px solid var(--accent-border);
+    background: var(--accent-dim);
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 600;
+    align-self: flex-start;
+  }
+
+  .pulse::before {
+    content: '';
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px rgba(245,158,11,0.6);
+  }
+
+  .scene[data-active="true"] .intercept-card.center .pulse {
+    animation: pulse-amber 1s 0.4s var(--ease-out) infinite;
+  }
+
+  @keyframes pulse-amber {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.4); }
+    70%      { box-shadow: 0 0 0 12px rgba(245,158,11,0); }
+  }
+
+  /* arrow chevrons between cards */
+  .arrow-flow {
+    align-self: center;
+    color: var(--accent);
+    font-size: 18px;
+    line-height: 1;
+    opacity: 0;
+  }
+
+  .scene[data-active="true"] .arrow-flow {
+    animation: arrow-pulse 1.4s 0.6s var(--ease-out) infinite;
+  }
+
+  @keyframes arrow-pulse {
+    0%, 100% { opacity: 0.35; }
+    50%      { opacity: 1; }
+  }
+
+  /* -------------------- Scene 4 — Payoff -------------------- */
+
+  .scene-payoff {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .payoff-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    flex: 1;
+  }
+
+  .payoff-cell {
+    background: var(--surface);
+    padding: 1.25rem 1.375rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+
+  .payoff-cell .label {
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .payoff-cell .big {
+    font-size: clamp(2rem, 5vw, 4rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    color: var(--text);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .payoff-cell .big .accent { color: var(--accent); }
+
+  .payoff-cell .delta {
+    font-size: 12px;
+    color: var(--color-success);
+    letter-spacing: 0.04em;
+  }
+
+  .mistake-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border: 1px solid rgba(245,158,11,0.35);
+    border-left: 3px solid var(--accent);
+    background: rgba(245,158,11,0.05);
+    border-radius: var(--radius-sm);
+    font-size: 11.5px;
+    color: var(--text);
+    align-self: flex-start;
+    opacity: 0;
+  }
+
+  .scene[data-active="true"] .mistake-chip {
+    animation: chip-in 0.4s 1.6s var(--ease-out) forwards;
+  }
+
+  @keyframes chip-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .mistake-chip .warn { color: var(--accent); font-weight: 700; }
+
+  /* -------------------- Storyboard fallback -------------------- */
+
+  .storyboard {
+    display: none;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+
+  .storyboard figure {
+    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+  }
+
+  .storyboard svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: var(--bg);
+  }
+
+  .storyboard figcaption {
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+
+  .storyboard figcaption .label {
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .storyboard figcaption h3 {
+    margin: 0;
+    font-size: 1.125rem;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+
+  .storyboard figcaption p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  /* -------------------- Reduced-motion swap -------------------- */
+
+  @media (prefers-reduced-motion: reduce) {
+    .player, .chapters, .scenes { display: none; }
+    .storyboard { display: grid; }
+    * { animation: none !important; transition: none !important; }
+    .scene { opacity: 1 !important; }
+  }
+
+  /* -------------------- Footer & hint -------------------- */
+
+  .render-hint {
+    margin-top: 1rem;
+    padding: 0.875rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.65;
+  }
+
+  .render-hint code {
+    background: var(--bg);
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: var(--accent);
+    font-size: 11.5px;
+    border: 1px solid var(--border);
+  }
+
+  footer.foot {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 11.5px;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  footer.foot a { color: var(--text-secondary); margin-right: 1rem; }
+  footer.foot a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<main class="wrap">
+
+  <!-- ================== PAGE HEAD ================== -->
+  <div class="page-head">
+    <a class="wordmark" href="../install.html">
+      eng<span class="accent">r</span><span class="accent">a</span>m
+    </a>
+    <div class="breadcrumb">
+      docs · demos · <span class="accent">showcase 24s</span>
+    </div>
+  </div>
+
+  <!-- ================== LIVE HTML PLAYER ================== -->
+  <figure class="player" data-showcase="engram-24s">
+    <video
+      preload="none"
+      poster="./poster.svg"
+      playsinline
+      muted
+      controls
+      hidden
+      width="1280"
+      height="720">
+      <source src="./showcase.webm" type="video/webm">
+      <source src="./showcase.mp4" type="video/mp4">
+      <track kind="captions" src="./captions.vtt" srclang="en" default>
+      <track kind="chapters" src="./chapters.vtt" srclang="en">
+      <p>Your browser doesn't support HTML video.
+        <a href="./showcase.mp4">Download the 24s tutorial (MP4)</a>.</p>
+    </video>
+
+    <button class="poster" type="button" id="play-poster" aria-label="Play 24-second showcase">
+      <img src="./poster.svg" alt="" aria-hidden="true">
+      <span class="play-btn">Play · 24s</span>
+    </button>
+  </figure>
+
+  <!-- ================== CHAPTERS ================== -->
+  <nav class="chapters" aria-label="Chapter scrubber">
+    <button class="chapter active" type="button" data-t="0"  data-scene="problem">
+      <span class="ts">0:00 — 0:05</span>
+      <span>01 · Problem</span>
+    </button>
+    <button class="chapter" type="button" data-t="5"  data-scene="install">
+      <span class="ts">0:05 — 0:11</span>
+      <span>02 · Install</span>
+    </button>
+    <button class="chapter" type="button" data-t="11" data-scene="intercept">
+      <span class="ts">0:11 — 0:18</span>
+      <span>03 · Intercept</span>
+    </button>
+    <button class="chapter" type="button" data-t="18" data-scene="payoff">
+      <span class="ts">0:18 — 0:24</span>
+      <span>04 · Result</span>
+    </button>
+  </nav>
+
+  <!-- ================== SCENE COMPOSITION ================== -->
+  <!-- Hyperframes reads the .scene[data-scene-start] elements in order -->
+  <div class="scenes" id="scenes" aria-label="Scene preview (interactive)">
+
+    <!-- ------------- SCENE 1 — Problem ------------- -->
+    <section
+      class="scene scene-problem"
+      data-scene-start="0"
+      data-scene-end="5"
+      data-scene-id="problem"
+      data-active="true">
+
+      <div style="position:absolute; top:1.25rem; left:1.5rem;">
+        <span class="scene-label">scene 01 · without engram</span>
+      </div>
+
+      <div class="panel" style="margin-top: 3rem;">
+        <div style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.75rem;">
+          Claude Code · session log
+        </div>
+        <div class="read-line">
+          <span class="n">→</span>
+          <span class="f">Read · <span style="color:var(--accent);">src/auth.ts</span></span>
+          <span class="s">5,400</span>
+        </div>
+        <div class="read-line">
+          <span class="n">→</span>
+          <span class="f strike">Read · src/auth.ts <span class="dim" style="color:var(--text-dim);">(again)</span></span>
+          <span class="s">+5,400</span>
+        </div>
+        <div class="read-line">
+          <span class="n">→</span>
+          <span class="f strike">Read · src/auth.ts <span class="dim" style="color:var(--text-dim);">(again)</span></span>
+          <span class="s">+5,400</span>
+        </div>
+        <div class="read-line">
+          <span class="n">→</span>
+          <span class="f strike">Read · src/auth.ts <span class="dim" style="color:var(--text-dim);">(again)</span></span>
+          <span class="s">+5,400</span>
+        </div>
+      </div>
+
+      <div class="meter" style="margin-top: 3rem;">
+        <span class="label">cumulative tokens</span>
+        <span class="value warning" data-counter
+              data-from="5400" data-to="21600" data-duration="4">5,400</span>
+        <span class="delta">↑ same file, 4 reads, 4× the cost</span>
+      </div>
+
+      <div class="lower-third">
+        Your AI agent re-reads the <span class="accent">same files</span>.<br>
+        Every session. Every time.
+      </div>
+    </section>
+
+    <!-- ------------- SCENE 2 — Install ------------- -->
+    <section
+      class="scene scene-install"
+      data-scene-start="5"
+      data-scene-end="11"
+      data-scene-id="install"
+      data-active="false">
+
+      <div style="position:absolute; top:1.25rem; left:1.5rem;">
+        <span class="scene-label">scene 02 · 30 seconds</span>
+      </div>
+
+      <div class="terminal" style="margin-top: 3rem;">
+        <div class="terminal-head">
+          <span>~ · zsh</span>
+          <span style="color:var(--accent);">engram install</span>
+        </div>
+        <div class="terminal-body">
+          <span class="term-line"><span class="prompt">$</span><span class="cmd">npm install -g </span><span class="arg">engramx</span></span>
+          <span class="term-line"><span class="dim">↳</span> <span class="info">added engramx@2.0.2 in 4s</span></span>
+          <span class="term-line"><span class="prompt">$</span><span class="cmd">cd </span><span class="arg">~/my-project</span></span>
+          <span class="term-line"><span class="prompt">$</span><span class="cmd">engram </span><span class="arg">init</span></span>
+          <span class="term-line"><span class="dim">↳</span> <span class="info">indexed 451 nodes · 1005 edges</span></span>
+          <span class="term-line"><span class="prompt">$</span><span class="cmd">engram </span><span class="arg">install-hook</span></span>
+          <span class="term-line"><span class="dim">↳</span> <span class="ok">✓</span> 7 hooks installed · hud label active</span>
+          <span class="term-line"><span class="ok">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span></span>
+        </div>
+      </div>
+
+      <div class="lower-third">
+        Three commands. <span class="accent">No accounts. No cloud.</span>
+      </div>
+    </section>
+
+    <!-- ------------- SCENE 3 — Intercept ------------- -->
+    <section
+      class="scene scene-intercept"
+      data-scene-start="11"
+      data-scene-end="18"
+      data-scene-id="intercept"
+      data-active="false">
+
+      <div style="position:absolute; top:1.25rem; left:1.5rem;">
+        <span class="scene-label">scene 03 · with engram</span>
+      </div>
+
+      <div class="intercept-col" style="margin-top: 3rem;">
+        <div class="intercept-card">
+          <h4>// agent</h4>
+          <div class="body">
+            Read(<span class="accent">'src/auth.ts'</span>)<br>
+            <span class="dim">requesting source…</span>
+          </div>
+        </div>
+      </div>
+
+      <span class="arrow-flow" style="margin-top: 3rem;">▸</span>
+
+      <div class="intercept-col" style="margin-top: 3rem;">
+        <div class="intercept-card center">
+          <h4>// engram sentinel</h4>
+          <span class="pulse">PreToolUse · intercepted</span>
+          <div class="body">
+            graph query · 8 providers<br>
+            packing context packet…<br>
+            <span class="ok">deny + reason</span>
+          </div>
+        </div>
+      </div>
+
+      <span class="arrow-flow" style="margin-top: 3rem;">▸</span>
+
+      <div class="intercept-col" style="margin-top: 3rem;">
+        <div class="intercept-card">
+          <h4>// agent receives</h4>
+          <div class="body">
+            structure · decisions · git ·<br>
+            mistakes · library docs<br>
+            <span class="accent">~500 tokens</span> · <span class="dim">vs 5,400</span><br>
+            <span class="ok">↓ 11×</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="lower-third">
+        Hooks at the boundary. Returns a <span class="accent">context packet</span>, not the file.
+      </div>
+    </section>
+
+    <!-- ------------- SCENE 4 — Payoff ------------- -->
+    <section
+      class="scene scene-payoff"
+      data-scene-start="18"
+      data-scene-end="24"
+      data-scene-id="payoff"
+      data-active="false">
+
+      <div style="position:absolute; top:1.25rem; left:1.5rem;">
+        <span class="scene-label">scene 04 · result · session totals</span>
+      </div>
+
+      <div class="payoff-grid" style="margin-top: 3rem; margin-bottom: 4rem;">
+        <div class="payoff-cell">
+          <span class="label">tokens saved</span>
+          <span class="big"><span class="accent">88.1</span>%</span>
+          <span class="delta">↓ 86.0K saved this session</span>
+        </div>
+        <div class="payoff-cell">
+          <span class="label">cost saved · $3/M</span>
+          <span class="big">$0.<span class="accent">26</span></span>
+          <span class="delta">↓ vs raw-Read baseline</span>
+        </div>
+        <div class="payoff-cell">
+          <span class="label">graph health</span>
+          <span class="big">451 / <span class="accent">1005</span></span>
+          <span class="delta">nodes / edges · 96% extracted</span>
+        </div>
+      </div>
+
+      <div class="mistake-chip">
+        <span class="warn">⚠</span>
+        <span><strong>mistake memory</strong> — auth.ts: don't add NOT NULL without backfill (caught 2026-03-04)</span>
+      </div>
+
+      <div class="lower-third">
+        <span class="accent">88.1% measured savings.</span> $0 cloud. Persistent memory.
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ================== STORYBOARD (reduced-motion fallback) ================== -->
+  <ol class="storyboard" aria-label="Static storyboard (4 frames)">
+
+    <li>
+      <figure>
+        <svg viewBox="0 0 480 270" xmlns="http://www.w3.org/2000/svg">
+          <rect width="480" height="270" fill="#0a0a0a"/>
+          <g fill="#f87171" font-family="JetBrains Mono, monospace" font-size="11">
+            <text x="30" y="60">→ Read · auth.ts        5,400</text>
+            <text x="30" y="86" opacity="0.7">→ Read · auth.ts (again)  +5,400</text>
+            <text x="30" y="112" opacity="0.55">→ Read · auth.ts (again)  +5,400</text>
+            <text x="30" y="138" opacity="0.4">→ Read · auth.ts (again)  +5,400</text>
+          </g>
+          <text x="30" y="200" fill="#f87171" font-family="JetBrains Mono, monospace" font-size="36" font-weight="700">21,600</text>
+          <text x="30" y="225" fill="#8a8a8a" font-family="JetBrains Mono, monospace" font-size="10">CUMULATIVE TOKENS</text>
+        </svg>
+        <figcaption>
+          <span class="label">scene 01 · problem</span>
+          <h3>Your agent re-reads the same files</h3>
+          <p>Every session. Every time. The cost compounds.</p>
+        </figcaption>
+      </figure>
+    </li>
+
+    <li>
+      <figure>
+        <svg viewBox="0 0 480 270" xmlns="http://www.w3.org/2000/svg">
+          <rect width="480" height="270" fill="#0a0a0a"/>
+          <g font-family="JetBrains Mono, monospace" font-size="12">
+            <text x="30" y="50" fill="#555">$</text>
+            <text x="50" y="50" fill="#e8e8e8">npm install -g </text>
+            <text x="195" y="50" fill="#f59e0b">engramx</text>
+            <text x="30" y="80" fill="#555">$</text>
+            <text x="50" y="80" fill="#e8e8e8">engram </text>
+            <text x="125" y="80" fill="#f59e0b">init</text>
+            <text x="30" y="110" fill="#555">$</text>
+            <text x="50" y="110" fill="#e8e8e8">engram </text>
+            <text x="125" y="110" fill="#f59e0b">install-hook</text>
+            <text x="30" y="148" fill="#34d399">✓</text>
+            <text x="50" y="148" fill="#e8e8e8">7 hooks installed</text>
+            <text x="30" y="172" fill="#34d399">✓</text>
+            <text x="50" y="172" fill="#e8e8e8">hud label active</text>
+            <text x="30" y="220" fill="#34d399" font-size="14" font-weight="700">━━━━━━━━━━━━━━━━━━━━━━━━━━</text>
+          </g>
+        </svg>
+        <figcaption>
+          <span class="label">scene 02 · install</span>
+          <h3>Three commands. Thirty seconds.</h3>
+          <p>No accounts. No cloud. Local SQLite.</p>
+        </figcaption>
+      </figure>
+    </li>
+
+    <li>
+      <figure>
+        <svg viewBox="0 0 480 270" xmlns="http://www.w3.org/2000/svg">
+          <rect width="480" height="270" fill="#0a0a0a"/>
+          <rect x="20" y="40" width="120" height="190" rx="8" fill="#141414" stroke="rgba(255,255,255,0.08)"/>
+          <rect x="180" y="40" width="120" height="190" rx="8" fill="#141414" stroke="rgba(245,158,11,0.5)"/>
+          <rect x="340" y="40" width="120" height="190" rx="8" fill="#141414" stroke="rgba(255,255,255,0.08)"/>
+          <text x="80"  y="120" text-anchor="middle" fill="#e8e8e8" font-family="JetBrains Mono, monospace" font-size="11">agent</text>
+          <text x="80"  y="142" text-anchor="middle" fill="#8a8a8a" font-family="JetBrains Mono, monospace" font-size="9">Read(auth.ts)</text>
+          <text x="240" y="115" text-anchor="middle" fill="#f59e0b" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700">sentinel</text>
+          <text x="240" y="138" text-anchor="middle" fill="#8a8a8a" font-family="JetBrains Mono, monospace" font-size="9">PreToolUse</text>
+          <text x="240" y="158" text-anchor="middle" fill="#34d399" font-family="JetBrains Mono, monospace" font-size="9">deny + packet</text>
+          <text x="400" y="120" text-anchor="middle" fill="#e8e8e8" font-family="JetBrains Mono, monospace" font-size="11">~500 tok</text>
+          <text x="400" y="142" text-anchor="middle" fill="#34d399" font-family="JetBrains Mono, monospace" font-size="9">↓ 11×</text>
+          <g stroke="#f59e0b" stroke-width="1" fill="none">
+            <path d="M140 135 L180 135"/>
+            <path d="M300 135 L340 135"/>
+          </g>
+          <g fill="#f59e0b">
+            <polygon points="180,135 174,131 174,139"/>
+            <polygon points="340,135 334,131 334,139"/>
+          </g>
+        </svg>
+        <figcaption>
+          <span class="label">scene 03 · intercept</span>
+          <h3>Hooks at the boundary</h3>
+          <p>Returns a context packet, not the file. ~500 tokens vs 5,400.</p>
+        </figcaption>
+      </figure>
+    </li>
+
+    <li>
+      <figure>
+        <svg viewBox="0 0 480 270" xmlns="http://www.w3.org/2000/svg">
+          <rect width="480" height="270" fill="#0a0a0a"/>
+          <rect x="20"  y="50" width="140" height="100" rx="8" fill="#141414" stroke="rgba(255,255,255,0.08)"/>
+          <rect x="170" y="50" width="140" height="100" rx="8" fill="#141414" stroke="rgba(255,255,255,0.08)"/>
+          <rect x="320" y="50" width="140" height="100" rx="8" fill="#141414" stroke="rgba(255,255,255,0.08)"/>
+          <text x="36"  y="78"  fill="#8a8a8a" font-family="JetBrains Mono, monospace" font-size="8">TOKENS SAVED</text>
+          <text x="36"  y="118" fill="#f59e0b" font-family="JetBrains Mono, monospace" font-size="32" font-weight="700">88.1%</text>
+          <text x="186" y="78"  fill="#8a8a8a" font-family="JetBrains Mono, monospace" font-size="8">COST SAVED</text>
+          <text x="186" y="118" fill="#e8e8e8" font-family="JetBrains Mono, monospace" font-size="32" font-weight="700">$0.<tspan fill="#f59e0b">26</tspan></text>
+          <text x="336" y="78"  fill="#8a8a8a" font-family="JetBrains Mono, monospace" font-size="8">GRAPH HEALTH</text>
+          <text x="336" y="118" fill="#e8e8e8" font-family="JetBrains Mono, monospace" font-size="22" font-weight="700">451 / <tspan fill="#f59e0b">1005</tspan></text>
+
+          <rect x="20" y="180" width="440" height="36" rx="4" fill="rgba(245,158,11,0.05)" stroke="rgba(245,158,11,0.35)"/>
+          <rect x="20" y="180" width="3" height="36" fill="#f59e0b"/>
+          <text x="36" y="204" fill="#f59e0b" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700">⚠ MISTAKE MEMORY</text>
+          <text x="180" y="204" fill="#e8e8e8" font-family="JetBrains Mono, monospace" font-size="10">auth.ts — don't add NOT NULL without backfill</text>
+        </svg>
+        <figcaption>
+          <span class="label">scene 04 · result</span>
+          <h3>88.1% measured savings · $0 cloud</h3>
+          <p>Mistake memory surfaces past regressions at the top of every query.</p>
+        </figcaption>
+      </figure>
+    </li>
+
+  </ol>
+
+  <!-- ================== RENDER HINT ================== -->
+  <div class="render-hint">
+    <strong style="color: var(--text);">Render to MP4:</strong>
+    this file is the source. Run
+    <code>npx hyperframes render --input docs/demos/showcase.html --output docs/demos/showcase.mp4 --width 1280 --height 720 --fps 30 --duration 24</code>
+    — see <a href="./README.md" style="color: var(--accent);">demos/README.md</a> for the full guide.
+  </div>
+
+  <footer class="foot">
+    <div>engram · v2.0.2 · Apache 2.0 · scene-table.md is source-of-truth</div>
+    <nav>
+      <a href="../install.html">Install page</a>
+      <a href="https://github.com/NickCirv/engram">GitHub</a>
+      <a href="https://github.com/heygen-com/hyperframes">Hyperframes</a>
+    </nav>
+  </footer>
+</main>
+
+<script>
+  /* ----------------------------------------------------------------
+     Live-player & chapter scrubber
+     Scenes are static DOM. Switching chapters toggles [data-active].
+     When the user clicks Play, we swap the poster for the <video>
+     and let the browser play the rendered MP4 (if present).
+     -------------------------------------------------------------- */
+
+  (() => {
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const scenes  = document.querySelectorAll('.scene');
+    const chapters = document.querySelectorAll('.chapter');
+    let currentIdx = 0;
+
+    function go(idx) {
+      currentIdx = idx;
+      scenes.forEach((s, i)   => s.dataset.active = (i === idx) ? 'true' : 'false');
+      chapters.forEach((c, i) => c.classList.toggle('active', i === idx));
+      // Restart CSS animations by toggling a data attribute
+      const target = scenes[idx];
+      target.dataset.active = 'false';
+      // force reflow
+      void target.offsetWidth;
+      target.dataset.active = 'true';
+      // Run any data-counter elements within the now-active scene
+      runCounters(target);
+    }
+
+    chapters.forEach((btn, i) => btn.addEventListener('click', () => go(i)));
+
+    /* Counter animation — runs whenever a scene with [data-counter] becomes active */
+    function runCounters(sceneEl) {
+      sceneEl.querySelectorAll('[data-counter]').forEach((el) => {
+        const from = parseInt(el.dataset.from, 10);
+        const to   = parseInt(el.dataset.to,   10);
+        const ms   = parseFloat(el.dataset.duration) * 1000;
+        if (isNaN(from) || isNaN(to) || isNaN(ms)) return;
+        const start = performance.now();
+        const fmt = (n) => Math.round(n).toLocaleString('en-US');
+        function step(now) {
+          const t = Math.min(1, (now - start) / ms);
+          const eased = 1 - Math.pow(1 - t, 3);
+          el.textContent = fmt(from + (to - from) * eased);
+          if (t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+      });
+    }
+
+    // Keyboard scrubber
+    document.addEventListener('keydown', (e) => {
+      if (reduced) return;
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); go((currentIdx + 1) % scenes.length); }
+      if (e.key === 'ArrowLeft')                   { e.preventDefault(); go((currentIdx - 1 + scenes.length) % scenes.length); }
+      const n = parseInt(e.key, 10);
+      if (!isNaN(n) && n >= 1 && n <= 4) { e.preventDefault(); go(n - 1); }
+    });
+
+    // Initial counter run for whichever scene starts active
+    runCounters(scenes[currentIdx]);
+
+    // Auto-advance for the live preview only (NOT for Hyperframes render — Hyperframes
+    // ignores this script and reads scenes by data-scene-start/end metadata.)
+    if (!reduced) {
+      const durations = [5, 6, 7, 6]; // seconds per scene matching the table
+      let t;
+      function loop() {
+        const next = (currentIdx + 1) % scenes.length;
+        t = setTimeout(() => { go(next); loop(); }, durations[currentIdx] * 1000);
+      }
+      // pause on hover, resume on leave
+      const stage = document.getElementById('scenes');
+      stage.addEventListener('mouseenter', () => clearTimeout(t));
+      stage.addEventListener('mouseleave', () => loop());
+      loop();
+    }
+
+    // Live-player: poster click swaps to <video>
+    const poster = document.getElementById('play-poster');
+    const video  = poster?.parentElement?.querySelector('video');
+    if (poster && video) {
+      poster.addEventListener('click', () => {
+        video.hidden = false;
+        poster.style.opacity = '0';
+        setTimeout(() => poster.style.display = 'none', 250);
+        video.play().catch(() => {
+          // MP4 not yet rendered — keep the poster, surface a hint
+          poster.style.display = '';
+          poster.style.opacity = '1';
+          poster.querySelector('.play-btn').textContent = 'MP4 not rendered yet · see README';
+        });
+      });
+    }
+  })();
+</script>
+
+</body>
+</html>

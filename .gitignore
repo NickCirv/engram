@@ -16,3 +16,6 @@ bench/results/*.json
 
 # Local planning docs (not published)
 .planning/
+
+# Hyperframes scratch/render directories (per-run intermediates)
+docs/demos/work-*/

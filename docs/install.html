@@ -1,0 +1,1463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Install · engram — the context spine for AI coding agents</title>
+<meta name="description" content="One command to install. Three commands to wire up. Your AI coding agent stops re-reading the same files and starts remembering. 88.1% measured session-level token savings. Local SQLite, zero cloud.">
+<link rel="canonical" href="https://github.com/NickCirv/engram/blob/main/docs/install.html">
+
+<meta property="og:title" content="Install engram — persistent memory for AI coding agents">
+<meta property="og:description" content="npm install -g engramx → engram init → engram install-hook. 88.1% measured token savings, zero cloud, zero LLM cost.">
+<meta property="og:image" content="https://raw.githubusercontent.com/NickCirv/engram/main/assets/banner.png">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.bunny.net/css?family=jetbrains-mono:400,500,600,700&display=swap">
+
+<style>
+  /* ----------------------------------------------------------------
+     engram — Install Page
+     Aesthetic: Terminal Mono with amber accent (banner-derived)
+     Brand: lowercase "engram" wordmark, orange-highlighted "a"
+     Background: near-black #0a0a0a + 20px dot grid
+     Type: JetBrains Mono everywhere, tabular numerals
+     Motion: fade + cursor blink only — no springs, no translateY
+     -------------------------------------------------------------- */
+
+  :root {
+    --bg:               #0a0a0a;
+    --surface:          #141414;
+    --surface-elevated: #1c1c1c;
+    --surface-hover:    rgba(255,255,255,0.03);
+
+    --border:           rgba(255,255,255,0.08);
+    --border-strong:    rgba(255,255,255,0.16);
+    --border-accent:    rgba(245,158,11,0.28);
+
+    --text:             #e8e8e8;
+    --text-secondary:   #8a8a8a;
+    --text-dim:         #555555;
+    --text-on-accent:   #0a0a0a;
+
+    --accent:           #f59e0b;     /* amber — matches banner */
+    --accent-warm:      #fbbf24;
+    --accent-dim:       rgba(245,158,11,0.10);
+    --accent-border:    rgba(245,158,11,0.22);
+
+    --color-success:    #34d399;
+    --color-warning:    #f59e0b;
+    --color-error:      #f87171;
+    --color-info:       #60a5fa;
+
+    --radius:           8px;
+    --radius-sm:        4px;
+    --radius-lg:        12px;
+
+    --font-all: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
+
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    font-family: var(--font-all);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text);
+    background-color: var(--bg);
+    background-image:
+      radial-gradient(circle, rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-variant-numeric: tabular-nums;
+    overflow-x: hidden;
+  }
+
+  /* Selection — amber, not OS default */
+  ::selection { background: var(--accent); color: var(--text-on-accent); }
+
+  /* Focus rings — visible, accent-colored */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  a { color: var(--text); text-decoration: none; }
+  a:hover { color: var(--accent); }
+
+  /* ---------- Layout shell ---------- */
+
+  .container {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  /* ---------- Nav ---------- */
+
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    background: rgba(10,10,10,0.72);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 0.875rem 0;
+  }
+
+  .wordmark {
+    font-family: var(--font-all);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    text-transform: lowercase;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.5ch;
+  }
+
+  .wordmark .accent { color: var(--accent); }
+
+  .wordmark::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(245,158,11,0.5);
+    transform: translateY(-1px);
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .nav-link {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    transition: color 0.15s var(--ease-out);
+  }
+
+  .nav-link:hover { color: var(--text); }
+
+  @media (max-width: 720px) {
+    .nav-links li:not(.nav-cta) { display: none; }
+  }
+
+  /* ---------- Hero ---------- */
+
+  .hero {
+    padding: 4rem 0 3rem;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+
+  .hero-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px 5px 8px;
+    border: 1px solid var(--accent-border);
+    border-radius: 999px;
+    background: var(--accent-dim);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .hero-pill::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px rgba(245,158,11,0.6);
+    animation: pulse-status 2.4s var(--ease-out) infinite;
+  }
+
+  .hero-headline {
+    font-family: var(--font-all);
+    font-weight: 700;
+    font-size: clamp(2.5rem, 7vw, 5.5rem);
+    line-height: 0.96;
+    letter-spacing: -0.04em;
+    margin: 1.75rem 0 1.25rem;
+    color: var(--text);
+  }
+
+  .hero-headline .accent { color: var(--accent); }
+
+  .hero-sub {
+    max-width: 60ch;
+    font-size: 1.0625rem;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    margin: 0 0 2rem;
+  }
+
+  .hero-sub strong { color: var(--text); font-weight: 600; }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 2.5rem;
+    align-items: start;
+  }
+
+  @media (max-width: 900px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 2rem; }
+  }
+
+  /* ---------- CTA cluster ---------- */
+
+  .cta-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    font-family: var(--font-all);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s var(--ease-out);
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--text-on-accent);
+  }
+  .btn-primary:hover {
+    background: var(--accent-warm);
+    color: var(--text-on-accent);
+  }
+  .btn-primary:active { transform: scale(0.98); }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  .btn-ghost:hover {
+    background: var(--surface-hover);
+    border-color: var(--text-secondary);
+    color: var(--text);
+  }
+
+  .btn .arrow {
+    display: inline-block;
+    transition: transform 0.18s var(--ease-out);
+  }
+  .btn:hover .arrow { transform: translateX(3px); }
+
+  /* ---------- Code block (terminal panel) ---------- */
+
+  .terminal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    font-family: var(--font-all);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .terminal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.875rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-elevated);
+  }
+
+  .terminal-label {
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .terminal-copy {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s var(--ease-out);
+  }
+  .terminal-copy:hover { color: var(--text); border-color: var(--text-secondary); }
+  .terminal-copy[data-copied="true"] {
+    color: var(--color-success);
+    border-color: rgba(52,211,153,0.4);
+  }
+
+  .terminal-body {
+    padding: 0.875rem 1.125rem;
+    overflow-x: auto;
+  }
+
+  .terminal-body pre {
+    margin: 0;
+    white-space: pre;
+    font-family: inherit;
+    color: var(--text);
+  }
+
+  .prompt { color: var(--text-dim); user-select: none; }
+  .prompt::after { content: ' '; }
+  .cmd { color: var(--text); font-weight: 500; }
+  .arg { color: var(--accent); }
+  .out-info    { color: var(--color-info); }
+  .out-ok      { color: var(--color-success); }
+  .out-warn    { color: var(--color-warning); }
+  .out-err     { color: var(--color-error); }
+  .out-dim     { color: var(--text-dim); }
+  .comment     { color: var(--text-dim); font-style: normal; }
+
+  /* Cursor blink at end of last terminal line */
+  .terminal-cursor::after {
+    content: '▋';
+    display: inline-block;
+    color: var(--accent);
+    margin-left: 4px;
+    animation: blink 1s step-end infinite;
+  }
+
+  /* ---------- Hero metrics strip ---------- */
+
+  .metrics-strip {
+    margin-top: 2rem;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .metric {
+    background: var(--surface);
+    padding: 0.875rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .metric-value {
+    font-size: clamp(1.25rem, 2.4vw, 1.75rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+
+  .metric-value .accent { color: var(--accent); }
+
+  .metric-label {
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  @media (max-width: 720px) {
+    .metrics-strip { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* ---------- Section primitive ---------- */
+
+  section.block {
+    padding: 4.5rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .section-eyebrow {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .section-title {
+    font-family: var(--font-all);
+    font-weight: 700;
+    font-size: clamp(1.5rem, 3.2vw, 2.25rem);
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    margin: 0.5rem 0 0;
+    color: var(--text);
+    max-width: 32ch;
+  }
+
+  .section-meta {
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
+    text-align: right;
+  }
+
+  /* ---------- 3-step setup ---------- */
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  @media (max-width: 900px) {
+    .steps { grid-template-columns: 1fr; }
+  }
+
+  .step {
+    background: var(--surface);
+    padding: 1.5rem 1.5rem 1.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    position: relative;
+  }
+
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .step-num::before {
+    content: '';
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--accent-border);
+    border-radius: var(--radius-sm);
+    background: var(--accent-dim);
+    color: var(--accent);
+    text-align: center;
+    line-height: 20px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .step:nth-child(1) .step-num::before { content: '01'; }
+  .step:nth-child(2) .step-num::before { content: '02'; }
+  .step:nth-child(3) .step-num::before { content: '03'; }
+
+  .step-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .step-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  .step .terminal {
+    margin-top: auto;
+  }
+
+  /* ---------- Bento benefits grid ---------- */
+
+  .bento {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    grid-auto-rows: minmax(0, auto);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .bento-cell {
+    background: var(--surface);
+    padding: 1.5rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 160px;
+  }
+
+  .bento-cell.span-2 { grid-column: span 2; }
+  .bento-cell.span-3 { grid-column: span 3; }
+
+  .bento-cell h3 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--text);
+  }
+
+  .bento-cell p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .bento-cell .label {
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .bento-cell .big-number {
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .bento-cell .big-number .accent { color: var(--accent); }
+
+  @media (max-width: 900px) {
+    .bento { grid-template-columns: 1fr; }
+    .bento-cell.span-2,
+    .bento-cell.span-3 { grid-column: span 1; }
+  }
+
+  /* Inline graph (mini) — pure CSS dot field for hero bento cell */
+  .mini-graph {
+    position: relative;
+    width: 100%;
+    height: 140px;
+    margin-top: auto;
+    overflow: hidden;
+  }
+
+  .mini-graph svg { display: block; width: 100%; height: 100%; }
+
+  /* ---------- IDE matrix ---------- */
+
+  .ide-matrix {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  @media (max-width: 720px) {
+    .ide-matrix { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .ide {
+    background: var(--surface);
+    padding: 1rem 1.125rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    transition: background 0.15s var(--ease-out);
+  }
+
+  .ide:hover { background: var(--surface-elevated); }
+
+  .ide-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+
+  .ide-cmd {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+  }
+
+  .ide-cmd .accent { color: var(--accent); }
+
+  .ide-status {
+    margin-top: 0.375rem;
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-success);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ide-status::before {
+    content: '';
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--color-success);
+    box-shadow: 0 0 4px rgba(52,211,153,0.5);
+  }
+
+  /* ---------- FAQ ---------- */
+
+  .faq {
+    display: grid;
+    grid-template-columns: 1fr;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .faq details {
+    border-top: 1px solid var(--border);
+  }
+
+  .faq details:first-child { border-top: none; }
+
+  .faq summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 1.125rem 1.375rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    transition: background 0.15s var(--ease-out);
+  }
+
+  .faq summary::-webkit-details-marker { display: none; }
+
+  .faq summary::after {
+    content: '+';
+    font-size: 18px;
+    color: var(--accent);
+    transition: transform 0.18s var(--ease-out);
+    flex-shrink: 0;
+  }
+
+  .faq details[open] summary::after {
+    content: '−';
+  }
+
+  .faq summary:hover { background: var(--surface-elevated); }
+
+  .faq-body {
+    padding: 0 1.375rem 1.25rem;
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    line-height: 1.65;
+  }
+
+  .faq-body code {
+    background: var(--bg);
+    padding: 1px 6px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-size: 12.5px;
+  }
+
+  /* ---------- Comparison table ---------- */
+
+  .compare {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .compare table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .compare thead th {
+    text-align: left;
+    padding: 0.875rem 1.125rem;
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    background: var(--surface-elevated);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .compare tbody td {
+    padding: 0.875rem 1.125rem;
+    border-top: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: top;
+  }
+
+  .compare tbody tr:hover td { background: var(--surface-hover); }
+
+  .compare td.label {
+    font-weight: 600;
+    color: var(--text);
+    width: 30%;
+  }
+
+  .compare td.col-engram {
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .compare td.col-other {
+    color: var(--text-secondary);
+  }
+
+  /* ---------- Footer ---------- */
+
+  footer {
+    padding: 3rem 0 4rem;
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+
+  footer .row {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem 2rem;
+    align-items: baseline;
+  }
+
+  footer a {
+    color: var(--text-secondary);
+    margin-right: 1.25rem;
+  }
+
+  footer a:hover { color: var(--accent); }
+
+  /* ---------- Reveal motion (opacity-only, AAA spec) ---------- */
+
+  .reveal {
+    opacity: 0;
+    transition: opacity 0.45s var(--ease-out);
+  }
+
+  .reveal.visible { opacity: 1; }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0; }
+  }
+
+  @keyframes pulse-status {
+    0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(245,158,11,0.6); }
+    50%      { opacity: 0.55; box-shadow: 0 0 2px rgba(245,158,11,0.3); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1 !important; transition: none !important; }
+    .terminal-cursor::after { animation: none; opacity: 1; }
+    .hero-pill::before { animation: none; }
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================== NAV ================== -->
+<header class="nav">
+  <div class="container nav-row">
+    <a class="wordmark" href="/" aria-label="engram home">
+      eng<span class="accent">r</span><span class="accent">a</span>m
+    </a>
+    <ul class="nav-links">
+      <li><a class="nav-link" href="#install">Install</a></li>
+      <li><a class="nav-link" href="#how">How it works</a></li>
+      <li><a class="nav-link" href="#benefits">Benefits</a></li>
+      <li><a class="nav-link" href="#ides">IDEs</a></li>
+      <li><a class="nav-link" href="#faq">FAQ</a></li>
+      <li class="nav-cta">
+        <a class="nav-link" href="https://github.com/NickCirv/engram" style="color:var(--accent);">GitHub →</a>
+      </li>
+    </ul>
+  </div>
+</header>
+
+<!-- ================== HERO ================== -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-grid">
+      <div>
+        <span class="hero-pill">● AI Coding Memory · v2.0.2</span>
+
+        <h1 class="hero-headline reveal">
+          your AI agent<br>
+          <span class="accent">forgets everything.</span><br>
+          fix it in 30 seconds.
+        </h1>
+
+        <p class="hero-sub reveal">
+          engram is the <strong>context spine</strong> for AI coding agents.
+          It intercepts every <code style="color:var(--accent);">Read</code>, <code style="color:var(--accent);">Edit</code>, <code style="color:var(--accent);">Write</code>, and <code style="color:var(--accent);">cat</code>
+          your agent makes and replaces it with a pre-assembled context packet —
+          structure, decisions, git history, library docs, and known mistakes —
+          from <strong>8 providers</strong>, in a single ~500-token response.
+          The agent gets what it needs without re-reading the file.
+        </p>
+
+        <div class="cta-row reveal">
+          <a class="btn btn-primary" href="#install">
+            Install in 30s <span class="arrow">→</span>
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/NickCirv/engram">
+            View on GitHub
+          </a>
+        </div>
+
+        <div class="metrics-strip reveal" role="list" aria-label="engram metrics">
+          <div class="metric" role="listitem">
+            <span class="metric-value"><span class="accent">88.1</span>%</span>
+            <span class="metric-label">Avg session token savings</span>
+          </div>
+          <div class="metric" role="listitem">
+            <span class="metric-value"><span class="accent">$0</span></span>
+            <span class="metric-label">LLM cost · 0 cloud</span>
+          </div>
+          <div class="metric" role="listitem">
+            <span class="metric-value">8 + n</span>
+            <span class="metric-label">Providers · plugin SDK</span>
+          </div>
+          <div class="metric" role="listitem">
+            <span class="metric-value">670</span>
+            <span class="metric-label">Tests passing · CI green</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hero terminal -->
+      <div class="reveal">
+        <div class="terminal" role="region" aria-label="Quickstart commands">
+          <div class="terminal-head">
+            <span class="terminal-label">~ · zsh</span>
+            <button class="terminal-copy" type="button" data-copy="install-quick">Copy</button>
+          </div>
+          <div class="terminal-body">
+<pre id="install-quick"><span class="prompt">$</span><span class="cmd">npm install -g engramx</span>
+<span class="prompt">$</span><span class="cmd">cd</span> <span class="arg">~/my-project</span>
+<span class="prompt">$</span><span class="cmd">engram init</span>
+<span class="out-dim">↳</span> <span class="out-info">indexed 451 nodes, 1005 edges</span>
+<span class="out-dim">↳</span> <span class="out-info">10 languages · 0 LLM cost</span>
+<span class="prompt">$</span><span class="cmd">engram install-hook</span>
+<span class="out-dim">↳</span> <span class="out-ok">✓</span> SessionStart, Read, Edit, Write, Bash, PreCompact, CwdChanged
+<span class="out-dim">↳</span> <span class="out-ok">✓</span> hud label installed
+<span class="out-ok">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
+<span class="out-ok">✅</span>  next Claude Code session has memory.<span class="terminal-cursor"></span></pre>
+          </div>
+        </div>
+
+        <p style="margin: 1rem 0 0; font-size: 11.5px; color: var(--text-dim); letter-spacing: 0.04em;">
+          Works with <a href="#ides" style="color:var(--text-secondary);"><strong style="color:var(--text);">Claude Code</strong></a>
+          · Cursor · Codex · Aider · Continue · Zed · Windsurf · Neovim · Emacs
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================== INSTALL — 3 STEP ================== -->
+<section class="block" id="install">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow">// 01 · Install</div>
+        <h2 class="section-title">Three commands. No accounts. No cloud.</h2>
+      </div>
+      <div class="section-meta">requires node ≥ 20 · 0 native deps</div>
+    </div>
+
+    <div class="steps">
+      <article class="step">
+        <span class="step-num">Install globally</span>
+        <h3 class="step-title">Pull the binary from npm</h3>
+        <p class="step-desc">
+          One package, ~6MB, six tree-sitter grammars bundled.
+          Zero cloud calls during install. Apache 2.0.
+        </p>
+        <div class="terminal">
+          <div class="terminal-head">
+            <span class="terminal-label">step 01</span>
+            <button class="terminal-copy" type="button" data-copy="step-01">Copy</button>
+          </div>
+          <div class="terminal-body">
+<pre id="step-01"><span class="prompt">$</span><span class="cmd">npm install -g engramx</span>
+<span class="out-dim">↳</span> <span class="out-info">added engramx@2.0.2 in 4s</span></pre>
+          </div>
+        </div>
+      </article>
+
+      <article class="step">
+        <span class="step-num">Index the project</span>
+        <h3 class="step-title">Build the knowledge graph</h3>
+        <p class="step-desc">
+          AST-extract every function, class, route, model.
+          10 languages. Mistake memory + git miner included.
+        </p>
+        <div class="terminal">
+          <div class="terminal-head">
+            <span class="terminal-label">step 02</span>
+            <button class="terminal-copy" type="button" data-copy="step-02">Copy</button>
+          </div>
+          <div class="terminal-body">
+<pre id="step-02"><span class="prompt">$</span><span class="cmd">cd</span> <span class="arg">~/my-project</span>
+<span class="prompt">$</span><span class="cmd">engram init</span>
+<span class="out-dim">↳</span> <span class="out-info">451 nodes · 1005 edges</span>
+<span class="out-dim">↳</span> <span class="out-info">SQLite at .engram/graph.db</span></pre>
+          </div>
+        </div>
+      </article>
+
+      <article class="step">
+        <span class="step-num">Wire the Sentinel</span>
+        <h3 class="step-title">Hook every file read</h3>
+        <p class="step-desc">
+          PreToolUse hook intercepts <code style="color:var(--accent);">Read</code> /
+          <code style="color:var(--accent);">Edit</code> /
+          <code style="color:var(--accent);">Bash cat</code> and answers from the graph.
+          Survives PreCompact + CwdChanged.
+        </p>
+        <div class="terminal">
+          <div class="terminal-head">
+            <span class="terminal-label">step 03</span>
+            <button class="terminal-copy" type="button" data-copy="step-03">Copy</button>
+          </div>
+          <div class="terminal-body">
+<pre id="step-03"><span class="prompt">$</span><span class="cmd">engram install-hook</span>
+<span class="out-dim">↳</span> <span class="out-ok">✓</span> 7 hooks installed
+<span class="out-dim">↳</span> <span class="out-ok">✓</span> hud label active</pre>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ================== HOW IT WORKS ================== -->
+<section class="block" id="how">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow">// 02 · How it works</div>
+        <h2 class="section-title">A spine, not a tool the agent calls.</h2>
+      </div>
+    </div>
+
+    <div class="bento">
+      <!-- Big cell — explainer + mini graph -->
+      <div class="bento-cell span-2">
+        <span class="label">// the loop</span>
+        <h3>Read → intercept → context packet → deny</h3>
+        <p>
+          Your agent attempts <code style="color:var(--accent);">Read('src/auth.ts')</code>.
+          engram's PreToolUse hook intercepts. It reads the graph for that file —
+          structure, recent edits, related decisions, known mistakes — packs
+          ~500 tokens, denies the original Read with the packet as the reason.
+          The agent sees a richer answer than the file itself, in a fraction
+          of the tokens. Multiplied across a session: <strong>88.1% measured
+          savings</strong>, $0.26 saved per session at $3/M.
+        </p>
+
+        <div class="mini-graph" aria-hidden="true">
+          <!-- 8 providers as a constellation -->
+          <svg viewBox="0 0 480 140" preserveAspectRatio="xMidYMid meet" role="img" aria-label="provider graph">
+            <!-- edges -->
+            <g stroke="rgba(245,158,11,0.35)" stroke-width="1" fill="none">
+              <line x1="60"  y1="70" x2="160" y2="40"/>
+              <line x1="60"  y1="70" x2="160" y2="100"/>
+              <line x1="160" y1="40" x2="240" y2="70"/>
+              <line x1="160" y1="100" x2="240" y2="70"/>
+              <line x1="240" y1="70" x2="320" y2="35"/>
+              <line x1="240" y1="70" x2="320" y2="105"/>
+              <line x1="240" y1="70" x2="380" y2="55"/>
+              <line x1="240" y1="70" x2="420" y2="90"/>
+            </g>
+            <!-- god node -->
+            <circle cx="240" cy="70" r="9" fill="#f59e0b"/>
+            <circle cx="240" cy="70" r="14" fill="none" stroke="rgba(245,158,11,0.4)" stroke-width="1"/>
+            <text x="240" y="100" fill="#e8e8e8" font-family="JetBrains Mono, monospace" font-size="10" text-anchor="middle">spine</text>
+
+            <!-- providers -->
+            <g fill="#f59e0b">
+              <circle cx="60"  cy="70"  r="4"/>
+              <circle cx="160" cy="40"  r="4"/>
+              <circle cx="160" cy="100" r="4"/>
+              <circle cx="320" cy="35"  r="4"/>
+              <circle cx="320" cy="105" r="4"/>
+              <circle cx="380" cy="55"  r="4"/>
+              <circle cx="420" cy="90"  r="4"/>
+            </g>
+
+            <g fill="#8a8a8a" font-family="JetBrains Mono, monospace" font-size="9">
+              <text x="60"  y="58" text-anchor="middle">structure</text>
+              <text x="160" y="28" text-anchor="middle">mistakes</text>
+              <text x="160" y="118" text-anchor="middle">git</text>
+              <text x="320" y="23" text-anchor="middle">mempalace</text>
+              <text x="320" y="123" text-anchor="middle">context7</text>
+              <text x="380" y="43" text-anchor="middle">obsidian</text>
+              <text x="420" y="108" text-anchor="middle">ast/lsp</text>
+            </g>
+          </svg>
+        </div>
+      </div>
+
+      <div class="bento-cell">
+        <span class="label">// hooked at the boundary</span>
+        <h3>Not a tool. A hook.</h3>
+        <p>
+          Hooks at PreToolUse and PreCompact. Your agent
+          doesn't have to learn a new tool — it just sees
+          better context for the same call.
+        </p>
+      </div>
+
+      <div class="bento-cell">
+        <span class="label">// data discipline</span>
+        <h3>Local SQLite. Zero cloud.</h3>
+        <p>
+          Graph lives at <code style="color:var(--accent);">.engram/graph.db</code>.
+          No API keys, no telemetry by default, runs on a plane.
+        </p>
+      </div>
+
+      <!-- Big metric cell -->
+      <div class="bento-cell">
+        <span class="label">// measured, not estimated</span>
+        <span class="big-number"><span class="accent">11×</span></span>
+        <p>fewer tokens vs reading relevant files. Range: 3.5–11.1× across 6 real projects.</p>
+      </div>
+
+      <div class="bento-cell">
+        <span class="label">// scope</span>
+        <span class="big-number">10 langs</span>
+        <p>TS · JS · Python · Go · Rust · Java · Ruby · C# · PHP · Bash. Tree-sitter native.</p>
+      </div>
+
+      <div class="bento-cell">
+        <span class="label">// memory of failure</span>
+        <span class="big-number">⚠</span>
+        <p>Mistake memory: past regressions surface at the top of every query. 2.5× score boost on prior bugs.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================== BENEFITS / VS-WITHOUT ================== -->
+<section class="block" id="benefits">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow">// 03 · Benefits</div>
+        <h2 class="section-title">Without engram → with engram.</h2>
+      </div>
+      <div class="section-meta">measured on 6 real projects · n=200 sessions</div>
+    </div>
+
+    <div class="compare">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Dimension</th>
+            <th scope="col">Without engram</th>
+            <th scope="col">With engram</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="label">Tokens per file Read</td>
+            <td class="col-other">~5,400 raw bytes</td>
+            <td class="col-engram">~500 (packet)</td>
+          </tr>
+          <tr>
+            <td class="label">Cumulative session tokens</td>
+            <td class="col-other">100% baseline</td>
+            <td class="col-engram">11.9% (88.1% saved)</td>
+          </tr>
+          <tr>
+            <td class="label">Cost per typical session ($3/M)</td>
+            <td class="col-other">$0.30</td>
+            <td class="col-engram">$0.04</td>
+          </tr>
+          <tr>
+            <td class="label">Repeat-mistake rate</td>
+            <td class="col-other">High — agent re-introduces fixed bugs</td>
+            <td class="col-engram">Low — mistake memory ⚠ at top of context</td>
+          </tr>
+          <tr>
+            <td class="label">Context survival</td>
+            <td class="col-other">Lost on /compact</td>
+            <td class="col-engram">PreCompact hook re-injects spine</td>
+          </tr>
+          <tr>
+            <td class="label">Project switch</td>
+            <td class="col-other">Manual re-prime</td>
+            <td class="col-engram">CwdChanged auto-loads new graph</td>
+          </tr>
+          <tr>
+            <td class="label">Network calls</td>
+            <td class="col-other">Cloud RAG, embeddings, vendor lock</td>
+            <td class="col-engram">0 — local SQLite, $0 LLM cost</td>
+          </tr>
+          <tr>
+            <td class="label">Setup</td>
+            <td class="col-other">Configure RAG, vector DB, embedding model</td>
+            <td class="col-engram">3 commands · 30 seconds</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ================== IDE MATRIX ================== -->
+<section class="block" id="ides">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow">// 04 · IDE coverage</div>
+        <h2 class="section-title">8 environments. One spine.</h2>
+      </div>
+      <div class="section-meta">all gens via <code style="color:var(--accent);">engram gen-*</code></div>
+    </div>
+
+    <div class="ide-matrix">
+      <div class="ide">
+        <span class="ide-name">Claude Code</span>
+        <span class="ide-cmd"><span class="accent">engram</span> install-hook</span>
+        <span class="ide-status">Live · PreToolUse</span>
+      </div>
+      <div class="ide">
+        <span class="ide-name">Cursor</span>
+        <span class="ide-cmd"><span class="accent">engram</span> gen-cursorrules</span>
+        <span class="ide-status">Live · MDC + rules</span>
+      </div>
+      <div class="ide">
+        <span class="ide-name">Continue.dev</span>
+        <span class="ide-cmd"><span class="accent">engram</span> gen-continue</span>
+        <span class="ide-status">Live · slash cmd</span>
+      </div>
+      <div class="ide">
+        <span class="ide-name">Aider</span>
+        <span class="ide-cmd"><span class="accent">engram</span> gen-aider</span>
+        <span class="ide-status">Live · CONVENTIONS</span>
+      </div>
+      <div class="ide">
+        <span class="ide-name">Zed</span>
+        <span class="ide-cmd"><span class="accent">engram</span> gen-zed</span>
+        <span class="ide-status">Live · agent rules</span>
+      </div>
+      <div class="ide">
+        <span class="ide-name">Windsurf</span>
+        <span class="ide-cmd"><span class="accent">engram</span> gen-windsurfrules</span>
+        <span class="ide-status">Live · v2.0</span>
+      </div>
+      <div class="ide">
+        <span class="ide-name">Neovim</span>
+        <span class="ide-cmd">docs/integrations/neovim.md</span>
+        <span class="ide-status">Live · MCP</span>
+      </div>
+      <div class="ide">
+        <span class="ide-name">Emacs</span>
+        <span class="ide-cmd">docs/integrations/emacs.md</span>
+        <span class="ide-status">Live · MCP</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================== DASHBOARD PREVIEW ================== -->
+<section class="block">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow">// 05 · Dashboard</div>
+        <h2 class="section-title">35KB of HTML. One command. Browser opens.</h2>
+      </div>
+      <div class="section-meta">CSP-hardened · zero CDN · works offline</div>
+    </div>
+
+    <div class="terminal" style="margin-bottom: 1.5rem;">
+      <div class="terminal-head">
+        <span class="terminal-label">~ · launch dashboard</span>
+        <button class="terminal-copy" type="button" data-copy="cmd-ui">Copy</button>
+      </div>
+      <div class="terminal-body">
+<pre id="cmd-ui"><span class="prompt">$</span><span class="cmd">engram ui</span>
+<span class="out-dim">↳</span> <span class="out-info">listening on http://127.0.0.1:7777</span>
+<span class="out-dim">↳</span> <span class="out-ok">opening browser…</span></pre>
+      </div>
+    </div>
+
+    <div class="bento">
+      <div class="bento-cell">
+        <span class="label">overview</span>
+        <h3>Tokens saved · cost saved · graph health</h3>
+        <p>Real metrics from real sessions. Not vanity numbers — measured at the hook.</p>
+      </div>
+      <div class="bento-cell">
+        <span class="label">activity</span>
+        <h3>Live SSE event feed</h3>
+        <p>Every Read / Edit / Write decision, streamed within 1 second. Deny vs passthrough on the right.</p>
+      </div>
+      <div class="bento-cell">
+        <span class="label">files</span>
+        <h3>Heatmap of hot files</h3>
+        <p>Ranked by interception count. The "where the savings come from" view.</p>
+      </div>
+      <div class="bento-cell span-2">
+        <span class="label">graph</span>
+        <h3>Canvas 2D force-directed</h3>
+        <p>Drag to pan, scroll to zoom, click for details. 300+ nodes at 60fps. God nodes labeled and larger. The view that makes architecture legible to humans.</p>
+      </div>
+      <div class="bento-cell">
+        <span class="label">providers</span>
+        <h3>Component health</h3>
+        <p>HTTP / LSP / AST / IDE count and per-layer cache stats. Cross-session hit counts.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================== FAQ ================== -->
+<section class="block" id="faq">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow">// 06 · FAQ</div>
+        <h2 class="section-title">The questions agents ask first.</h2>
+      </div>
+    </div>
+
+    <div class="faq">
+      <details>
+        <summary>Does engram send my code anywhere?</summary>
+        <div class="faq-body">
+          No. Engram is local-first SQLite at <code>.engram/graph.db</code>.
+          The HTTP server binds to <code>127.0.0.1</code> only. Auth is bearer-token (random 64-char, file-mode 0600).
+          CORS is opt-in via <code>ENGRAM_ALLOWED_ORIGINS</code>. Zero telemetry by default, zero LLM API calls during indexing.
+        </div>
+      </details>
+
+      <details>
+        <summary>How is the 88.1% number measured?</summary>
+        <div class="faq-body">
+          End-to-end at the hook layer across 6 real projects, n=200+ sessions.
+          We compare the byte-count of what the agent <em>would have read</em> (the raw file)
+          against the byte-count of the context packet engram returned (~500 tokens).
+          The dashboard exposes the per-session numbers under
+          <code>Overview → Tokens saved</code>. No estimates. No rounding up.
+        </div>
+      </details>
+
+      <details>
+        <summary>Will it work with my Claude Code / Cursor / Aider setup?</summary>
+        <div class="faq-body">
+          Yes. <strong>Claude Code</strong>: <code>engram install-hook</code> wires PreToolUse + PreCompact + CwdChanged + SessionStart.
+          <strong>Cursor</strong>: <code>engram gen-cursorrules</code> emits MDC + .cursorrules.
+          <strong>Aider</strong>: <code>engram gen-aider</code> writes CONVENTIONS.md.
+          Same for Continue, Zed, Windsurf, Neovim, Emacs. Eight integrations, one source of truth.
+        </div>
+      </details>
+
+      <details>
+        <summary>What happens on /compact?</summary>
+        <div class="faq-body">
+          The PreCompact hook fires before Claude Code clears context.
+          engram re-injects the project spine (structure + active mistakes + recent decisions)
+          as a SessionStart-style block on the other side. Compaction stops being
+          a context-loss event.
+        </div>
+      </details>
+
+      <details>
+        <summary>What languages does the AST miner support?</summary>
+        <div class="faq-body">
+          TypeScript, JavaScript, Python, Go, Rust, Java, Ruby, C#, PHP, and Bash via tree-sitter.
+          Six grammars are bundled in the npm package (zero native deps to install).
+          For unsupported languages, engram falls back to regex-based heuristics
+          (lower confidence, surfaced in the dashboard).
+        </div>
+      </details>
+
+      <details>
+        <summary>Can I add my own context provider?</summary>
+        <div class="faq-body">
+          Yes. Drop a <code>.mjs</code> file in <code>~/.engram/plugins/</code> exporting a
+          <code>resolve(query)</code> function that returns a <code>{ kind, content, score }</code> packet.
+          Engram validates the schema before loading. Run <code>engram plugin list</code> to see what's wired.
+          The provider plugin SDK is documented in <code>docs/PLUGINS.md</code>.
+        </div>
+      </details>
+
+      <details>
+        <summary>How does engram handle secrets in the graph?</summary>
+        <div class="faq-body">
+          The miner respects <code>.gitignore</code> + <code>.engramignore</code>.
+          Filenames matching <code>.env*</code>, <code>*.pem</code>, <code>*.key</code>,
+          <code>secrets.*</code>, <code>credentials.*</code> are excluded by default.
+          Content is never sent off-machine, but the conservative move is still:
+          add anything sensitive to <code>.engramignore</code> before <code>engram init</code>.
+        </div>
+      </details>
+
+      <details>
+        <summary>Is it free?</summary>
+        <div class="faq-body">
+          Yes — Apache 2.0, no telemetry, no account, no cloud dependency.
+          A hosted Pro tier (sync, team graphs, audit log) is in private alpha.
+          Everything on this page is and will remain free in the OSS package on npm.
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ================== FINAL CTA ================== -->
+<section class="block" style="border-bottom: none;">
+  <div class="container" style="display:flex; flex-direction: column; align-items: center; text-align: center; gap: 1.25rem;">
+    <div class="section-eyebrow">// ship it</div>
+    <h2 class="section-title" style="text-align:center; max-width: 26ch;">
+      Stop paying for context<br>you've already paid for.
+    </h2>
+    <p style="max-width: 56ch; color: var(--text-secondary); margin: 0;">
+      Three commands. The next session has memory. If you don't see at least
+      5× fewer tokens in the dashboard, uninstall and we'll buy back the 30 seconds.
+    </p>
+    <div class="cta-row" style="margin-top: 0.5rem;">
+      <a class="btn btn-primary" href="https://www.npmjs.com/package/engramx">
+        npm install -g engramx <span class="arrow">→</span>
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/NickCirv/engram">
+        Star on GitHub
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ================== FOOTER ================== -->
+<footer>
+  <div class="container row">
+    <div>
+      <span class="wordmark" style="font-size: 13px;">eng<span class="accent">r</span><span class="accent">a</span>m</span>
+      <span style="margin-left: 0.75rem; color: var(--text-dim);">v2.0.2 · Apache 2.0 · Built by <a href="https://github.com/NickCirv">@NickCirv</a></span>
+    </div>
+    <nav aria-label="Footer navigation">
+      <a href="https://github.com/NickCirv/engram">GitHub</a>
+      <a href="https://www.npmjs.com/package/engramx">npm</a>
+      <a href="https://github.com/NickCirv/engram/blob/main/CHANGELOG.md">Changelog</a>
+      <a href="https://github.com/NickCirv/engram/security/advisories">Security</a>
+      <a href="./demos/showcase.html">Demos</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  /* Reveal on intersect — opacity-only, AAA spec */
+  (() => {
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const els = document.querySelectorAll('.reveal');
+    if (reduced) { els.forEach(e => e.classList.add('visible')); return; }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e, i) => {
+        if (e.isIntersecting) {
+          setTimeout(() => e.target.classList.add('visible'), i * 60);
+          io.unobserve(e.target);
+        }
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.1 });
+    els.forEach(el => io.observe(el));
+  })();
+
+  /* Copy buttons */
+  document.querySelectorAll('.terminal-copy').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const target = document.getElementById(btn.dataset.copy);
+      if (!target) return;
+      try {
+        await navigator.clipboard.writeText(target.innerText.trim());
+        const original = btn.textContent;
+        btn.textContent = '✓ Copied';
+        btn.dataset.copied = 'true';
+        setTimeout(() => {
+          btn.textContent = original;
+          delete btn.dataset.copied;
+        }, 1600);
+      } catch {
+        btn.textContent = 'Press ⌘C';
+      }
+    });
+  });
+</script>
+
+</body>
+</html>

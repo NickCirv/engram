@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>engram — 24s showcase</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
+    <link rel="stylesheet" href="https://fonts.bunny.net/css?family=jetbrains-mono:400,500,600,700,800&display=swap">
+
+    <style>
+      /* ==========================================================
+         engram — Hyperframes composition
+         24s @ 1920×1080 · 4 scenes
+         Brand: terminal-mono + amber, banner-derived
+         Palette: bg #0a0a0a · fg #e8e8e8 · accent #f59e0b
+         Type: JetBrains Mono everywhere, tabular numerals
+         ========================================================== */
+
+      :root {
+        --bg:      #0a0a0a;
+        --surface: #141414;
+        --surface-2: #1c1c1c;
+        --border:  rgba(255, 255, 255, 0.08);
+        --border-strong: rgba(255, 255, 255, 0.16);
+        --fg:      #e8e8e8;
+        --fg-2:    #8a8a8a;
+        --fg-3:    #555555;
+        --accent:  #f59e0b;
+        --accent-warm: #fbbf24;
+        --accent-dim: rgba(245, 158, 11, 0.10);
+        --accent-border: rgba(245, 158, 11, 0.28);
+        --ok:      #34d399;
+        --err:     #f87171;
+        --info:    #60a5fa;
+        --font:    'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1920px; height: 1080px;
+        overflow: hidden;
+        background: var(--bg);
+        font-family: var(--font);
+        color: var(--fg);
+        font-variant-numeric: tabular-nums;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      #root {
+        width: 1920px; height: 1080px;
+        position: relative;
+        background-color: var(--bg);
+        background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1.4px, transparent 1.4px);
+        background-size: 28px 28px;
+      }
+
+      /* Persistent ambient background (lives across all scenes) */
+      .ambient {
+        position: absolute; inset: 0;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .ambient .glow {
+        position: absolute;
+        width: 900px; height: 900px;
+        border-radius: 50%;
+        filter: blur(120px);
+        opacity: 0.18;
+      }
+      .ambient .glow-1 { left: -200px; top: 100px;  background: var(--accent); }
+      .ambient .glow-2 { right: -250px; bottom: -100px; background: #ea580c; opacity: 0.10; }
+
+      /* Ghost watermark — engram wordmark drifting at 4% opacity */
+      .watermark {
+        position: absolute;
+        bottom: -100px; right: -50px;
+        font-size: 540px;
+        font-weight: 800;
+        color: var(--fg);
+        opacity: 0.025;
+        letter-spacing: -25px;
+        text-transform: lowercase;
+        white-space: nowrap;
+      }
+
+      /* Persistent brand chip — top-left */
+      .brand {
+        position: absolute;
+        top: 56px; left: 80px;
+        display: inline-flex; align-items: center; gap: 14px;
+        z-index: 10;
+        opacity: 0;
+      }
+      .brand .dot {
+        width: 12px; height: 12px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 14px rgba(245,158,11,0.6);
+      }
+      .brand .word {
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: -1px;
+      }
+      .brand .word .a { color: var(--accent); }
+
+      /* Persistent scene counter — top-right */
+      .counter {
+        position: absolute;
+        top: 56px; right: 80px;
+        z-index: 10;
+        font-size: 18px;
+        letter-spacing: 4px;
+        color: var(--fg-2);
+        font-weight: 500;
+        opacity: 0;
+      }
+      .counter .accent { color: var(--accent); }
+
+      /* Lower-third caption (each scene supplies its own copy) */
+      .lower-third {
+        position: absolute;
+        left: 80px; right: 80px; bottom: 80px;
+        font-size: 44px;
+        line-height: 1.25;
+        color: var(--fg);
+        font-weight: 500;
+        letter-spacing: -0.5px;
+      }
+      .lower-third .accent { color: var(--accent); font-weight: 700; }
+
+      /* Scene chrome — every clip is absolutely positioned, full-bleed */
+      .clip {
+        position: absolute; inset: 0;
+        z-index: 5;
+        opacity: 0;
+        padding: 160px 80px 220px;
+      }
+
+      /* Eyebrow label per-scene */
+      .eyebrow {
+        display: inline-flex; align-items: center; gap: 12px;
+        padding: 8px 18px 8px 14px;
+        border: 1.5px solid var(--accent-border);
+        background: var(--accent-dim);
+        border-radius: 8px;
+        color: var(--accent);
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        margin-bottom: 56px;
+      }
+      .eyebrow::before {
+        content: '';
+        width: 9px; height: 9px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      /* ============= SCENE 1 — PROBLEM ============= */
+
+      #scene-problem .lines {
+        background: var(--surface);
+        border: 1.5px solid var(--border);
+        border-radius: 14px;
+        padding: 40px 56px;
+        font-size: 28px;
+        line-height: 2.1;
+      }
+      #scene-problem .row {
+        display: grid;
+        grid-template-columns: 60px 1fr 200px;
+        gap: 32px;
+        padding: 14px 0;
+        border-top: 1px solid var(--border);
+        opacity: 0;
+      }
+      #scene-problem .row:first-of-type { border-top: none; }
+      #scene-problem .arrow { color: var(--fg-3); }
+      #scene-problem .file { color: var(--fg); }
+      #scene-problem .file .accent { color: var(--accent); }
+      #scene-problem .file.again { opacity: 0.55; text-decoration: line-through; color: var(--fg-2); }
+      #scene-problem .tok { text-align: right; color: var(--err); font-weight: 700; }
+
+      #scene-problem .meter {
+        position: absolute;
+        right: 80px; top: 320px;
+        width: 540px;
+        background: var(--surface);
+        border: 1.5px solid var(--border);
+        border-radius: 14px;
+        padding: 48px 56px;
+      }
+      #scene-problem .meter .label {
+        font-size: 18px;
+        letter-spacing: 4px;
+        color: var(--fg-2);
+        text-transform: uppercase;
+        font-weight: 600;
+        margin-bottom: 24px;
+      }
+      #scene-problem .meter .value {
+        font-size: 148px;
+        line-height: 0.95;
+        font-weight: 800;
+        letter-spacing: -6px;
+        color: var(--err);
+        font-variant-numeric: tabular-nums;
+      }
+      #scene-problem .meter .delta {
+        margin-top: 20px;
+        font-size: 22px;
+        color: var(--err);
+        font-weight: 500;
+      }
+
+      /* ============= SCENE 2 — INSTALL ============= */
+
+      #scene-install .terminal {
+        margin: 0 auto;
+        max-width: 1400px;
+        background: var(--surface);
+        border: 1.5px solid var(--border);
+        border-radius: 16px;
+        overflow: hidden;
+      }
+      #scene-install .term-head {
+        display: flex; justify-content: space-between; align-items: center;
+        background: var(--surface-2);
+        border-bottom: 1.5px solid var(--border);
+        padding: 22px 36px;
+        font-size: 18px;
+        letter-spacing: 4px;
+        text-transform: uppercase;
+        color: var(--fg-2);
+        font-weight: 600;
+      }
+      #scene-install .term-head .right { color: var(--accent); }
+
+      #scene-install .term-body {
+        padding: 48px 56px 56px;
+        font-size: 32px;
+        line-height: 1.85;
+      }
+      #scene-install .line {
+        display: block;
+        white-space: nowrap;
+        opacity: 0;
+      }
+      #scene-install .prompt { color: var(--fg-3); margin-right: 0.7ch; }
+      #scene-install .cmd    { color: var(--fg); font-weight: 500; }
+      #scene-install .arg    { color: var(--accent); font-weight: 600; }
+      #scene-install .ok     { color: var(--ok); }
+      #scene-install .info   { color: var(--info); }
+      #scene-install .dim    { color: var(--fg-3); }
+      #scene-install .bar    { color: var(--ok); letter-spacing: 0.05em; }
+
+      /* ============= SCENE 3 — INTERCEPT ============= */
+
+      #scene-intercept .grid {
+        display: grid;
+        grid-template-columns: 1fr 60px 1fr 60px 1fr;
+        gap: 0;
+        align-items: stretch;
+        height: 580px;
+      }
+      #scene-intercept .card {
+        background: var(--surface);
+        border: 1.5px solid var(--border);
+        border-radius: 16px;
+        padding: 40px 44px;
+        display: flex; flex-direction: column;
+        opacity: 0;
+      }
+      #scene-intercept .card.center {
+        border-color: var(--accent-border);
+        box-shadow: inset 0 0 0 1px rgba(245,158,11,0.15);
+      }
+      #scene-intercept .card .h {
+        font-size: 18px;
+        letter-spacing: 4px;
+        color: var(--fg-2);
+        text-transform: uppercase;
+        font-weight: 600;
+        margin-bottom: 24px;
+      }
+      #scene-intercept .card .body {
+        font-size: 30px;
+        line-height: 1.5;
+        color: var(--fg);
+      }
+      #scene-intercept .card .body .accent { color: var(--accent); font-weight: 600; }
+      #scene-intercept .card .body .ok     { color: var(--ok); font-weight: 600; }
+      #scene-intercept .card .body .dim    { color: var(--fg-3); }
+
+      #scene-intercept .pulse-pill {
+        display: inline-flex; align-items: center; gap: 12px;
+        padding: 10px 22px 10px 18px;
+        border: 1.5px solid var(--accent-border);
+        background: var(--accent-dim);
+        border-radius: 8px;
+        color: var(--accent);
+        font-size: 18px;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        font-weight: 700;
+        align-self: flex-start;
+        margin-bottom: 24px;
+      }
+      #scene-intercept .pulse-pill::before {
+        content: '';
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      #scene-intercept .arrow-cell {
+        display: flex; align-items: center; justify-content: center;
+        opacity: 0;
+      }
+      #scene-intercept .arrow-cell svg { width: 100%; height: 60px; }
+
+      /* ============= SCENE 4 — PAYOFF ============= */
+
+      #scene-payoff .stat-grid {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr 1fr;
+        gap: 0;
+        background: var(--border);
+        border: 1.5px solid var(--border);
+        border-radius: 16px;
+        overflow: hidden;
+      }
+      #scene-payoff .cell {
+        background: var(--surface);
+        padding: 56px 56px;
+        display: flex; flex-direction: column; gap: 20px;
+        opacity: 0;
+      }
+      #scene-payoff .cell .lbl {
+        font-size: 18px;
+        letter-spacing: 4px;
+        color: var(--fg-2);
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+      #scene-payoff .cell .big {
+        font-size: 156px;
+        font-weight: 800;
+        letter-spacing: -6px;
+        color: var(--fg);
+        line-height: 0.95;
+      }
+      #scene-payoff .cell .big .accent { color: var(--accent); }
+      #scene-payoff .cell .delta {
+        font-size: 22px;
+        color: var(--ok);
+        font-weight: 500;
+      }
+      #scene-payoff .mistake {
+        margin-top: 40px;
+        display: flex; align-items: center; gap: 22px;
+        padding: 24px 32px;
+        background: rgba(245,158,11,0.06);
+        border: 1.5px solid rgba(245,158,11,0.35);
+        border-left: 5px solid var(--accent);
+        border-radius: 8px;
+        opacity: 0;
+      }
+      #scene-payoff .mistake .warn {
+        color: var(--accent);
+        font-size: 38px;
+        font-weight: 800;
+      }
+      #scene-payoff .mistake .text {
+        font-size: 22px;
+        color: var(--fg);
+        font-weight: 500;
+      }
+      #scene-payoff .mistake .text strong { color: var(--accent); font-weight: 700; }
+    </style>
+  </head>
+
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="24"
+      data-width="1920"
+      data-height="1080"
+    >
+
+      <!-- ==================== AMBIENT BACKGROUND ==================== -->
+      <div class="ambient">
+        <div class="glow glow-1"></div>
+        <div class="glow glow-2"></div>
+        <div class="watermark">engram</div>
+      </div>
+
+      <!-- ==================== PERSISTENT BRAND ==================== -->
+      <div class="brand" id="brand">
+        <span class="dot"></span>
+        <span class="word">eng<span class="a">r</span><span class="a">a</span>m</span>
+      </div>
+
+      <div class="counter" id="counter">
+        <span id="counter-num" class="accent">01</span> / 04
+      </div>
+
+
+      <!-- ==================== SCENE 1 · PROBLEM (0–5s) ==================== -->
+      <div
+        class="clip"
+        id="scene-problem"
+        data-start="0"
+        data-duration="5"
+        data-track-index="1"
+      >
+        <span class="eyebrow" id="s1-eyebrow">scene 01 · without engram</span>
+
+        <div class="lines" style="max-width: 1100px;" id="s1-panel">
+          <div class="row" id="s1-r1">
+            <span class="arrow">→</span>
+            <span class="file">Read · <span class="accent">src/auth.ts</span></span>
+            <span class="tok">5,400</span>
+          </div>
+          <div class="row" id="s1-r2">
+            <span class="arrow">→</span>
+            <span class="file again">Read · src/auth.ts <span style="color:var(--fg-3);">(again)</span></span>
+            <span class="tok">+5,400</span>
+          </div>
+          <div class="row" id="s1-r3">
+            <span class="arrow">→</span>
+            <span class="file again">Read · src/auth.ts <span style="color:var(--fg-3);">(again)</span></span>
+            <span class="tok">+5,400</span>
+          </div>
+          <div class="row" id="s1-r4">
+            <span class="arrow">→</span>
+            <span class="file again">Read · src/auth.ts <span style="color:var(--fg-3);">(again)</span></span>
+            <span class="tok">+5,400</span>
+          </div>
+        </div>
+
+        <div class="meter" id="s1-meter">
+          <div class="label">cumulative tokens</div>
+          <div class="value" id="s1-tokens">5,400</div>
+          <div class="delta">↑ same file · 4 reads · 4× the cost</div>
+        </div>
+
+        <div class="lower-third" id="s1-lt">
+          Your AI agent re-reads the <span class="accent">same files</span>.<br>
+          Every session. Every time.
+        </div>
+      </div>
+
+
+      <!-- ==================== SCENE 2 · INSTALL (5–11s) ==================== -->
+      <div
+        class="clip"
+        id="scene-install"
+        data-start="5"
+        data-duration="6"
+        data-track-index="1"
+      >
+        <span class="eyebrow" id="s2-eyebrow">scene 02 · 30 seconds</span>
+
+        <div class="terminal" id="s2-terminal">
+          <div class="term-head">
+            <span>~ · zsh</span>
+            <span class="right">engram install</span>
+          </div>
+          <div class="term-body">
+            <span class="line" id="s2-l1"><span class="prompt">$</span><span class="cmd">npm install -g </span><span class="arg">engramx</span></span>
+            <span class="line" id="s2-l2"><span class="dim">↳</span> <span class="info">added engramx@2.0.2 in 4s</span></span>
+            <span class="line" id="s2-l3"><span class="prompt">$</span><span class="cmd">cd </span><span class="arg">~/my-project</span></span>
+            <span class="line" id="s2-l4"><span class="prompt">$</span><span class="cmd">engram </span><span class="arg">init</span></span>
+            <span class="line" id="s2-l5"><span class="dim">↳</span> <span class="info">indexed 451 nodes · 1005 edges</span></span>
+            <span class="line" id="s2-l6"><span class="prompt">$</span><span class="cmd">engram </span><span class="arg">install-hook</span></span>
+            <span class="line" id="s2-l7"><span class="dim">↳</span> <span class="ok">✓</span> 7 hooks installed · hud label active</span>
+            <span class="line" id="s2-l8"><span class="bar">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span></span>
+          </div>
+        </div>
+
+        <div class="lower-third" id="s2-lt">
+          Three commands. <span class="accent">No accounts. No cloud.</span>
+        </div>
+      </div>
+
+
+      <!-- ==================== SCENE 3 · INTERCEPT (11–18s) ==================== -->
+      <div
+        class="clip"
+        id="scene-intercept"
+        data-start="11"
+        data-duration="7"
+        data-track-index="1"
+      >
+        <span class="eyebrow" id="s3-eyebrow">scene 03 · with engram</span>
+
+        <div class="grid">
+          <div class="card" id="s3-c1">
+            <div class="h">// agent</div>
+            <div class="body">
+              Read(<span class="accent">'src/auth.ts'</span>)<br>
+              <span class="dim">requesting source…</span>
+            </div>
+          </div>
+          <div class="arrow-cell" id="s3-a1">
+            <svg viewBox="0 0 60 40">
+              <line x1="0" y1="20" x2="50" y2="20" stroke="#f59e0b" stroke-width="2"/>
+              <polygon points="50,14 60,20 50,26" fill="#f59e0b"/>
+            </svg>
+          </div>
+          <div class="card center" id="s3-c2">
+            <div class="h">// engram sentinel</div>
+            <div class="pulse-pill" id="s3-pulse">PreToolUse · intercepted</div>
+            <div class="body">
+              graph query · 8 providers<br>
+              packing context packet…<br>
+              <span class="ok">deny + reason</span>
+            </div>
+          </div>
+          <div class="arrow-cell" id="s3-a2">
+            <svg viewBox="0 0 60 40">
+              <line x1="0" y1="20" x2="50" y2="20" stroke="#f59e0b" stroke-width="2"/>
+              <polygon points="50,14 60,20 50,26" fill="#f59e0b"/>
+            </svg>
+          </div>
+          <div class="card" id="s3-c3">
+            <div class="h">// agent receives</div>
+            <div class="body">
+              structure · decisions · git ·<br>
+              mistakes · library docs<br>
+              <span class="accent">~500 tokens</span> <span class="dim">vs 5,400</span><br>
+              <span class="ok">↓ 11×</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="lower-third" id="s3-lt">
+          Hooks at the boundary. Returns a <span class="accent">context packet</span>, not the file.
+        </div>
+      </div>
+
+
+      <!-- ==================== SCENE 4 · PAYOFF (18–24s) ==================== -->
+      <div
+        class="clip"
+        id="scene-payoff"
+        data-start="18"
+        data-duration="6"
+        data-track-index="1"
+      >
+        <span class="eyebrow" id="s4-eyebrow">scene 04 · result · session totals</span>
+
+        <div class="stat-grid">
+          <div class="cell" id="s4-c1">
+            <span class="lbl">tokens saved</span>
+            <span class="big"><span id="s4-pct" class="accent">88.1</span>%</span>
+            <span class="delta">↓ 86.0K saved · this session</span>
+          </div>
+          <div class="cell" id="s4-c2">
+            <span class="lbl">cost saved · $3/M</span>
+            <span class="big">$0.<span class="accent">26</span></span>
+            <span class="delta">↓ vs raw-Read baseline</span>
+          </div>
+          <div class="cell" id="s4-c3">
+            <span class="lbl">graph health</span>
+            <span class="big">451 / <span class="accent">1005</span></span>
+            <span class="delta">nodes / edges · 96% extracted</span>
+          </div>
+        </div>
+
+        <div class="mistake" id="s4-mistake">
+          <span class="warn">⚠</span>
+          <span class="text"><strong>mistake memory</strong> · auth.ts: don't add NOT NULL without backfill (caught 2026-03-04)</span>
+        </div>
+
+        <div class="lower-third" id="s4-lt">
+          <span class="accent">88.1% measured savings.</span> $0 cloud. Persistent memory.
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- ==================== TIMELINE ==================== -->
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      /* ----- Persistent (lives across all scenes) ----- */
+      tl.to('#brand',   { opacity: 1, duration: 0.6, ease: 'sine.out' }, 0.3);
+      tl.to('#counter', { opacity: 1, duration: 0.6, ease: 'sine.out' }, 0.4);
+
+      // Glow drifts continuously (slow ambient)
+      tl.to('.glow-1', { x: 80,  y: -40, scale: 1.1, duration: 24, ease: 'sine.inOut' }, 0);
+      tl.to('.glow-2', { x: -60, y: 50,  scale: 1.05, duration: 24, ease: 'sine.inOut' }, 0);
+
+
+      /* =========== SCENE 1 — PROBLEM (0-5s) =========== */
+
+      tl.set('#scene-problem', { opacity: 1 }, 0);
+      tl.from('#s1-eyebrow',    { opacity: 0, x: -40, duration: 0.5, ease: 'expo.out' }, 0.2);
+      tl.from('#s1-panel',      { opacity: 0, scale: 0.96, duration: 0.6, ease: 'back.out(1.4)' }, 0.4);
+      tl.from('#s1-meter',      { opacity: 0, x: 60, duration: 0.55, ease: 'expo.out' }, 0.55);
+
+      tl.to('#s1-r1', { opacity: 1, duration: 0.25, ease: 'power1.out' }, 0.9);
+      tl.to('#s1-r2', { opacity: 1, duration: 0.25, ease: 'power1.out' }, 1.5);
+      tl.to('#s1-r3', { opacity: 1, duration: 0.25, ease: 'power1.out' }, 2.1);
+      tl.to('#s1-r4', { opacity: 1, duration: 0.25, ease: 'power1.out' }, 2.7);
+
+      // Token counter
+      const tokens = { v: 5400 };
+      tl.to(tokens, {
+        v: 21600,
+        duration: 2.4,
+        ease: 'none',
+        onUpdate: () => {
+          const el = document.getElementById('s1-tokens');
+          if (el) el.textContent = Math.round(tokens.v).toLocaleString('en-US');
+        }
+      }, 1.0);
+
+      tl.from('#s1-lt', { opacity: 0, y: 30, duration: 0.45, ease: 'power3.out' }, 1.1);
+
+      tl.to('#scene-problem', { opacity: 0, duration: 0.35, ease: 'power2.in' }, 4.65);
+
+
+      /* =========== SCENE 2 — INSTALL (5-11s) =========== */
+
+      tl.set('#scene-install', { opacity: 1 }, 5);
+      tl.from('#s2-eyebrow',  { opacity: 0, x: -40, duration: 0.5, ease: 'expo.out' }, 5.15);
+      tl.from('#s2-terminal', { opacity: 0, y: 40, duration: 0.55, ease: 'back.out(1.3)' }, 5.3);
+
+      tl.to('#s2-l1', { opacity: 1, duration: 0.18, ease: 'none' }, 5.6);
+      tl.to('#s2-l2', { opacity: 1, duration: 0.22, ease: 'sine.out' }, 5.95);
+      tl.to('#s2-l3', { opacity: 1, duration: 0.18, ease: 'none' }, 6.4);
+      tl.to('#s2-l4', { opacity: 1, duration: 0.18, ease: 'none' }, 6.75);
+      tl.to('#s2-l5', { opacity: 1, duration: 0.22, ease: 'sine.out' }, 7.15);
+      tl.to('#s2-l6', { opacity: 1, duration: 0.18, ease: 'none' }, 7.6);
+      tl.to('#s2-l7', { opacity: 1, duration: 0.3, ease: 'back.out(2)' }, 8.0);
+      tl.to('#s2-l8', { opacity: 1, duration: 0.4, ease: 'expo.out' }, 8.5);
+
+      tl.from('#s2-lt', { opacity: 0, y: 30, duration: 0.45, ease: 'power3.out' }, 9.1);
+
+      tl.to('#scene-install', { opacity: 0, duration: 0.35, ease: 'power2.in' }, 10.65);
+
+
+      /* =========== SCENE 3 — INTERCEPT (11-18s) =========== */
+
+      tl.set('#scene-intercept', { opacity: 1 }, 11);
+      tl.from('#s3-eyebrow', { opacity: 0, x: -40, duration: 0.5, ease: 'expo.out' }, 11.15);
+
+      tl.fromTo('#s3-c1',
+        { opacity: 0, x: -50 },
+        { opacity: 1, x: 0, duration: 0.4, ease: 'power3.out' },
+        11.4);
+
+      tl.to('#s3-a1', { opacity: 1, duration: 0.3, ease: 'power2.out' }, 11.85);
+
+      tl.fromTo('#s3-c2',
+        { opacity: 0, scale: 0.92 },
+        { opacity: 1, scale: 1, duration: 0.45, ease: 'back.out(1.5)' },
+        12.0);
+
+      tl.to('#s3-pulse', {
+        boxShadow: '0 0 0 24px rgba(245,158,11,0)',
+        repeat: 4, yoyo: false, duration: 1.0, ease: 'sine.out'
+      }, 12.5);
+
+      tl.to('#s3-a2', { opacity: 1, duration: 0.3, ease: 'power2.out' }, 13.1);
+
+      tl.fromTo('#s3-c3',
+        { opacity: 0, x: 50 },
+        { opacity: 1, x: 0, duration: 0.45, ease: 'expo.out' },
+        13.3);
+
+      tl.from('#s3-lt', { opacity: 0, y: 30, duration: 0.45, ease: 'power3.out' }, 14.0);
+
+      tl.to('#scene-intercept', { opacity: 0, duration: 0.35, ease: 'power2.in' }, 17.65);
+
+
+      /* =========== SCENE 4 — PAYOFF (18-24s) =========== */
+
+      tl.set('#scene-payoff', { opacity: 1 }, 18);
+      tl.from('#s4-eyebrow', { opacity: 0, x: -40, duration: 0.5, ease: 'expo.out' }, 18.15);
+
+      tl.fromTo('#s4-c1',
+        { opacity: 0, y: 40 },
+        { opacity: 1, y: 0, duration: 0.6, ease: 'expo.out' },
+        18.4);
+
+      tl.fromTo('#s4-c2',
+        { opacity: 0, y: 40 },
+        { opacity: 1, y: 0, duration: 0.55, ease: 'expo.out' },
+        18.6);
+
+      tl.fromTo('#s4-c3',
+        { opacity: 0, y: 40 },
+        { opacity: 1, y: 0, duration: 0.5, ease: 'expo.out' },
+        18.8);
+
+      const pct = { v: 0 };
+      tl.to(pct, {
+        v: 88.1,
+        duration: 1.5,
+        ease: 'expo.out',
+        onUpdate: () => {
+          const el = document.getElementById('s4-pct');
+          if (el) el.textContent = pct.v.toFixed(1);
+        }
+      }, 18.6);
+
+      tl.fromTo('#s4-mistake',
+        { opacity: 0, y: 30 },
+        { opacity: 1, y: 0, duration: 0.5, ease: 'back.out(1.6)' },
+        20.4);
+
+      tl.from('#s4-lt', { opacity: 0, y: 30, duration: 0.5, ease: 'power3.out' }, 21.0);
+
+
+      /* ----- Persistent counter updates ----- */
+      tl.call(() => { const el = document.getElementById('counter-num'); if (el) el.textContent = '02'; }, [], 5.0);
+      tl.call(() => { const el = document.getElementById('counter-num'); if (el) el.textContent = '03'; }, [], 11.0);
+      tl.call(() => { const el = document.getElementById('counter-num'); if (el) el.textContent = '04'; }, [], 18.0);
+
+      window.__timelines['main'] = tl;
+    </script>
+  </body>
+</html>

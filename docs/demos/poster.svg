@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet" role="img" aria-label="engram — your AI agent forgets everything. Fix it in 30 seconds.">
+  <defs>
+    <pattern id="dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="10" cy="10" r="1" fill="rgba(255,255,255,0.05)"/>
+    </pattern>
+    <radialGradient id="amber-glow" cx="20%" cy="55%" r="50%">
+      <stop offset="0%" stop-color="rgba(245,158,11,0.18)"/>
+      <stop offset="60%" stop-color="rgba(245,158,11,0.04)"/>
+      <stop offset="100%" stop-color="rgba(245,158,11,0)"/>
+    </radialGradient>
+    <linearGradient id="seam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="rgba(245,158,11,0)"/>
+      <stop offset="0.5" stop-color="rgba(245,158,11,0.3)"/>
+      <stop offset="1" stop-color="rgba(245,158,11,0)"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect width="1280" height="720" fill="#0a0a0a"/>
+  <rect width="1280" height="720" fill="url(#dots)"/>
+  <rect width="1280" height="720" fill="url(#amber-glow)"/>
+
+  <!-- pill badge -->
+  <g transform="translate(80, 100)">
+    <rect x="0" y="0" width="220" height="32" rx="999" fill="rgba(245,158,11,0.10)" stroke="rgba(245,158,11,0.28)"/>
+    <circle cx="14" cy="16" r="4" fill="#f59e0b"/>
+    <text x="28" y="21" font-family="JetBrains Mono, monospace" font-size="11" fill="#f59e0b" letter-spacing="2.2" font-weight="600">AI CODING MEMORY · v2.0.2</text>
+  </g>
+
+  <!-- wordmark -->
+  <text x="80" y="270"
+        font-family="JetBrains Mono, monospace"
+        font-size="160"
+        font-weight="700"
+        letter-spacing="-7"
+        fill="#e8e8e8">eng<tspan fill="#f59e0b">r</tspan><tspan fill="#f59e0b">a</tspan>m</text>
+
+  <!-- subtitle -->
+  <text x="80" y="334" font-family="JetBrains Mono, monospace" font-size="22" fill="#e8e8e8" font-weight="400">
+    Your AI coding assistant <tspan font-weight="700">forgets everything</tspan>.
+  </text>
+  <text x="80" y="368" font-family="JetBrains Mono, monospace" font-size="22" fill="#8a8a8a" font-weight="400">
+    Persistent memory that learns from every session.
+  </text>
+
+  <!-- terminal block -->
+  <g transform="translate(80, 420)">
+    <rect width="500" height="160" rx="8" fill="#141414" stroke="rgba(255,255,255,0.08)"/>
+    <text x="20" y="36" font-family="JetBrains Mono, monospace" font-size="14" fill="#555">$</text>
+    <text x="38" y="36" font-family="JetBrains Mono, monospace" font-size="14" fill="#e8e8e8">npm install -g </text>
+    <text x="200" y="36" font-family="JetBrains Mono, monospace" font-size="14" fill="#f59e0b" font-weight="600">engramx</text>
+
+    <text x="20" y="64" font-family="JetBrains Mono, monospace" font-size="14" fill="#60a5fa">↳</text>
+    <text x="38" y="64" font-family="JetBrains Mono, monospace" font-size="14" fill="#60a5fa">451 nodes · 1005 edges · 0 tokens</text>
+
+    <text x="20" y="92" font-family="JetBrains Mono, monospace" font-size="14" fill="#60a5fa">↳</text>
+    <text x="38" y="92" font-family="JetBrains Mono, monospace" font-size="14" fill="#60a5fa">11× fewer tokens vs relevant files</text>
+
+    <text x="20" y="120" font-family="JetBrains Mono, monospace" font-size="14" fill="#34d399">✅</text>
+    <text x="46" y="120" font-family="JetBrains Mono, monospace" font-size="14" fill="#34d399">Your AI now has persistent memory.</text>
+
+    <!-- blinking cursor -->
+    <rect x="46" y="135" width="9" height="14" fill="#f59e0b" opacity="0.85"/>
+  </g>
+
+  <!-- graph constellation (right side) -->
+  <g transform="translate(720, 100)" stroke="rgba(245,158,11,0.35)" stroke-width="1" fill="none">
+    <!-- edges -->
+    <line x1="80" y1="180" x2="220" y2="100"/>
+    <line x1="80" y1="180" x2="220" y2="260"/>
+    <line x1="80" y1="180" x2="200" y2="380"/>
+    <line x1="220" y1="100" x2="380" y2="200"/>
+    <line x1="220" y1="260" x2="380" y2="200"/>
+    <line x1="200" y1="380" x2="380" y2="200"/>
+    <line x1="380" y1="200" x2="500" y2="120"/>
+    <line x1="380" y1="200" x2="520" y2="280"/>
+    <line x1="500" y1="120" x2="520" y2="280"/>
+  </g>
+
+  <!-- nodes -->
+  <g transform="translate(720, 100)" fill="#f59e0b">
+    <circle cx="80"  cy="180" r="5"/>
+    <circle cx="220" cy="100" r="5"/>
+    <circle cx="220" cy="260" r="5"/>
+    <circle cx="200" cy="380" r="5"/>
+    <circle cx="380" cy="200" r="9"/>
+    <circle cx="500" cy="120" r="5"/>
+    <circle cx="520" cy="280" r="5"/>
+  </g>
+
+  <!-- node labels -->
+  <g transform="translate(720, 100)" font-family="JetBrains Mono, monospace" font-size="11" fill="#8a8a8a">
+    <text x="80"  y="170" text-anchor="middle">ast-miner</text>
+    <text x="232" y="92"  text-anchor="start">GraphStore</text>
+    <text x="220" y="282" text-anchor="middle">session-miner</text>
+    <text x="200" y="402" text-anchor="middle">core.ts</text>
+    <text x="395" y="195" text-anchor="start" fill="#e8e8e8" font-weight="600">queryGraph()</text>
+    <text x="510" y="112" text-anchor="start">extractFile()</text>
+    <text x="530" y="295" text-anchor="start">init()</text>
+  </g>
+
+  <!-- bottom seam -->
+  <rect x="0" y="660" width="1280" height="1" fill="url(#seam)"/>
+
+  <!-- footer meta -->
+  <g font-family="JetBrains Mono, monospace" font-size="11" fill="#555">
+    <text x="80"  y="690" letter-spacing="0.5">10 <tspan fill="#8a8a8a">languages</tspan>     ·     0 <tspan fill="#8a8a8a">LLM cost</tspan>     ·     0 <tspan fill="#8a8a8a">cloud</tspan>     ·     works with <tspan fill="#e8e8e8" font-weight="600">Claude Code</tspan> · <tspan fill="#e8e8e8" font-weight="600">Cursor</tspan> · <tspan fill="#e8e8e8" font-weight="600">Codex</tspan> · <tspan fill="#e8e8e8" font-weight="600">aider</tspan></text>
+  </g>
+
+  <!-- play button overlay (so the poster reads as "click to play") -->
+  <g transform="translate(640, 360)">
+    <circle r="56" fill="rgba(10,10,10,0.7)" stroke="#f59e0b" stroke-width="2"/>
+    <polygon points="-15,-22 -15,22 25,0" fill="#f59e0b"/>
+    <text x="0" y="92" font-family="JetBrains Mono, monospace" font-size="11" fill="#f59e0b" text-anchor="middle" letter-spacing="2" font-weight="700">PLAY · 24S</text>
+  </g>
+</svg>
