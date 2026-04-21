@@ -6,6 +6,26 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-04-21 — "Reliability + Zero-Friction Install"
+
+First release in the v2.1 / v2.2 / v3.0 elevation trilogy. Design spec
+at `docs/superpowers/specs/2026-04-20-engram-elevation-trilogy-design.md`.
+
+Headline: `engram setup` is the new one-command first-run flow. Users
+go from `npm install -g engramx` to a working Sentinel hook + indexed
+graph in under 30 seconds. `engram doctor` reports component health
+with remediation hints. `engram update` ships future hotfixes to every
+install without surprise — passive notify, zero telemetry, one-command
+upgrade. Plus fixes for issue #11 (AST/LSP path bug in flattened
+bundles) and issue #14's Bash-ops half (auto-reindex on `rm`/`mv`/
+`git rm` via an opt-in PostToolUse gate).
+
+Contributor credit this release: [@gabiudrescu](https://github.com/gabiudrescu)
+for PR #13 (reindex CLI + `install-hook --auto-reindex`), PR #12
+(watcher prune on delete/rename), and the original v2.0.2 security
+disclosure. [@ttessarolo](https://github.com/ttessarolo) for precise
+forensics + suggested fix on issue #11.
+
 ### Added — v2.1 "Reliability + Zero-Friction Install" track
 
 - **`engram update`** — one-command self-upgrade.
