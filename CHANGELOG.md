@@ -6,6 +6,87 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+### Added — v2.1 "Reliability + Zero-Friction Install" track
+
+- **`engram update`** — one-command self-upgrade.
+  Passive notify on every `engram *` invocation when a newer version is
+  available (cached, at most one line on stderr, throttled to a 7-day
+  registry check). Manual trigger detects the package manager that owns
+  the engram install (npm / pnpm / yarn / bun via install-path markers)
+  and shells out to its global-upgrade command. `--check` for dry-probe,
+  `--force` to bypass the 7-day throttle, `--dry-run` to print the
+  upgrade command without executing it, `--manager <mgr>` override.
+  Zero telemetry: the only network call is an anonymous GET to
+  `registry.npmjs.org/engramx/latest`. `ENGRAM_NO_UPDATE_CHECK=1` and
+  `$CI` disable the entire subsystem. Addresses the "1,300 weekly
+  downloads, 10/day organic, near-zero hotfix reach" problem.
+
+- **`engram doctor`** — component health report with remediation hints.
+  Wraps existing probes (HTTP, LSP, AST, IDE adapters) plus four new
+  checks: engram version freshness, `.engram/graph.db` presence,
+  Sentinel hook installation, IDE adapter count. Each check emits
+  severity (ok / warn / fail) + detail + optional remediation. Exit
+  code reflects overall severity (0 ok, 1 warn, 2 fail) so `doctor`
+  is CI-friendly. `--verbose` shows remediation hints; `--json` /
+  `--export` emits redacted JSON for bug-report attachment
+  (`projectRoot` intentionally omitted — can contain usernames).
+
+- **`engram setup`** — zero-friction first-run wizard. One command for
+  "go from cloned repo to working engram in under 30 seconds."
+  Runs `init` (if `.engram/graph.db` missing) → `install-hook` (with
+  prompted scope, `local` default) → detects IDE adapters (Cursor,
+  Windsurf, Continue.dev, Aider) and suggests the matching `gen-*`
+  command for each → finishes with a `doctor` summary. Each step is
+  idempotent. `--yes` runs with defaults; `--dry-run` prints intent
+  without acting; `--scope` controls the install-hook scope. Drops
+  install-to-first-value from 4 commands to 1.
+
+- **`engram init --with-hook`** — shorthand for `init` followed by
+  `install-hook` (local scope, idempotent). The #1 thing every user
+  does after `init` was `install-hook`; now it's one step.
+
+- **First-run hint.** On any `engram` subcommand invoked in a repo
+  lacking `.engram/graph.db`, print one line on stderr:
+  `💡 First time in this repo? Run 'engram setup' for a zero-friction install.`
+  Throttled via `~/.engram/first-run-shown` (fires once per machine,
+  not per repo). Silenced in `$CI`, under `ENGRAM_NO_UPDATE_CHECK=1`,
+  and under the JSON-stdout commands (`intercept`, `cursor-intercept`,
+  `hud-label`, `setup`, `init`, `update`, `doctor`) so neither
+  pollutes the hook protocol.
+
+- **Bash PostToolUse parser for auto-reindex** — closes half of
+  [#14](https://github.com/NickCirv/engram/issues/14).
+  `src/intercept/handlers/bash-postool.ts` parses file-mutating Bash
+  commands (`rm`, `mv`, `cp`, `git rm`, `git mv`, single-redirect
+  `<cmd> > <dst>`) into `FileOp { action, path }` records. Strict
+  parser: globs, pipes, subshells, command-substitution, directory
+  ops, and `touch` all pass through untouched. Wired into the
+  PostToolUse observer path in `handlers/post-tool.ts` — on Bash
+  PostToolUse events, each op is handed to `syncFile()` fire-and-forget.
+  Gated by `ENGRAM_AUTO_REINDEX=1` opt-in until
+  [#13](https://github.com/NickCirv/engram/pull/13)'s install-hook
+  `--auto-reindex` flag lands; that flag will toggle the env gate
+  implicitly.
+
+### Fixed — v2.1 reliability
+
+- **AST grammar detection in flattened bundles**
+  ([#11](https://github.com/NickCirv/engram/issues/11) partial).
+  When `tsup`/`esbuild` flattens chunks to `engramx/dist/chunk-*.js`,
+  `import.meta.url` resolves to `engramx/dist` and the previous
+  candidates (`../grammars` and `../../dist/grammars`) both missed the
+  actual grammar dir. Added `join(here, "grammars")` as the first
+  candidate; dev-time layout (`src/intercept/`) still works via the
+  third candidate. Thanks [@ttessarolo](https://github.com/ttessarolo).
+
+- **LSP socket candidate coverage**
+  ([#11](https://github.com/NickCirv/engram/issues/11) partial).
+  `checkLsp` was looking for two socket names while
+  `lsp-connection.ts::candidateSockets()` probes six. Synced the list
+  so HUD availability matches actual provider availability. Kept
+  `.engram/lsp-available` as an explicit user opt-in marker for
+  back-compat.
+
 ### Fixed
 
 - **Locale-independent number formatting across the codebase.** All 10

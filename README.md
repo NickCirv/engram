@@ -2,6 +2,35 @@
   <img src="assets/banner.png" alt="engram — AI coding memory" width="100%">
 </p>
 
+<!-- ============================================================
+     24-second product showcase (Hyperframes-rendered MP4 + WebM).
+     Source: docs/demos/showcase.html · scenes drive both the
+     live HTML player and this MP4. Edit scene-table.md to change.
+     If the MP4 isn't rendered yet, GitHub gracefully shows the
+     poster image and links to the live HTML player.
+     ============================================================ -->
+<p align="center">
+  <video src="https://raw.githubusercontent.com/NickCirv/engram/main/docs/demos/showcase.mp4"
+         controls
+         muted
+         playsinline
+         poster="docs/demos/poster.svg"
+         width="100%">
+    <a href="docs/demos/showcase.html">
+      <img src="docs/demos/poster.svg" alt="engram — 24-second showcase (click to open the live HTML player)" width="100%">
+    </a>
+  </video>
+</p>
+
+<p align="center">
+  <sub>
+    <a href="docs/install.html"><strong>Install Page</strong></a> ·
+    <a href="docs/demos/showcase.html"><strong>Live Demo</strong></a> ·
+    <a href="docs/demos/scene-table.md"><strong>Scene Table</strong></a> ·
+    rendered with <a href="https://github.com/heygen-com/hyperframes">Hyperframes</a>
+  </sub>
+</p>
+
 <p align="center">
   <a href="#install"><strong>Install</strong></a> ·
   <a href="#quickstart"><strong>Quickstart</strong></a> ·
@@ -175,9 +204,22 @@ npm install -g engramx
 
 Requires Node.js 20+. Zero native dependencies. No build tools. Local SQLite via sql.js WASM — no Rust, no Python, no system libs.
 
+> **Prefer a designed walkthrough?** Open [**docs/install.html**](docs/install.html) — three-step install, benefits matrix, IDE coverage, FAQ. Local file, opens in any browser. Brand-matched terminal-mono aesthetic.
+
 ---
 
 ## Quickstart
+
+**One command, zero friction:**
+
+```bash
+cd ~/my-project
+engram setup                     # init + install-hook + adapter detect + doctor
+```
+
+`engram setup` runs the whole first-run flow interactively (or pass `-y` for defaults, `--dry-run` to preview). It is idempotent — safe to re-run, and skips any step already done.
+
+<sub>Prefer the individual commands?</sub>
 
 ```bash
 cd ~/my-project
@@ -185,6 +227,16 @@ engram init                      # scan codebase → .engram/graph.db (~40ms, 0 
 engram install-hook              # wire the Sentinel into Claude Code
 engram ui                        # open the web dashboard in your browser
 ```
+
+**Diagnostics + self-update:**
+
+```bash
+engram doctor                    # component health + remediation hints (0=ok, 1=warn, 2=fail)
+engram update                    # check + upgrade via detected pkg manager (no telemetry)
+engram update --check            # check only, dry-probe the registry
+```
+
+Set `ENGRAM_NO_UPDATE_CHECK=1` to disable the passive "newer version available" hint on every CLI invocation. `$CI` does the same automatically.
 
 Open a Claude Code session. When the agent reads a well-covered file you will see a system-reminder with the structural summary instead of file contents. After the session:
 

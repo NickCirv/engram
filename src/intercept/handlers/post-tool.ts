@@ -17,6 +17,8 @@
 import { findProjectRoot, isValidCwd } from "../context.js";
 import { isHookDisabled, PASSTHROUGH, type HandlerResult } from "../safety.js";
 import { logHookEvent } from "../../intelligence/hook-log.js";
+import { handleBashPostTool, type FileOp } from "./bash-postool.js";
+import { syncFile } from "../../watcher.js";
 
 export interface PostToolHookPayload {
   readonly hook_event_name: "PostToolUse" | string;
@@ -112,10 +114,59 @@ export async function handlePostTool(
       outputSize,
       success: !hasError,
     });
+
+    // v2.1 issue #14: auto-reindex on Bash file ops. Opt-in via env or
+    // via `engram install-hook --auto-reindex` (PR #13 lands the flag).
+    // We gate on ENGRAM_AUTO_REINDEX=1 so this is off by default until
+    // the flag-driven install path is merged.
+    if (
+      toolName === "Bash" &&
+      !hasError &&
+      process.env.ENGRAM_AUTO_REINDEX === "1"
+    ) {
+      // Fire-and-forget — never block PostToolUse return.
+      void reindexBashOps(payload, projectRoot).catch(() => {
+        /* silent */
+      });
+    }
   } catch {
     // Observer errors are never surfaced.
   }
 
   // Always passthrough — this handler is pure observation.
   return PASSTHROUGH;
+}
+
+/**
+ * Parse a PostToolUse:Bash command and sync the resulting FileOps.
+ * Best-effort: errors are swallowed; unknown paths silent-skip via
+ * syncFile's own skipped branch. Never blocks the PostToolUse response.
+ */
+async function reindexBashOps(
+  payload: PostToolHookPayload,
+  projectRoot: string
+): Promise<void> {
+  const result = handleBashPostTool({
+    tool_name: payload.tool_name ?? "",
+    tool_input: payload.tool_input ?? {},
+    cwd: payload.cwd,
+  });
+  if (result.ops.length === 0) return;
+
+  // Execute sequentially — we're off the critical path and don't want
+  // to thrash the store with parallel writes on bulk ops like `rm a b c`.
+  for (const op of result.ops) {
+    await runOp(op, projectRoot);
+  }
+}
+
+async function runOp(op: FileOp, projectRoot: string): Promise<void> {
+  try {
+    // syncFile handles the "file exists -> reindex, file gone -> prune"
+    // dispatch internally. Our action hint is advisory only — syncFile
+    // already checks the file's actual state.
+    await syncFile(op.path, projectRoot);
+  } catch {
+    /* swallow — observer stays observer */
+  }
 }
