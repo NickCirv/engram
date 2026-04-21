@@ -275,6 +275,7 @@ engram install-hook                  # default: .claude/settings.local.json (git
 engram install-hook --scope project  # .claude/settings.json (committed)
 engram install-hook --scope user     # ~/.claude/settings.json (global)
 engram install-hook --dry-run        # preview changes without writing
+engram install-hook --auto-reindex   # also keep the graph fresh after every Edit/Write/MultiEdit (#8)
 ```
 
 **Kill switch (if anything goes wrong):**
@@ -336,6 +337,8 @@ engram hook-enable               # remove kill switch
 
 ```bash
 engram watch [path]              # live file watcher — incremental re-index on save
+engram reindex <file>            # re-index one file (editor/hook/CI primitive, issue #8)
+engram reindex-hook              # PostToolUse hook entry point (reads JSON from stdin, always exits 0)
 engram dashboard [path]          # live terminal dashboard
 engram hud-label [path]          # JSON label for Claude HUD --extra-cmd integration
 engram hooks install             # install post-commit + post-checkout git hooks
