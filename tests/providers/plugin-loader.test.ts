@@ -81,6 +81,115 @@ describe("validatePlugin", () => {
   });
 });
 
+describe("validatePlugin — v3.0 mcpConfig auto-wrap", () => {
+  function makeMcpBackedPlugin(): Record<string, unknown> {
+    return {
+      name: "mcp:fake",
+      label: "FAKE MCP",
+      version: "0.1.0",
+      description: "An MCP-backed plugin with no custom resolve()",
+      mcpConfig: {
+        transport: "stdio",
+        command: "echo",
+        args: ["fake"],
+        tools: [{ name: "fake_tool" }],
+      },
+    };
+  }
+
+  it("accepts a plugin with only mcpConfig and auto-wraps resolve/isAvailable", () => {
+    const result = validatePlugin({ default: makeMcpBackedPlugin() });
+    expect(result.plugin).not.toBeNull();
+    expect(result.reason).toBe("");
+    if (result.plugin) {
+      expect(result.plugin.name).toBe("mcp:fake");
+      expect(result.plugin.label).toBe("FAKE MCP");
+      expect(typeof result.plugin.resolve).toBe("function");
+      expect(typeof result.plugin.isAvailable).toBe("function");
+      expect(result.plugin.tier).toBe(2);
+      expect(result.plugin.mcpConfig).toBeDefined();
+    }
+  });
+
+  it("rejects a plugin with neither resolve() nor mcpConfig", () => {
+    const result = validatePlugin({
+      default: {
+        name: "mcp:empty",
+        label: "EMPTY",
+        version: "0.1.0",
+      },
+    });
+    expect(result.plugin).toBeNull();
+    expect(result.reason).toContain("resolve");
+    expect(result.reason).toContain("mcpConfig");
+  });
+
+  it("rejects a plugin with an invalid mcpConfig (missing command)", () => {
+    const bad = makeMcpBackedPlugin();
+    delete (bad.mcpConfig as Record<string, unknown>).command;
+    const result = validatePlugin({ default: bad });
+    expect(result.plugin).toBeNull();
+    expect(result.reason).toContain("invalid mcpConfig");
+  });
+
+  it("rejects a plugin with an invalid mcpConfig (bad http URL)", () => {
+    const bad = {
+      name: "mcp:bad-http",
+      label: "BAD",
+      version: "0.1.0",
+      mcpConfig: {
+        transport: "http",
+        url: "not-a-url",
+        tools: [{ name: "t" }],
+      },
+    };
+    const result = validatePlugin({ default: bad });
+    expect(result.plugin).toBeNull();
+    expect(result.reason).toContain("invalid mcpConfig");
+  });
+
+  it("custom resolve() wins when both resolve() AND mcpConfig are present", () => {
+    const customResolveMarker = Symbol("custom-resolve-fn");
+    const customResolve = async () => null;
+    (customResolve as unknown as { marker: symbol }).marker = customResolveMarker;
+
+    const plugin = {
+      ...makeMcpBackedPlugin(),
+      tier: 2 as const,
+      tokenBudget: 50,
+      timeoutMs: 500,
+      resolve: customResolve,
+      isAvailable: async () => true,
+    };
+    const result = validatePlugin({ default: plugin });
+    expect(result.plugin).not.toBeNull();
+    if (result.plugin) {
+      // Should have kept the author's custom resolve — verify by reference
+      expect(result.plugin.resolve).toBe(customResolve);
+    }
+  });
+
+  it("plugin tokenBudget override wins over mcpConfig-factory default", () => {
+    const plugin = {
+      ...makeMcpBackedPlugin(),
+      tokenBudget: 999,
+    };
+    const result = validatePlugin({ default: plugin });
+    expect(result.plugin).not.toBeNull();
+    if (result.plugin) {
+      expect(result.plugin.tokenBudget).toBe(999);
+    }
+  });
+
+  it("missing version is rejected even for mcpConfig plugins", () => {
+    const bad = makeMcpBackedPlugin();
+    delete bad.version;
+    const result = validatePlugin({ default: bad });
+    expect(result.plugin).toBeNull();
+    expect(result.reason).toContain("version");
+  });
+});
+
 describe("loadPlugins (end-to-end)", () => {
   let testPluginsDir: string;
 
