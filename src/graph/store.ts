@@ -106,8 +106,8 @@ export class GraphStore {
 
   upsertNode(node: GraphNode): void {
     this.db.run(
-      `INSERT OR REPLACE INTO nodes (id, label, kind, source_file, source_location, confidence, confidence_score, last_verified, query_count, metadata)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO nodes (id, label, kind, source_file, source_location, confidence, confidence_score, last_verified, query_count, metadata, valid_until, invalidated_by_commit)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         node.id,
         node.label,
@@ -119,6 +119,8 @@ export class GraphStore {
         node.lastVerified,
         node.queryCount,
         JSON.stringify(node.metadata),
+        node.validUntil ?? null,
+        node.invalidatedByCommit ?? null,
       ]
     );
   }
@@ -577,6 +579,8 @@ export class GraphStore {
   }
 
   private rowToNode(row: Record<string, unknown>): GraphNode {
+    const validUntilRaw = row.valid_until;
+    const invalidatedByRaw = row.invalidated_by_commit;
     return {
       id: row.id as string,
       label: row.label as string,
@@ -588,6 +592,14 @@ export class GraphStore {
       lastVerified: (row.last_verified as number) ?? 0,
       queryCount: (row.query_count as number) ?? 0,
       metadata: JSON.parse((row.metadata as string) || "{}"),
+      validUntil:
+        validUntilRaw === null || validUntilRaw === undefined
+          ? undefined
+          : (validUntilRaw as number),
+      invalidatedByCommit:
+        invalidatedByRaw === null || invalidatedByRaw === undefined
+          ? undefined
+          : (invalidatedByRaw as string),
     };
   }
 

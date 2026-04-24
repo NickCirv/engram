@@ -15,7 +15,7 @@ export interface MigrationResult {
 }
 
 /** Current schema version — bump this when adding new migrations. */
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 8;
 
 export interface RollbackResult {
   readonly fromVersion: number;
@@ -34,6 +34,11 @@ export interface RollbackResult {
  * automatic. Forward migrations are append-only and idempotent.
  */
 const DOWN_MIGRATIONS: Record<number, string> = {
+  // v3.0: bi-temporal mistake validity. SQLite only added DROP COLUMN in
+  // 3.35 (2021); older sql.js builds may not support it. We don't depend
+  // on the columns being absent — leaving them in place is safe. The index
+  // CAN be dropped cleanly.
+  8: `DROP INDEX IF EXISTS idx_nodes_validity;`,
   7: `DROP TABLE IF EXISTS query_cache; DROP TABLE IF EXISTS pattern_cache;`,
   6: `DROP TABLE IF EXISTS engram_config;`,
   5: `DROP TABLE IF EXISTS provider_cache;`,
@@ -45,11 +50,41 @@ const DOWN_MIGRATIONS: Record<number, string> = {
 };
 
 /**
+ * A migration step is either:
+ *  - a SQL string (run verbatim — must be self-idempotent, e.g. CREATE TABLE
+ *    IF NOT EXISTS) — used for migrations 1-7
+ *  - a function that receives the db handle and runs custom logic, used when
+ *    SQLite syntax isn't natively idempotent (e.g. ALTER TABLE ADD COLUMN
+ *    raises 'duplicate column name' on re-run)
+ */
+type MigrationStep =
+  | string
+  | ((db: ExecDb) => void);
+
+/**
+ * Add a column to an existing table only if it isn't already present.
+ * SQLite (pre-3.35) has no ADD COLUMN IF NOT EXISTS, so we check
+ * PRAGMA table_info first. Safe to re-run.
+ */
+function addColumnIfMissing(
+  db: ExecDb,
+  table: string,
+  column: string,
+  ddl: string
+): void {
+  const result = db.exec(`PRAGMA table_info(${table})`);
+  const existing = (result[0]?.values ?? []).map((row) => row[1] as string);
+  if (!existing.includes(column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
+}
+
+/**
  * Migration definitions — each runs only once, in order.
  * Migrations 1-5 are retroactive: they document the existing schema using
  * CREATE TABLE IF NOT EXISTS so they are safe to run on existing databases.
  */
-const MIGRATIONS: Record<number, string> = {
+const MIGRATIONS: Record<number, MigrationStep> = {
   // v0.1.0: Initial schema
   1: `
 CREATE TABLE IF NOT EXISTS nodes (
@@ -127,6 +162,28 @@ CREATE TABLE IF NOT EXISTS pattern_cache (
   hit_count INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_query_cache_file ON query_cache(file_path);`,
+
+  // v3.0.0: Bi-temporal validity for mistake nodes (and any other node kind
+  // that wants it). `valid_until` is the unix-ms timestamp after which the
+  // mistake should NO LONGER surface in context (e.g. the referenced code
+  // was refactored away). NULL = still valid (back-compat default for all
+  // existing rows). `invalidated_by_commit` records the git SHA that caused
+  // the invalidation, for audit + future "explain why this mistake stopped
+  // firing" UX. Index is partial — only mistakes with an explicit validity
+  // window pay storage cost.
+  //
+  // Function-based because ALTER TABLE ADD COLUMN isn't idempotent in
+  // SQLite — re-running on a db that already has the columns throws
+  // 'duplicate column name'. We pre-check via PRAGMA table_info.
+  8: (db: ExecDb) => {
+    addColumnIfMissing(db, "nodes", "valid_until", "valid_until INTEGER");
+    addColumnIfMissing(db, "nodes", "invalidated_by_commit", "invalidated_by_commit TEXT");
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_nodes_validity
+        ON nodes(kind, valid_until)
+        WHERE kind = 'mistake' AND valid_until IS NOT NULL;
+    `);
+  },
 };
 
 type ExecDb = { exec: (sql: string) => Array<{ values: unknown[][] }> };
@@ -180,9 +237,13 @@ export function runMigrations(db: RunDb, dbPath: string): MigrationResult {
   // Run each pending migration in order
   let migrationsRun = 0;
   for (let v = fromVersion + 1; v <= CURRENT_SCHEMA_VERSION; v++) {
-    const sql = MIGRATIONS[v];
-    if (sql) {
-      (db as unknown as ExecDb).exec(sql);
+    const step = MIGRATIONS[v];
+    if (step) {
+      if (typeof step === "string") {
+        (db as unknown as ExecDb).exec(step);
+      } else {
+        step(db as unknown as ExecDb);
+      }
       migrationsRun++;
     }
   }

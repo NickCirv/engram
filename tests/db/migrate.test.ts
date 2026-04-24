@@ -108,4 +108,24 @@ describe("migrate", () => {
     expect(result.backedUp).toBe(true);
     expect(existsSync(`${dbPath}.bak-v5`)).toBe(true);
   });
+
+  // ── v3.0 migration 8 — bi-temporal mistake validity ────────────────────
+  describe("migration 8: bi-temporal mistake validity", () => {
+    it("nodes table has valid_until + invalidated_by_commit columns after migration", () => {
+      const db = getRawDb(store);
+      const result = db.exec("PRAGMA table_info(nodes)");
+      const columnNames = (result[0]?.values ?? []).map((row) => row[1] as string);
+      expect(columnNames).toContain("valid_until");
+      expect(columnNames).toContain("invalidated_by_commit");
+    });
+
+    it("idx_nodes_validity exists after migration", () => {
+      const db = getRawDb(store);
+      const result = db.exec(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_nodes_validity'"
+      );
+      expect(result.length).toBeGreaterThan(0);
+      expect(result[0].values[0][0]).toBe("idx_nodes_validity");
+    });
+  });
 });
