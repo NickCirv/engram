@@ -248,6 +248,98 @@ export async function resolveRichPacket(
 }
 
 /**
+ * v3.0 item #5 — streaming event shape. One per provider as it resolves,
+ * then a final `done` event with totals. Order of `provider` events
+ * is ARRIVAL order (not priority order) — slow providers don't block
+ * fast ones. Consumers who want priority order can sort client-side
+ * or use the non-streaming `resolveRichPacket()` which applies full
+ * priority + boost + budget logic.
+ */
+export type StreamEvent =
+  | { readonly type: "provider"; readonly result: ProviderResult }
+  | {
+      readonly type: "done";
+      readonly providerCount: number;
+      readonly durationMs: number;
+    };
+
+/**
+ * Streaming counterpart to resolveRichPacket. Yields one event per
+ * provider as soon as its result lands, then a final `done` event.
+ * Clients can render progressively — the Serena provider's 2-3s
+ * cold-start doesn't hide the AST provider's 8 ms result.
+ *
+ * Protocol alignment: this matches MCP SEP-1699 (SSE resumption with
+ * event IDs) — the HTTP /context/stream endpoint wraps each event in
+ * an SSE frame with an incrementing `id` so clients reconnecting via
+ * `Last-Event-ID` can skip already-delivered providers.
+ */
+export async function* resolveRichPacketStreaming(
+  filePath: string,
+  context: NodeContext,
+  enabledProviders?: readonly string[]
+): AsyncGenerator<StreamEvent, void, undefined> {
+  const start = Date.now();
+
+  let allProviders: readonly ContextProvider[];
+  try {
+    allProviders = await getAllProviders();
+  } catch {
+    allProviders = BUILTIN_PROVIDERS;
+  }
+
+  const providers = allProviders.filter(
+    (p) => !enabledProviders || enabledProviders.includes(p.name)
+  );
+  const available = await filterAvailable(providers);
+  if (available.length === 0) {
+    yield { type: "done", providerCount: 0, durationMs: Date.now() - start };
+    return;
+  }
+
+  // Fan out: one promise per provider. Each promise pushes its outcome
+  // into a FIFO queue + wakes the consumer via a resolver. The generator
+  // consumes the queue until it's empty AND all promises have landed.
+  type Outcome = { result: ProviderResult | null; provider: ContextProvider };
+  const queue: Outcome[] = [];
+  let wake: (() => void) | null = null;
+  let remaining = available.length;
+
+  for (const p of available) {
+    resolveWithTimeout(p, filePath, context)
+      .then((r) => queue.push({ result: r, provider: p }))
+      .catch(() => queue.push({ result: null, provider: p }))
+      .finally(() => {
+        remaining--;
+        wake?.();
+        wake = null;
+      });
+  }
+
+  let yielded = 0;
+  while (remaining > 0 || queue.length > 0) {
+    while (queue.length > 0) {
+      const outcome = queue.shift()!;
+      if (outcome.result) {
+        yielded++;
+        yield { type: "provider", result: outcome.result };
+      }
+    }
+    if (remaining > 0) {
+      await new Promise<void>((r) => {
+        wake = r;
+      });
+    }
+  }
+
+  yield {
+    type: "done",
+    providerCount: yielded,
+    durationMs: Date.now() - start,
+  };
+}
+
+/**
  * Warm all Tier 2 provider caches. Called at SessionStart.
  */
 export async function warmAllProviders(

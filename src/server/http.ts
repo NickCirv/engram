@@ -206,6 +206,115 @@ async function handleQuery(
   }
 }
 
+/**
+ * v3.0 item #5 — streaming rich-packet endpoint. Client supplies
+ * `?file=<relative-path>`; we stream one SSE frame per provider as it
+ * resolves, then a final `done` frame with totals.
+ *
+ * Frame shape (matches MCP SEP-1699 — each frame carries an `id` so
+ * clients reconnecting via `Last-Event-ID` can skip already-delivered
+ * providers):
+ *
+ *   id: 0
+ *   event: provider
+ *   data: {"provider":"engram:ast","content":"…","confidence":1.0,"cached":false}
+ *
+ *   id: 1
+ *   event: provider
+ *   data: …
+ *
+ *   id: N
+ *   event: done
+ *   data: {"providerCount":N,"durationMs":347}
+ */
+async function handleContextStream(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): Promise<void> {
+  const url = parseUrl(req);
+  const filePath = url.searchParams.get("file");
+  if (!filePath) {
+    json(res, 400, { error: "Missing required query parameter 'file'" });
+    return;
+  }
+
+  const lastEventIdHeader = req.headers["last-event-id"];
+  const resumeAfter = (() => {
+    if (typeof lastEventIdHeader !== "string") return -1;
+    const n = parseInt(lastEventIdHeader, 10);
+    return isNaN(n) ? -1 : n;
+  })();
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+    ...corsHeaders(req),
+  });
+  // Flush headers so slow clients see the stream start immediately.
+  // Older Node versions may not have flushHeaders; guard via typeof.
+  if (typeof res.flushHeaders === "function") res.flushHeaders();
+
+  // Minimal NodeContext — mirror resolver.test.ts's shape. Real production
+  // callers pass through more fields via the intercept layer; for the
+  // HTTP-facing streaming path we lean on provider isAvailable() + the
+  // file path + defaults.
+  const context = {
+    filePath,
+    projectRoot,
+    nodeIds: [] as const,
+    imports: [] as const,
+    hasTests: false,
+    churnRate: 0,
+  };
+
+  const { resolveRichPacketStreaming } = await import(
+    "../providers/resolver.js"
+  );
+
+  let eventId = 0;
+  let disconnected = false;
+  req.on("close", () => {
+    disconnected = true;
+  });
+
+  try {
+    for await (const event of resolveRichPacketStreaming(
+      filePath,
+      context
+    )) {
+      if (disconnected) break;
+      if (eventId <= resumeAfter) {
+        eventId++;
+        continue;
+      }
+      const frame =
+        `id: ${eventId}\n` +
+        `event: ${event.type}\n` +
+        `data: ${JSON.stringify(
+          event.type === "provider"
+            ? event.result
+            : { providerCount: event.providerCount, durationMs: event.durationMs }
+        )}\n\n`;
+      try {
+        res.write(frame);
+      } catch {
+        // Client went away mid-write.
+        return;
+      }
+      eventId++;
+    }
+  } finally {
+    try {
+      res.end();
+    } catch {
+      // Already closed
+    }
+  }
+}
+
 async function handleStats(
   _req: IncomingMessage,
   res: ServerResponse,
@@ -664,6 +773,8 @@ export function createHttpServer(
           await handleGraphGodNodes(req, res, projectRoot);
         } else if (req.method === "GET" && path === "/api/sse") {
           handleSSE(req, res, projectRoot);
+        } else if (req.method === "GET" && path === "/context/stream") {
+          await handleContextStream(req, res, projectRoot);
         } else if (req.method === "GET" && (path === "/ui" || path === "/ui/")) {
           // Serve the dashboard SPA + refresh the HttpOnly cookie so
           // same-origin fetches from the dashboard carry auth automatically.
