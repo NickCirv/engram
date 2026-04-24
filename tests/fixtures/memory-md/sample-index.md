@@ -1,0 +1,6 @@
+- [engram fulcrum insight](feedback_engram_fulcrum_insight.md) — PreToolUse hook is THE v0.3 unlock; passive lookup is capped at ~10K/session, hook flips engram to -45% session tokens
+- [engram Query Budget 2000](reference_engram_query_budget_2000.md) — Hard fact: queryGraph() hardcodes tokenBudget=2000 at src/graph/query.ts:85; reranking changes content not count
+- [Claude Code Hook Protocol — Empirical](reference_claude_code_hook_protocol_empirical.md) — Verified 2026-04-11: deny+reason works, allow+additionalContext works, updatedInput.file_path for Read does NOT work despite docs
+- [Hooks Must Use Portable Paths](feedback_hooks_full_paths.md) — Never use bare commands in hooks; use wrapper scripts with platform-aware path resolution + exit 0 fallback
+- [SSH ProxyCommand Fix](ssh_proxmox_fix.md) — macOS Sequoia breaks SSH to Proxmox; nc workaround applied 2026-04-07
+- [Rules Consolidation](rules_consolidation.md) — Merged 14→8 rule files, saving ~6K tokens/session, zero functionality lost

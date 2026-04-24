@@ -27,6 +27,7 @@ import { mempalaceProvider } from "./mempalace.js";
 import { context7Provider } from "./context7.js";
 import { obsidianProvider } from "./obsidian.js";
 import { lspProvider } from "./lsp.js";
+import { anthropicMemoryProvider } from "./anthropic-memory.js";
 import { readConfig } from "../tuner/config.js";
 
 /** Built-in providers (first-party, always available). */
@@ -34,6 +35,7 @@ const BUILTIN_PROVIDERS: readonly ContextProvider[] = [
   astProvider,
   structureProvider,
   mistakesProvider,
+  anthropicMemoryProvider,
   gitProvider,
   mempalaceProvider,
   context7Provider,

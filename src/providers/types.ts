@@ -164,6 +164,12 @@ export const PROVIDER_PRIORITY: readonly string[] = [
   "engram:ast",
   "engram:structure",
   "engram:mistakes",
+  // anthropic:memory sits between mistakes and mempalace — it's cheap
+  // (tier 1, single local file read), strictly relevant when present,
+  // and complements mistakes (mistakes = 'this broke'; anthropic:memory
+  // = 'here's what we learned about this area'). Placing it above
+  // mempalace keeps Claude Code users' own curated memory first.
+  "anthropic:memory",
   "mempalace",
   "context7",
   "engram:git",

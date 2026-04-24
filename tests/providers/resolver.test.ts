@@ -138,10 +138,12 @@ describe("provider priority", () => {
     expect(PROVIDER_PRIORITY[0]).toBe("engram:ast");
     expect(PROVIDER_PRIORITY[1]).toBe("engram:structure");
     expect(PROVIDER_PRIORITY[2]).toBe("engram:mistakes");
-    expect(PROVIDER_PRIORITY[3]).toBe("mempalace");
-    expect(PROVIDER_PRIORITY[4]).toBe("context7");
-    expect(PROVIDER_PRIORITY[5]).toBe("engram:git");
-    expect(PROVIDER_PRIORITY[6]).toBe("obsidian");
+    // v3.0 item #4: anthropic:memory inserted between mistakes + mempalace
+    expect(PROVIDER_PRIORITY[3]).toBe("anthropic:memory");
+    expect(PROVIDER_PRIORITY[4]).toBe("mempalace");
+    expect(PROVIDER_PRIORITY[5]).toBe("context7");
+    expect(PROVIDER_PRIORITY[6]).toBe("engram:git");
+    expect(PROVIDER_PRIORITY[7]).toBe("obsidian");
   });
 });
 
