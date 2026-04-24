@@ -6,6 +6,46 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+## [3.0.1] — 2026-04-24 — "Clean Uninstall"
+
+**Patch release fixing the orphaned-hooks bug reported by @freenow82 within
+hours of 3.0.0 going live on npm. No feature changes — this release is
+purely about not leaving users stranded when they uninstall.**
+
+### The bug (what 3.0.0 shipped with)
+
+`npm uninstall -g engramx` removed the binary from PATH but left the hook
+entries in `~/.claude/settings.json` pointing at a `engram intercept`
+command that no longer existed. Claude Code fires those hooks on every
+tool call — the hook commands failed with ENOENT — and user-visible
+behaviour was "Claude Code stopped executing anything." Recovery required
+reinstalling engramx just to run `engram uninstall-hook` before
+uninstalling again.
+
+That is a bad experience. Sorry to anyone who hit it.
+
+### Fixed
+
+- **`scripts/preuninstall.mjs`** now runs automatically before `npm uninstall -g engramx`. It reads `~/.claude/settings.json`, strips every hook entry that references engram (case-insensitive match on the command string), drops engram's statusLine/HUD, backs up the original to a timestamped `.bak` file, and writes the result atomically via rename. It NEVER fails the uninstall — if the settings file is missing, unparseable, or unwritable, it logs a single-line hint and exits 0. Contract: the user's `npm uninstall` always succeeds, with or without hook cleanup.
+- **`scripts/postinstall.mjs`** prints a one-time info banner on `npm install -g engramx` showing the recommended next step (`engram setup`) and the clean-uninstall flow. Respects `$CI` and `$ENGRAM_NO_POSTINSTALL=1`.
+- **New `engram repair-hooks` alias** — literally the same as `engram uninstall-hook`, but named so users who ended up with orphaned hooks after a bad uninstall can find it by the word they'd actually search for. No code duplication — `commander.alias()`.
+- Both scripts included in the `files` allowlist of `package.json` so they ship in the tarball.
+
+### For users still stranded on 3.0.0
+
+If you ran `npm uninstall -g engramx` before this patch shipped and Claude Code is still broken, you have two paths:
+
+1. **Fast, no reinstall:** edit `~/.claude/settings.json` manually (or run the one-line `jq` filter posted in the 3.0.1 announcement thread) to strip every entry whose `command` contains the word `engram`.
+2. **Works from 3.0.1:** `npm install -g engramx@3.0.1 && engram repair-hooks --scope user` — the install no longer stops execution (hooks are in place), run repair-hooks, then `npm uninstall -g engramx` again if you want engramx gone. This time the preuninstall cleans up automatically.
+
+### Tests
+
+- New regression test: the preuninstall script on a fixture with a mix of engram hooks + unrelated hooks + a custom statusLine verifies 3 engram entries removed, unrelated keys preserved byte-for-byte, backup written, atomic rename completed.
+
+### Thanks
+
+[@freenow82](https://www.reddit.com/user/freenow82) for the bug report and the transparency about the pain it caused. That feedback is the entire point of a public launch — the tool is measurably better for it.
+
 ## [3.0.0] — 2026-04-24 — "Spine"
 
 The biggest engramx release since v1.0. One meticulous release, not a

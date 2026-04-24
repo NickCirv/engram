@@ -1,6 +1,6 @@
 {
   "name": "engramx",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "The context spine for AI coding agents. 9 built-in providers + mcpConfig plugin contract (wrap any MCP server in 10 lines), generic MCP-client aggregator (stdio), pre-mortem mistake-guard, bi-temporal mistake memory, Anthropic Auto-Memory bridge, SSE streaming context packets, dual-emit AGENTS.md+CLAUDE.md. 90.8% measured real-world token savings (reproducible bench included). Local SQLite, zero cloud.",
   "repository": {
     "type": "git",
@@ -25,7 +25,9 @@
     "lint": "tsc --noEmit",
     "prepublishOnly": "npm run build",
     "bench": "tsx bench/runner.ts",
-    "stress": "tsx bench/stress-test.ts"
+    "stress": "tsx bench/stress-test.ts",
+    "postinstall": "node scripts/postinstall.mjs",
+    "preuninstall": "node scripts/preuninstall.mjs"
   },
   "keywords": [
     "structural-code-graph",
@@ -51,6 +53,8 @@
   },
   "files": [
     "dist",
+    "scripts/preuninstall.mjs",
+    "scripts/postinstall.mjs",
     "LICENSE",
     "README.md",
     "CHANGELOG.md"

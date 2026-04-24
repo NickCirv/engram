@@ -99,6 +99,14 @@ It runs on your laptop. It doesn't send your code anywhere. It's Apache 2.0. The
 
 **Want even bigger savings?** Install a plugin. Each one closes a different context leak — see [Plugins multiply the savings](#plugins-multiply-the-savings) below. Drop a 10-line `.mjs` file in `~/.engram/plugins/` and the next session uses it.
 
+**Want out?** Clean uninstall is one command:
+
+```bash
+npm uninstall -g engramx     # 3.0.1+ auto-runs preuninstall hook-cleanup
+```
+
+If you installed 3.0.0 and ran `npm uninstall` before the 3.0.1 patch shipped, your Claude Code hooks may be orphaned. Run `engram repair-hooks --scope user` (install 3.0.1 first if needed) or see the [`CHANGELOG.md`](CHANGELOG.md#301--2026-04-24--clean-uninstall) for the manual `jq`-based recovery one-liner.
+
 ---
 
 ## Proof, not promises

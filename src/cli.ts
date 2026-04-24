@@ -1079,8 +1079,9 @@ program
  */
 program
   .command("uninstall-hook")
-  .description("Remove engram hook entries from Claude Code settings")
-  .option("--scope <scope>", "local | project | user", "local")
+  .alias("repair-hooks")
+  .description("Remove engram hook entries from Claude Code settings (also: 'repair-hooks' — same thing, named for users who ended up with orphaned hooks after npm uninstall)")
+  .option("--scope <scope>", "local | project | user (default user on fresh runs)", "local")
   .option("-p, --project <path>", "Project directory", ".")
   .action(async (opts: { scope: string; project: string }) => {
     const settingsPath = resolveSettingsPath(opts.scope, opts.project);
