@@ -1,0 +1,63 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.NickCirv/engram",
+  "description": "EngramX — the cached context spine for AI coding agents. 9 built-in providers + any MCP server as a 10-line plugin, pre-mortem mistake-guard, bi-temporal mistake memory, Anthropic Auto-Memory bridge, SSE streaming packets, dual-emit AGENTS.md+CLAUDE.md. 89.1% measured real-world token savings (reproducible bench). Local SQLite, zero cloud.",
+  "repository": {
+    "url": "https://github.com/NickCirv/engram",
+    "source": "github"
+  },
+  "version": "3.0.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "engramx",
+      "version": "3.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "node",
+      "runtimeArguments": [
+        {
+          "type": "positional",
+          "value": "engram-serve",
+          "isRequired": true,
+          "format": "string",
+          "name": "binary"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "ENGRAM_API_TOKEN",
+          "description": "Optional auth bearer token for the HTTP server. Auto-generated at ~/.engram/http-server.token on first run if unset.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "ENGRAM_MISTAKE_GUARD",
+          "description": "Pre-mortem warnings on Edit/Write/Bash. Set to '1' for permissive (warn via additionalContext), '2' for strict (deny with reason). Unset = off, zero overhead.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "ENGRAM_ANTHROPIC_MEMORY_PATH",
+          "description": "Override path to Claude Code's Auto-Memory MEMORY.md. Defaults to ~/.claude/projects/<encoded-cwd>/memory/MEMORY.md.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "ENGRAM_MCP_CONFIG_PATH",
+          "description": "Override path to the mcp-providers.json that declares plugin MCP servers. Defaults to ~/.engram/mcp-providers.json.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "ENGRAM_NO_UPDATE_CHECK",
+          "description": "Disable passive update notice on CLI invocation. Set to '1' to silence. Auto-disabled when $CI is set.",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}
