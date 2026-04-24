@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="engram — AI coding memory" width="100%">
+  <img src="assets/banner-v3.png" alt="EngramX — the cached context spine for AI coding agents (v3.0 'Spine')" width="100%">
 </p>
 
 <!-- ============================================================
