@@ -176,11 +176,29 @@ export async function resolveRichPacket(
     ? results.filter((r) => r.provider !== "engram:structure")
     : results;
 
-  // Sort by priority order
-  const sorted = deduped.sort((a, b) => {
+  // v3.0 — per-provider budget backstop. Providers are supposed to
+  // self-truncate to their `tokenBudget`, but a bad plugin or a server
+  // that ignores its contract shouldn't be able to spend our whole
+  // total budget on one section. Truncate here before assembly.
+  const budgetedResults = enforcePerProviderBudget(deduped, allProviders);
+
+  // v3.0 — mistakes-boost reranking. Results that mention a label from
+  // the engram:mistakes provider get their confidence boosted (capped
+  // at 1.0) so they sort up within their priority tier. This surfaces
+  // structural context that touches known-broken areas ahead of other
+  // structural context of equal priority.
+  const boosted = boostByMistakes(budgetedResults);
+
+  // Sort by (priority index, boosted confidence desc). Priority is the
+  // primary axis — boost only breaks ties within the same priority tier.
+  // Unknown providers sort last (priority index 99).
+  const sorted = [...boosted].sort((a, b) => {
     const aIdx = PROVIDER_PRIORITY.indexOf(a.provider);
     const bIdx = PROVIDER_PRIORITY.indexOf(b.provider);
-    return (aIdx === -1 ? 99 : aIdx) - (bIdx === -1 ? 99 : bIdx);
+    const pa = aIdx === -1 ? 99 : aIdx;
+    const pb = bIdx === -1 ? 99 : bIdx;
+    if (pa !== pb) return pa - pb;
+    return b.confidence - a.confidence;
   });
 
   // Assemble within budget (config-driven, falls back to compile-time constant)
@@ -277,6 +295,92 @@ export async function warmAllProviders(
 }
 
 // ─── Internals ──────────────────────────────────────────────────
+
+/**
+ * Truncate every result's content to its provider's declared tokenBudget.
+ * Providers are supposed to self-truncate; this is a backstop so a bad
+ * plugin or a non-conforming MCP server can't spend the whole total
+ * budget on one section. Truncates by whole lines when possible so we
+ * don't cut mid-word.
+ */
+export function enforcePerProviderBudget(
+  results: readonly ProviderResult[],
+  providers: readonly ContextProvider[]
+): ProviderResult[] {
+  const out: ProviderResult[] = [];
+  for (const r of results) {
+    const provider = providers.find((p) => p.name === r.provider);
+    const budget = provider?.tokenBudget ?? 200;
+    if (estimateTokens(r.content) <= budget) {
+      out.push(r);
+      continue;
+    }
+    // Over budget — truncate by lines, then hard-cap by chars as last resort
+    const lines = r.content.split("\n");
+    const kept: string[] = [];
+    let used = 0;
+    for (const line of lines) {
+      const lineTokens = estimateTokens(line) + 1;
+      if (used + lineTokens > budget) break;
+      kept.push(line);
+      used += lineTokens;
+    }
+    const truncated =
+      kept.length > 0
+        ? kept.join("\n") + "\n… [truncated]"
+        : r.content.slice(0, budget * 4 - 20) + "… [truncated]";
+    out.push({ ...r, content: truncated });
+  }
+  return out;
+}
+
+/**
+ * Extract mistake labels from an engram:mistakes provider result. The
+ * provider formats mistakes as `  ! <label> (flagged <age>)` — one per
+ * line. Returns the labels only, trimmed, lowercased for case-insensitive
+ * matching.
+ */
+function extractMistakeLabels(mistakesContent: string): string[] {
+  const labels: string[] = [];
+  for (const line of mistakesContent.split("\n")) {
+    const match = line.match(/^\s*!\s+(.+?)\s+\(flagged/);
+    if (match && match[1]) {
+      labels.push(match[1].trim().toLowerCase());
+    }
+  }
+  return labels;
+}
+
+/**
+ * Boost the confidence of results whose content mentions a known-mistake
+ * label from the engram:mistakes provider. Boost = 1.5x, capped at 1.0.
+ * The mistakes result itself is NOT boosted (it's already at confidence
+ * 0.95 — boosting would flatten the distinction between the signal and
+ * the signal-holders).
+ *
+ * Runs BEFORE the priority sort so the boosted confidence participates
+ * in the secondary-sort tie-breaker. Priority still wins across tiers.
+ */
+export function boostByMistakes(
+  results: readonly ProviderResult[]
+): ProviderResult[] {
+  const mistakesResult = results.find((r) => r.provider === "engram:mistakes");
+  if (!mistakesResult) return [...results];
+
+  const labels = extractMistakeLabels(mistakesResult.content);
+  if (labels.length === 0) return [...results];
+
+  return results.map((r) => {
+    if (r.provider === "engram:mistakes") return r;
+    const lower = r.content.toLowerCase();
+    const matched = labels.some((label) => lower.includes(label));
+    if (!matched) return r;
+    return {
+      ...r,
+      confidence: Math.min(1.0, r.confidence * 1.5),
+    };
+  });
+}
 
 const availabilityCache = new Map<string, boolean>();
 

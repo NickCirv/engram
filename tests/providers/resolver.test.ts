@@ -144,3 +144,177 @@ describe("provider priority", () => {
     expect(PROVIDER_PRIORITY[6]).toBe("obsidian");
   });
 });
+
+// ── v3.0 item #3: per-provider budget enforcement + mistakes-boost ──
+
+describe("enforcePerProviderBudget", () => {
+  it("leaves under-budget results untouched", async () => {
+    const { enforcePerProviderBudget } = await import(
+      "../../src/providers/resolver.js"
+    );
+    const providers: ContextProvider[] = [mockProvider({ name: "p1", tokenBudget: 100 })];
+    const results: ProviderResult[] = [
+      { provider: "p1", content: "short content", confidence: 0.8, cached: false },
+    ];
+    const out = enforcePerProviderBudget(results, providers);
+    expect(out[0].content).toBe("short content");
+  });
+
+  it("truncates over-budget results by line", async () => {
+    const { enforcePerProviderBudget } = await import(
+      "../../src/providers/resolver.js"
+    );
+    // 5-token budget ≈ 20 chars; big content spans many lines
+    const providers: ContextProvider[] = [mockProvider({ name: "p1", tokenBudget: 5 })];
+    const bigLine = "a".repeat(40); // ~10 tokens
+    const content = ["line1 short", bigLine, "line3"].join("\n");
+    const results: ProviderResult[] = [
+      { provider: "p1", content, confidence: 0.8, cached: false },
+    ];
+    const out = enforcePerProviderBudget(results, providers);
+    expect(out[0].content).toContain("line1 short");
+    expect(out[0].content).toContain("[truncated]");
+    expect(out[0].content).not.toContain(bigLine);
+  });
+
+  it("hard-caps characters when even the first line exceeds budget", async () => {
+    const { enforcePerProviderBudget } = await import(
+      "../../src/providers/resolver.js"
+    );
+    const providers: ContextProvider[] = [mockProvider({ name: "p1", tokenBudget: 5 })];
+    const content = "x".repeat(1000); // single line, way over budget
+    const results: ProviderResult[] = [
+      { provider: "p1", content, confidence: 0.5, cached: false },
+    ];
+    const out = enforcePerProviderBudget(results, providers);
+    // Must be truncated — never emit the full 1000-char line
+    expect(out[0].content.length).toBeLessThan(content.length);
+    expect(out[0].content).toContain("[truncated]");
+  });
+
+  it("defaults budget to 200 tokens when provider isn't found", async () => {
+    const { enforcePerProviderBudget } = await import(
+      "../../src/providers/resolver.js"
+    );
+    const content = "ok"; // tiny — should survive default budget
+    const results: ProviderResult[] = [
+      { provider: "mystery", content, confidence: 0.7, cached: false },
+    ];
+    const out = enforcePerProviderBudget(results, []);
+    expect(out[0].content).toBe("ok");
+  });
+});
+
+describe("boostByMistakes", () => {
+  const sampleMistakesContent = [
+    "  ! JWT secret hardcoded (flagged 3d ago)",
+    "  ! Race condition in login flow (flagged 1mo ago)",
+  ].join("\n");
+
+  it("returns results unchanged when there's no mistakes provider in the set", async () => {
+    const { boostByMistakes } = await import("../../src/providers/resolver.js");
+    const results: ProviderResult[] = [
+      { provider: "engram:ast", content: "foo JWT bar", confidence: 0.8, cached: false },
+    ];
+    const out = boostByMistakes(results);
+    expect(out[0].confidence).toBe(0.8);
+  });
+
+  it("boosts results whose content matches a mistake label", async () => {
+    const { boostByMistakes } = await import("../../src/providers/resolver.js");
+    const results: ProviderResult[] = [
+      {
+        provider: "engram:mistakes",
+        content: sampleMistakesContent,
+        confidence: 0.95,
+        cached: false,
+      },
+      {
+        provider: "engram:ast",
+        content: "function handleLogin() { /* race condition in login flow */ }",
+        confidence: 0.6,
+        cached: false,
+      },
+    ];
+    const out = boostByMistakes(results);
+    const ast = out.find((r) => r.provider === "engram:ast");
+    expect(ast!.confidence).toBeCloseTo(0.9, 5); // 0.6 * 1.5 = 0.9
+  });
+
+  it("caps boosted confidence at 1.0", async () => {
+    const { boostByMistakes } = await import("../../src/providers/resolver.js");
+    const results: ProviderResult[] = [
+      {
+        provider: "engram:mistakes",
+        content: sampleMistakesContent,
+        confidence: 0.95,
+        cached: false,
+      },
+      {
+        provider: "mempalace",
+        content: "decision about JWT secret hardcoded handling",
+        confidence: 0.8,
+        cached: false,
+      },
+    ];
+    const out = boostByMistakes(results);
+    const mp = out.find((r) => r.provider === "mempalace");
+    expect(mp!.confidence).toBe(1.0); // 0.8 * 1.5 = 1.2 capped
+  });
+
+  it("leaves non-matching results' confidence untouched", async () => {
+    const { boostByMistakes } = await import("../../src/providers/resolver.js");
+    const results: ProviderResult[] = [
+      {
+        provider: "engram:mistakes",
+        content: sampleMistakesContent,
+        confidence: 0.95,
+        cached: false,
+      },
+      {
+        provider: "context7",
+        content: "Express.js middleware documentation — no relation to our mistakes",
+        confidence: 0.7,
+        cached: false,
+      },
+    ];
+    const out = boostByMistakes(results);
+    const c7 = out.find((r) => r.provider === "context7");
+    expect(c7!.confidence).toBe(0.7);
+  });
+
+  it("does NOT boost the engram:mistakes provider itself", async () => {
+    const { boostByMistakes } = await import("../../src/providers/resolver.js");
+    const results: ProviderResult[] = [
+      {
+        provider: "engram:mistakes",
+        content: sampleMistakesContent,
+        confidence: 0.95,
+        cached: false,
+      },
+    ];
+    const out = boostByMistakes(results);
+    expect(out[0].confidence).toBe(0.95);
+  });
+
+  it("case-insensitive matching (mistake labels are normalized)", async () => {
+    const { boostByMistakes } = await import("../../src/providers/resolver.js");
+    const results: ProviderResult[] = [
+      {
+        provider: "engram:mistakes",
+        content: "  ! Some Important Bug (flagged today)",
+        confidence: 0.95,
+        cached: false,
+      },
+      {
+        provider: "engram:git",
+        content: "commit abc: fixed SOME IMPORTANT BUG for real this time",
+        confidence: 0.5,
+        cached: false,
+      },
+    ];
+    const out = boostByMistakes(results);
+    const git = out.find((r) => r.provider === "engram:git");
+    expect(git!.confidence).toBeCloseTo(0.75, 5); // 0.5 * 1.5
+  });
+});
