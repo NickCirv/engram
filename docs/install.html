@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>Install · engram — the context spine for AI coding agents</title>
-<meta name="description" content="One command to install. Three commands to wire up. Your AI coding agent stops re-reading the same files and starts remembering. 88.1% measured session-level token savings. Local SQLite, zero cloud.">
+<title>Install · engramx v3.0 "Spine" — the context spine for AI coding agents</title>
+<meta name="description" content="One command installs. One command wires it all up. Your AI coding agent stops re-reading the same files and starts remembering. 89.1% measured token savings on a real codebase. Local SQLite, zero cloud, zero LLM cost. Pluggable — add Serena, GitHub, Sentry as 10-line plugins.">
 <link rel="canonical" href="https://github.com/NickCirv/engram/blob/main/docs/install.html">
 
-<meta property="og:title" content="Install engram — persistent memory for AI coding agents">
-<meta property="og:description" content="npm install -g engramx → engram init → engram install-hook. 88.1% measured token savings, zero cloud, zero LLM cost.">
+<meta property="og:title" content="engramx v3.0 — the context spine. 89.1% measured savings, pluggable providers, mistakes that remember.">
+<meta property="og:description" content="npm install -g engramx → engram setup. 89.1% measured real-world token savings on code agents. Any MCP server becomes a provider in 10 lines. Open source, Apache 2.0.">
 <meta property="og:image" content="https://raw.githubusercontent.com/NickCirv/engram/main/assets/banner.png">
 <meta name="twitter:card" content="summary_large_image">
 
@@ -797,14 +797,28 @@
 
   footer a:hover { color: var(--accent); }
 
-  /* ---------- Reveal motion (opacity-only, AAA spec) ---------- */
+  /* ---------- Reveal motion — progressive enhancement ----------
+     Content is VISIBLE by default so the page renders correctly for
+     headless screenshotters (OG previews, Twitter cards), crawlers,
+     and users with JS disabled. The IntersectionObserver upgrades the
+     entrance with a slide+fade when JS is active. `.js-ready` on <html>
+     is toggled by the script below. */
 
   .reveal {
-    opacity: 0;
-    transition: opacity 0.45s var(--ease-out);
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.55s var(--ease-out), transform 0.55s var(--ease-out);
   }
 
-  .reveal.visible { opacity: 1; }
+  html.js-ready .reveal {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  html.js-ready .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
 
   @keyframes blink {
     0%, 100% { opacity: 1; }
@@ -833,9 +847,11 @@
       eng<span class="accent">r</span><span class="accent">a</span>m
     </a>
     <ul class="nav-links">
+      <li><a class="nav-link" href="#whats-new">v3.0</a></li>
       <li><a class="nav-link" href="#install">Install</a></li>
       <li><a class="nav-link" href="#how">How it works</a></li>
       <li><a class="nav-link" href="#benefits">Benefits</a></li>
+      <li><a class="nav-link" href="#plugins-multiply">Plugins</a></li>
       <li><a class="nav-link" href="#ides">IDEs</a></li>
       <li><a class="nav-link" href="#faq">FAQ</a></li>
       <li class="nav-cta">
@@ -850,7 +866,7 @@
   <div class="container">
     <div class="hero-grid">
       <div>
-        <span class="hero-pill">● AI Coding Memory · v2.0.2</span>
+        <span class="hero-pill">● v3.0 "Spine" · shipped 2026-04-24</span>
 
         <h1 class="hero-headline reveal">
           your AI agent<br>
@@ -859,11 +875,12 @@
         </h1>
 
         <p class="hero-sub reveal">
-          engram is the <strong>context spine</strong> for AI coding agents.
+          <strong>engramx</strong> is the <strong>context spine</strong> for AI coding agents.
           It intercepts every <code style="color:var(--accent);">Read</code>, <code style="color:var(--accent);">Edit</code>, <code style="color:var(--accent);">Write</code>, and <code style="color:var(--accent);">cat</code>
           your agent makes and replaces it with a pre-assembled context packet —
-          structure, decisions, git history, library docs, and known mistakes —
-          from <strong>8 providers</strong>, in a single ~500-token response.
+          structure, decisions, git history, library docs, known mistakes, and
+          now <strong>any MCP server you plug in</strong> —
+          in a single ~500-token response.
           The agent gets what it needs without re-reading the file.
         </p>
 
@@ -876,21 +893,21 @@
           </a>
         </div>
 
-        <div class="metrics-strip reveal" role="list" aria-label="engram metrics">
+        <div class="metrics-strip reveal" role="list" aria-label="engramx metrics">
           <div class="metric" role="listitem">
-            <span class="metric-value"><span class="accent">88.1</span>%</span>
-            <span class="metric-label">Avg session token savings</span>
+            <span class="metric-value"><span class="accent">89.1</span>%</span>
+            <span class="metric-label">Measured savings · 87 real files</span>
           </div>
           <div class="metric" role="listitem">
             <span class="metric-value"><span class="accent">$0</span></span>
             <span class="metric-label">LLM cost · 0 cloud</span>
           </div>
           <div class="metric" role="listitem">
-            <span class="metric-value">8 + n</span>
-            <span class="metric-label">Providers · plugin SDK</span>
+            <span class="metric-value">9 + n</span>
+            <span class="metric-label">Built-ins · any MCP as plugin</span>
           </div>
           <div class="metric" role="listitem">
-            <span class="metric-value">670</span>
+            <span class="metric-value">876</span>
             <span class="metric-label">Tests passing · CI green</span>
           </div>
         </div>
@@ -906,14 +923,14 @@
           <div class="terminal-body">
 <pre id="install-quick"><span class="prompt">$</span><span class="cmd">npm install -g engramx</span>
 <span class="prompt">$</span><span class="cmd">cd</span> <span class="arg">~/my-project</span>
-<span class="prompt">$</span><span class="cmd">engram init</span>
-<span class="out-dim">↳</span> <span class="out-info">indexed 451 nodes, 1005 edges</span>
-<span class="out-dim">↳</span> <span class="out-info">10 languages · 0 LLM cost</span>
-<span class="prompt">$</span><span class="cmd">engram install-hook</span>
-<span class="out-dim">↳</span> <span class="out-ok">✓</span> SessionStart, Read, Edit, Write, Bash, PreCompact, CwdChanged
-<span class="out-dim">↳</span> <span class="out-ok">✓</span> hud label installed
+<span class="prompt">$</span><span class="cmd">engram setup</span>
+<span class="out-dim">↳</span> <span class="out-info">init → indexed 451 nodes, 1005 edges (10 langs)</span>
+<span class="out-dim">↳</span> <span class="out-info">install-hook → 7 hooks wired</span>
+<span class="out-dim">↳</span> <span class="out-info">adapters → Claude Code detected · AGENTS.md + CLAUDE.md generated</span>
+<span class="out-dim">↳</span> <span class="out-info">doctor → everything green</span>
 <span class="out-ok">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
-<span class="out-ok">✅</span>  next Claude Code session has memory.<span class="terminal-cursor"></span></pre>
+<span class="out-ok">✅</span>  next Claude Code session has memory.
+<span class="out-dim">→</span>  optional: <span class="cmd">engram plugin install</span> <span class="arg">serena</span> for +LSP symbols<span class="terminal-cursor"></span></pre>
           </div>
         </div>
 
@@ -926,13 +943,155 @@
   </div>
 </section>
 
+<!-- ================== WHAT'S NEW IN v3.0 ================== -->
+<section class="block" id="whats-new" style="border-top: 1px solid var(--border);">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow">// v3.0 · what's new</div>
+        <h2 class="section-title">Six upgrades that make v3.0 land.</h2>
+      </div>
+      <div class="section-meta">11 of 12 scope items · 876 tests · 89.1% real-world savings</div>
+    </div>
+
+    <div class="v3-grid">
+      <article class="v3-card">
+        <div class="v3-card-tag">extensibility</div>
+        <h3 class="v3-card-title"><span class="accent">⊕</span>  Plug any MCP server in 10 lines</h3>
+        <p class="v3-card-body">
+          Drop a <code>.mjs</code> into <code>~/.engram/plugins/</code> with an <code>mcpConfig</code>
+          block — the loader spawns the server, calls its tools on every
+          <code>Read</code>, and merges the result into the rich packet.
+          <strong>Serena for LSP symbols. GitHub for issue context. Sentry for prod errors.</strong>
+          No code changes to engramx.
+        </p>
+      </article>
+
+      <article class="v3-card">
+        <div class="v3-card-tag">mistakes moat</div>
+        <h3 class="v3-card-title"><span class="accent">⏱</span>  Bi-temporal mistake validity</h3>
+        <p class="v3-card-body">
+          When you refactor a broken function away, the old mistake stops
+          firing. Schema-level <code>valid_until</code> +
+          <code>invalidated_by_commit</code>. No more stale warnings
+          polluting your context. Your v2.1 database auto-migrates on first open.
+        </p>
+      </article>
+
+      <article class="v3-card">
+        <div class="v3-card-tag">opt-in safety</div>
+        <h3 class="v3-card-title"><span class="accent">⛔</span>  Pre-mortem warnings on Edit / Bash</h3>
+        <p class="v3-card-body">
+          Set <code>ENGRAM_MISTAKE_GUARD=1</code>. Before Claude runs a command
+          that previously caused a bug, engramx intercepts and surfaces the
+          warning. Set <code>=2</code> for hard-deny. Zero overhead when unset.
+        </p>
+      </article>
+
+      <article class="v3-card">
+        <div class="v3-card-tag">universal agent spec</div>
+        <h3 class="v3-card-title"><span class="accent">◎</span>  AGENTS.md + CLAUDE.md, dual-emit</h3>
+        <p class="v3-card-body">
+          One <code>engram gen</code> writes to both. Works in
+          <strong>Claude Code, Cursor, Codex CLI, Windsurf, Copilot Chat, JetBrains Junie,
+          Antigravity</strong> without per-IDE setup. Linux Foundation's universal
+          agent-instructions standard, adopted by every major AI coding tool.
+        </p>
+      </article>
+
+      <article class="v3-card">
+        <div class="v3-card-tag">progressive rendering</div>
+        <h3 class="v3-card-title"><span class="accent">≈</span>  SSE streaming packets</h3>
+        <p class="v3-card-body">
+          <code>GET /context/stream?file=…</code> emits one frame per provider as it resolves.
+          Fast providers paint first; Serena's cold-start doesn't block the
+          packet. Resumable across reconnects via <code>Last-Event-ID</code>
+          (MCP SEP-1699).
+        </p>
+      </article>
+
+      <article class="v3-card">
+        <div class="v3-card-tag">future-proof</div>
+        <h3 class="v3-card-title"><span class="accent">⇌</span>  Anthropic Auto-Memory bridge</h3>
+        <p class="v3-card-body">
+          Claude Code writes consolidated memory to
+          <code>~/.claude/projects/&lt;project&gt;/memory/MEMORY.md</code>.
+          engramx reads the index, surfaces entries relevant to the current file.
+          When Anthropic flips Auto-Dream on, this bridge gets better —
+          no update required.
+        </p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<style>
+  .v3-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+    margin-top: 24px;
+  }
+  .v3-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    transition: border-color 240ms var(--ease-out), transform 240ms var(--ease-out), background-color 240ms var(--ease-out);
+  }
+  .v3-card:hover {
+    border-color: var(--border-accent);
+    background: var(--surface-elevated);
+    transform: translateY(-2px);
+  }
+  .v3-card-tag {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    font-weight: 600;
+  }
+  .v3-card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+  .v3-card-title .accent {
+    display: inline-block;
+    width: 22px;
+    text-align: center;
+    margin-right: 4px;
+    font-weight: 400;
+  }
+  .v3-card-body {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+  .v3-card-body code {
+    background: var(--surface-elevated);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11.5px;
+  }
+  .v3-card-body strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+</style>
+
 <!-- ================== INSTALL — 3 STEP ================== -->
 <section class="block" id="install">
   <div class="container">
     <div class="section-head">
       <div>
         <div class="section-eyebrow">// 01 · Install</div>
-        <h2 class="section-title">Three commands. No accounts. No cloud.</h2>
+        <h2 class="section-title">One command. Or three, if you like ceremony.</h2>
       </div>
       <div class="section-meta">requires node ≥ 20 · 0 native deps</div>
     </div>
@@ -952,7 +1111,7 @@
           </div>
           <div class="terminal-body">
 <pre id="step-01"><span class="prompt">$</span><span class="cmd">npm install -g engramx</span>
-<span class="out-dim">↳</span> <span class="out-info">added engramx@2.0.2 in 4s</span></pre>
+<span class="out-dim">↳</span> <span class="out-info">added engramx@3.0.0 in 4s</span></pre>
           </div>
         </div>
       </article>
@@ -1024,8 +1183,9 @@
           structure, recent edits, related decisions, known mistakes — packs
           ~500 tokens, denies the original Read with the packet as the reason.
           The agent sees a richer answer than the file itself, in a fraction
-          of the tokens. Multiplied across a session: <strong>88.1% measured
-          savings</strong>, $0.26 saved per session at $3/M.
+          of the tokens. Multiplied across a session: <strong>89.1% measured
+          savings</strong> on 87 real files of engramx itself — reproducible via
+          <code style="color:var(--accent);">npx tsx bench/real-world.ts</code>.
         </p>
 
         <div class="mini-graph" aria-hidden="true">
@@ -1092,9 +1252,9 @@
 
       <!-- Big metric cell -->
       <div class="bento-cell">
-        <span class="label">// measured, not estimated</span>
-        <span class="big-number"><span class="accent">11×</span></span>
-        <p>fewer tokens vs reading relevant files. Range: 3.5–11.1× across 6 real projects.</p>
+        <span class="label">// measured, reproducible</span>
+        <span class="big-number"><span class="accent">89.1</span>%</span>
+        <p>real-world token savings on 87 source files of engramx itself. Committed report at <code style="color:var(--accent);">bench/results/</code>. Reproduce with one command.</p>
       </div>
 
       <div class="bento-cell">
@@ -1106,7 +1266,7 @@
       <div class="bento-cell">
         <span class="label">// memory of failure</span>
         <span class="big-number">⚠</span>
-        <p>Mistake memory: past regressions surface at the top of every query. 2.5× score boost on prior bugs.</p>
+        <p>Mistake memory with bi-temporal validity (v3.0). Past bugs surface; refactored-away mistakes stop firing. 1.5× relevance boost on matching results.</p>
       </div>
     </div>
   </div>
@@ -1118,9 +1278,9 @@
     <div class="section-head">
       <div>
         <div class="section-eyebrow">// 03 · Benefits</div>
-        <h2 class="section-title">Without engram → with engram.</h2>
+        <h2 class="section-title">Without engramx → with engramx.</h2>
       </div>
-      <div class="section-meta">measured on 6 real projects · n=200 sessions</div>
+      <div class="section-meta">measured on 87 real source files · <a href="https://github.com/NickCirv/engram/blob/main/bench/results/real-world-2026-04-24.md" style="color:var(--accent);">bench report</a></div>
     </div>
 
     <div class="compare">
@@ -1128,30 +1288,35 @@
         <thead>
           <tr>
             <th scope="col">Dimension</th>
-            <th scope="col">Without engram</th>
-            <th scope="col">With engram</th>
+            <th scope="col">Without engramx</th>
+            <th scope="col">With engramx v3.0</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td class="label">Tokens per file Read</td>
-            <td class="col-other">~5,400 raw bytes</td>
-            <td class="col-engram">~500 (packet)</td>
+            <td class="col-other">~5,400 raw bytes (median)</td>
+            <td class="col-engram">~500 (rich packet)</td>
           </tr>
           <tr>
-            <td class="label">Cumulative session tokens</td>
-            <td class="col-other">100% baseline</td>
-            <td class="col-engram">11.9% (88.1% saved)</td>
+            <td class="label">Cumulative token cost</td>
+            <td class="col-other">163,122 tokens (baseline)</td>
+            <td class="col-engram">17,722 tokens <strong>(89.1% saved)</strong></td>
           </tr>
           <tr>
             <td class="label">Cost per typical session ($3/M)</td>
-            <td class="col-other">$0.30</td>
-            <td class="col-engram">$0.04</td>
+            <td class="col-other">$0.49</td>
+            <td class="col-engram">$0.05</td>
           </tr>
           <tr>
             <td class="label">Repeat-mistake rate</td>
             <td class="col-other">High — agent re-introduces fixed bugs</td>
-            <td class="col-engram">Low — mistake memory ⚠ at top of context</td>
+            <td class="col-engram">Low — mistakes at top of context, pre-mortem guard on Edit / Bash</td>
+          </tr>
+          <tr>
+            <td class="label">Stale-warning noise</td>
+            <td class="col-other">Old bugs keep firing after refactor</td>
+            <td class="col-engram">Bi-temporal validity — refactored-away mistakes stop surfacing</td>
           </tr>
           <tr>
             <td class="label">Context survival</td>
@@ -1164,6 +1329,11 @@
             <td class="col-engram">CwdChanged auto-loads new graph</td>
           </tr>
           <tr>
+            <td class="label">Provider ecosystem</td>
+            <td class="col-other">Fixed set (cloud RAG, 1 vector DB)</td>
+            <td class="col-engram">9 built-ins + any MCP server as a 10-line plugin</td>
+          </tr>
+          <tr>
             <td class="label">Network calls</td>
             <td class="col-other">Cloud RAG, embeddings, vendor lock</td>
             <td class="col-engram">0 — local SQLite, $0 LLM cost</td>
@@ -1171,7 +1341,7 @@
           <tr>
             <td class="label">Setup</td>
             <td class="col-other">Configure RAG, vector DB, embedding model</td>
-            <td class="col-engram">3 commands · 30 seconds</td>
+            <td class="col-engram"><code style="color:var(--accent);">engram setup</code> · one command</td>
           </tr>
         </tbody>
       </table>
@@ -1179,16 +1349,231 @@
   </div>
 </section>
 
+<!-- ================== PLUGINS MULTIPLY ================== -->
+<section class="block" id="plugins-multiply" style="border-top: 1px solid var(--border);">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow">// plugins</div>
+        <h2 class="section-title">Every plugin you add closes another token leak.</h2>
+      </div>
+      <div class="section-meta">10-line plugin files · zero engramx changes</div>
+    </div>
+
+    <p class="intro-copy reveal" style="max-width: 680px; color: var(--text-secondary); font-size: 14px; line-height: 1.7; margin-top: 16px;">
+      The <strong style="color:var(--text);">89.1% savings</strong> is what you get with engramx's
+      9 built-in providers. Every MCP server you plug in covers another context gap — cross-file symbols,
+      production errors, schema, tickets, library docs — that the agent would otherwise burn tokens
+      researching. And because every provider is budget-capped + budget-weighted reranked, more plugins
+      = more <strong style="color:var(--text);">relevant</strong> context without packet bloat.
+    </p>
+
+    <div class="plugin-table-wrap reveal">
+      <table class="plugin-table">
+        <thead>
+          <tr>
+            <th scope="col">Plugin</th>
+            <th scope="col">Closes this gap</th>
+            <th scope="col">Savings angle</th>
+            <th scope="col">Effort</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="pl-name">
+              <span class="pl-dot"></span>
+              <strong>Serena</strong>
+              <span class="pl-sub">LSP-backed symbols · MCP · 20+ langs</span>
+            </td>
+            <td>Cross-file symbol references engramx's AST can't resolve precisely.</td>
+            <td>Saves ~3-5 file Reads per "find callers" style query. Kills the grep-then-read loop.</td>
+            <td class="pl-effort">
+              <code style="color:var(--accent);">cp serena-plugin.mjs ~/.engram/plugins/</code>
+            </td>
+          </tr>
+          <tr>
+            <td class="pl-name">
+              <span class="pl-dot"></span>
+              <strong>GitHub MCP</strong>
+              <span class="pl-sub">issues · PRs · commits · official Anthropic+GH</span>
+            </td>
+            <td>Issue history & PR context when editing a file that was recently discussed.</td>
+            <td>Replaces "run gh issue list, pipe to grep, read 3 issues" with one context block.</td>
+            <td class="pl-effort">
+              <code style="color:var(--accent);">engram plugin install github</code>
+            </td>
+          </tr>
+          <tr>
+            <td class="pl-name">
+              <span class="pl-dot"></span>
+              <strong>Sentry MCP</strong>
+              <span class="pl-sub">prod error context · stack traces</span>
+            </td>
+            <td>"What broke in prod for this file" when the agent is about to change it.</td>
+            <td>Cuts the debug-request → open-dashboard → paste-stacktrace loop.</td>
+            <td class="pl-effort">
+              <code style="color:var(--accent);">engram plugin install sentry</code>
+            </td>
+          </tr>
+          <tr>
+            <td class="pl-name">
+              <span class="pl-dot"></span>
+              <strong>Supabase / Neon</strong>
+              <span class="pl-sub">schema · RLS · table info</span>
+            </td>
+            <td>Database schema context when editing queries, migrations, or ORM models.</td>
+            <td>Kills the "Read prisma.schema / query pg_catalog / show definition" roundtrip.</td>
+            <td class="pl-effort">
+              <code style="color:var(--accent);">engram plugin install supabase</code>
+            </td>
+          </tr>
+          <tr>
+            <td class="pl-name">
+              <span class="pl-dot"></span>
+              <strong>Context7</strong>
+              <span class="pl-sub">always-current library docs · bundled</span>
+            </td>
+            <td>Library API changes + breaking updates for imports you actually use.</td>
+            <td>Already a built-in (Tier 2 w/ cache). Stays cheap, stays current.</td>
+            <td class="pl-effort">
+              <code style="color:var(--accent);">shipped · no install</code>
+            </td>
+          </tr>
+          <tr>
+            <td class="pl-name">
+              <span class="pl-dot"></span>
+              <strong>Anthropic Auto-Memory</strong>
+              <span class="pl-sub">Claude Code's own MEMORY.md</span>
+            </td>
+            <td>Consolidated memory Claude already wrote about this codebase.</td>
+            <td>Auto-lights-up when Auto-Dream server flag flips on. Zero code change needed.</td>
+            <td class="pl-effort">
+              <code style="color:var(--accent);">shipped · no install</code>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="plugin-how" style="margin-top: 40px; padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);">
+      <div class="section-eyebrow" style="margin-bottom: 12px;">// how a plugin is built</div>
+      <div class="terminal">
+        <div class="terminal-head">
+          <span class="terminal-label">~/.engram/plugins/serena.mjs</span>
+          <button class="terminal-copy" type="button" data-copy="plugin-serena">Copy</button>
+        </div>
+        <div class="terminal-body">
+<pre id="plugin-serena"><span class="cmd">export default</span> {
+  <span class="arg">name</span>: <span class="out-info">"mcp:serena"</span>,
+  <span class="arg">label</span>: <span class="out-info">"SEMANTIC SYMBOLS"</span>,
+  <span class="arg">version</span>: <span class="out-info">"0.1.0"</span>,
+  <span class="arg">tokenBudget</span>: <span class="out-info">250</span>,
+  <span class="arg">mcpConfig</span>: {
+    <span class="arg">transport</span>: <span class="out-info">"stdio"</span>,
+    <span class="arg">command</span>: <span class="out-info">"uvx"</span>,
+    <span class="arg">args</span>: [<span class="out-info">"--from"</span>, <span class="out-info">"git+https://github.com/oraios/serena"</span>, <span class="out-info">"serena"</span>, <span class="out-info">"start-mcp-server"</span>],
+    <span class="arg">tools</span>: [{ <span class="arg">name</span>: <span class="out-info">"find_symbol"</span>, <span class="arg">args</span>: { <span class="arg">name_path</span>: <span class="out-info">"{fileBasename}"</span> } }]
+  }
+};</pre>
+        </div>
+      </div>
+      <p style="margin-top: 14px; font-size: 12px; color: var(--text-dim); letter-spacing: 0.02em;">
+        That's the entire Serena integration. No transport code, no connection pooling, no retry logic —
+        the loader auto-wraps via <code style="color:var(--accent);">createMcpProvider()</code>.
+        Full spec at <code style="color:var(--accent);">docs/plugins/README.md</code>.
+      </p>
+    </div>
+  </div>
+</section>
+
+<style>
+  .plugin-table-wrap {
+    overflow-x: auto;
+    margin-top: 24px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .plugin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .plugin-table thead th {
+    text-align: left;
+    padding: 14px 18px;
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.012);
+  }
+  .plugin-table tbody td {
+    padding: 18px;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border);
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+  .plugin-table tbody tr:last-child td { border-bottom: none; }
+  .plugin-table tbody tr:hover { background: var(--surface-hover); }
+  .plugin-table .pl-name {
+    min-width: 170px;
+    color: var(--text);
+  }
+  .plugin-table .pl-name strong {
+    display: block;
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .plugin-table .pl-name .pl-sub {
+    display: block;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.01em;
+    line-height: 1.5;
+  }
+  .plugin-table .pl-name .pl-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-right: 8px;
+    vertical-align: middle;
+    box-shadow: 0 0 12px rgba(245,158,11,0.6);
+  }
+  .plugin-table .pl-effort code {
+    font-size: 11.5px;
+    display: inline-block;
+    padding: 4px 8px;
+    background: var(--surface-elevated);
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+</style>
+
 <!-- ================== IDE MATRIX ================== -->
 <section class="block" id="ides">
   <div class="container">
     <div class="section-head">
       <div>
         <div class="section-eyebrow">// 04 · IDE coverage</div>
-        <h2 class="section-title">8 environments. One spine.</h2>
+        <h2 class="section-title">One <code style="color:var(--accent); font-size:0.9em;">engram gen</code>. Every agent reads it.</h2>
       </div>
-      <div class="section-meta">all gens via <code style="color:var(--accent);">engram gen-*</code></div>
+      <div class="section-meta">v3.0 dual-emits <code style="color:var(--accent);">AGENTS.md</code> + <code style="color:var(--accent);">CLAUDE.md</code></div>
     </div>
+
+    <p class="intro-copy reveal" style="max-width: 680px; color: var(--text-secondary); font-size: 14px; line-height: 1.7; margin: 8px 0 24px;">
+      v3.0 emits both <code style="color:var(--accent);">CLAUDE.md</code> (for Claude Code) and
+      <code style="color:var(--accent);">AGENTS.md</code> (the Linux-Foundation universal agent-instructions
+      standard adopted by Codex, Cursor, Windsurf, Copilot, Junie, Antigravity) by default.
+      <strong style="color:var(--text);">One project indexing → every agent reads it.</strong>
+      Legacy per-IDE generators still work for explicit control.
+    </p>
 
     <div class="ide-matrix">
       <div class="ide">
@@ -1218,8 +1603,23 @@
       </div>
       <div class="ide">
         <span class="ide-name">Windsurf</span>
-        <span class="ide-cmd"><span class="accent">engram</span> gen-windsurfrules</span>
-        <span class="ide-status">Live · v2.0</span>
+        <span class="ide-cmd"><span class="accent">engram</span> gen</span>
+        <span class="ide-status">v3.0 · AGENTS.md</span>
+      </div>
+      <div class="ide">
+        <span class="ide-name">Codex CLI (OpenAI)</span>
+        <span class="ide-cmd"><span class="accent">engram</span> gen</span>
+        <span class="ide-status">v3.0 · AGENTS.md</span>
+      </div>
+      <div class="ide">
+        <span class="ide-name">Copilot Chat</span>
+        <span class="ide-cmd"><span class="accent">engram</span> gen</span>
+        <span class="ide-status">v3.0 · AGENTS.md</span>
+      </div>
+      <div class="ide">
+        <span class="ide-name">JetBrains Junie</span>
+        <span class="ide-cmd"><span class="accent">engram</span> gen</span>
+        <span class="ide-status">v3.0 · AGENTS.md</span>
       </div>
       <div class="ide">
         <span class="ide-name">Neovim</span>
@@ -1309,23 +1709,38 @@
       </details>
 
       <details>
-        <summary>How is the 88.1% number measured?</summary>
+        <summary>How is the 89.1% number measured?</summary>
         <div class="faq-body">
-          End-to-end at the hook layer across 6 real projects, n=200+ sessions.
-          We compare the byte-count of what the agent <em>would have read</em> (the raw file)
-          against the byte-count of the context packet engram returned (~500 tokens).
-          The dashboard exposes the per-session numbers under
-          <code>Overview → Tokens saved</code>. No estimates. No rounding up.
+          End-to-end on 87 real source files from engramx itself. For every file we compare the raw-file-read
+          token cost (bytes / 4) against the rich-packet cost the resolver produces. Script lives at
+          <code>bench/real-world.ts</code>. Results committed under
+          <code><a style="color:var(--accent);" href="https://github.com/NickCirv/engram/blob/main/bench/results/real-world-2026-04-24.md">bench/results/</a></code>.
+          Run <code>npx tsx bench/real-world.ts --project . --files 50</code> on your own code to reproduce.
+          No estimates. No rounding up. No cherry-picking — 85 of 87 files saved tokens, median 84.2%.
         </div>
       </details>
 
       <details>
-        <summary>Will it work with my Claude Code / Cursor / Aider setup?</summary>
+        <summary>What's new in v3.0 I should know about?</summary>
         <div class="faq-body">
-          Yes. <strong>Claude Code</strong>: <code>engram install-hook</code> wires PreToolUse + PreCompact + CwdChanged + SessionStart.
-          <strong>Cursor</strong>: <code>engram gen-cursorrules</code> emits MDC + .cursorrules.
-          <strong>Aider</strong>: <code>engram gen-aider</code> writes CONVENTIONS.md.
-          Same for Continue, Zed, Windsurf, Neovim, Emacs. Eight integrations, one source of truth.
+          <ul style="margin: 0.25rem 0 0; padding-left: 1.1rem; color: var(--text-secondary); line-height: 1.75;">
+            <li><strong style="color:var(--text);">Plugin contract v2</strong> — any MCP server becomes a provider in a 10-line <code>.mjs</code>. Serena for LSP symbols, GitHub for issue context, Sentry for prod errors.</li>
+            <li><strong style="color:var(--text);">Pre-mortem mistake-guard</strong> — set <code>ENGRAM_MISTAKE_GUARD=1</code> and Claude gets a warning before running a command that caused a bug before.</li>
+            <li><strong style="color:var(--text);">Bi-temporal mistakes</strong> — refactored-away mistakes stop firing. Auto-migrates your v2.1 DB on first open; <code>.bak-v7</code> saved.</li>
+            <li><strong style="color:var(--text);">AGENTS.md dual-emit</strong> — <code>engram gen</code> now writes both <code>CLAUDE.md</code> and <code>AGENTS.md</code>. Works in every major AI IDE without per-IDE setup.</li>
+            <li><strong style="color:var(--text);">SSE streaming packets</strong> — <code>/context/stream?file=…</code> emits one frame per provider as it resolves. Resumable via <code>Last-Event-ID</code>.</li>
+            <li><strong style="color:var(--text);">Anthropic Auto-Memory bridge</strong> — reads Claude Code's own <code>MEMORY.md</code> index. Lights up automatically when Anthropic's Auto-Dream server flag flips.</li>
+          </ul>
+        </div>
+      </details>
+
+      <details>
+        <summary>Will it work with my Claude Code / Cursor / Codex / Copilot setup?</summary>
+        <div class="faq-body">
+          Yes. <strong>Claude Code</strong>: <code>engram install-hook</code> wires the full PreToolUse / PreCompact / CwdChanged / SessionStart sentinel.
+          <strong>Everything else</strong> (Cursor, Codex CLI, Windsurf, Copilot Chat, JetBrains Junie, Antigravity): they all read
+          <code>AGENTS.md</code> which <code>engram gen</code> now writes by default. One project, indexed once, works everywhere.
+          Legacy <code>gen-cursorrules</code> / <code>gen-aider</code> / <code>gen-windsurfrules</code> still work for explicit control.
         </div>
       </details>
 
@@ -1352,10 +1767,12 @@
       <details>
         <summary>Can I add my own context provider?</summary>
         <div class="faq-body">
-          Yes. Drop a <code>.mjs</code> file in <code>~/.engram/plugins/</code> exporting a
-          <code>resolve(query)</code> function that returns a <code>{ kind, content, score }</code> packet.
-          Engram validates the schema before loading. Run <code>engram plugin list</code> to see what's wired.
-          The provider plugin SDK is documented in <code>docs/PLUGINS.md</code>.
+          Two paths. <strong>Easy path (v3.0):</strong> drop a <code>.mjs</code> in <code>~/.engram/plugins/</code>
+          with an <code>mcpConfig</code> block pointing at any MCP server — the loader spawns, connects, and merges
+          tool calls into the rich packet automatically. Works in ~10 lines. <strong>Full control path:</strong> write your own
+          async <code>resolve(filePath, context)</code> + <code>isAvailable()</code> in the same <code>.mjs</code>.
+          The loader validates the shape before loading; broken plugins are silently skipped and reported in
+          <code>engram plugin list</code>. Full spec + examples in <code><a style="color:var(--accent);" href="https://github.com/NickCirv/engram/blob/main/docs/plugins/README.md">docs/plugins/README.md</a></code>.
         </div>
       </details>
 
@@ -1389,9 +1806,10 @@
     <h2 class="section-title" style="text-align:center; max-width: 26ch;">
       Stop paying for context<br>you've already paid for.
     </h2>
-    <p style="max-width: 56ch; color: var(--text-secondary); margin: 0;">
-      Three commands. The next session has memory. If you don't see at least
-      5× fewer tokens in the dashboard, uninstall and we'll buy back the 30 seconds.
+    <p style="max-width: 58ch; color: var(--text-secondary); margin: 0;">
+      One command. The next session has memory. <strong style="color:var(--text);">89.1% fewer tokens</strong>
+      in a reproducible benchmark. Any MCP server becomes a provider in 10 lines. Zero cloud, zero
+      telemetry, Apache 2.0 — uninstall whenever, it's 30 seconds back either way.
     </p>
     <div class="cta-row" style="margin-top: 0.5rem;">
       <a class="btn btn-primary" href="https://www.npmjs.com/package/engramx">
@@ -1409,7 +1827,7 @@
   <div class="container row">
     <div>
       <span class="wordmark" style="font-size: 13px;">eng<span class="accent">r</span><span class="accent">a</span>m</span>
-      <span style="margin-left: 0.75rem; color: var(--text-dim);">v2.0.2 · Apache 2.0 · Built by <a href="https://github.com/NickCirv">@NickCirv</a></span>
+      <span style="margin-left: 0.75rem; color: var(--text-dim);">v3.0.0 "Spine" · Apache 2.0 · Built by <a href="https://github.com/NickCirv">@NickCirv</a></span>
     </div>
     <nav aria-label="Footer navigation">
       <a href="https://github.com/NickCirv/engram">GitHub</a>
@@ -1422,19 +1840,32 @@
 </footer>
 
 <script>
-  /* Reveal on intersect — opacity-only, AAA spec */
+  /* Reveal on intersect — progressive enhancement.
+     Content is CSS-visible by default so screenshotters + crawlers + no-JS
+     users see a rendered page. This script toggles `html.js-ready` so the
+     CSS kicks in the hidden-initial-state + transition; then it flips each
+     .reveal to .visible as it crosses into the viewport. Under
+     prefers-reduced-motion it stays static (no JS-driven changes). */
   (() => {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) return;  /* leave content visible + static */
+
+    document.documentElement.classList.add('js-ready');
+
     const els = document.querySelectorAll('.reveal');
-    if (reduced) { els.forEach(e => e.classList.add('visible')); return; }
     const io = new IntersectionObserver((entries) => {
-      entries.forEach((e, i) => {
+      entries.forEach((e) => {
         if (e.isIntersecting) {
-          setTimeout(() => e.target.classList.add('visible'), i * 60);
+          /* No per-element stagger — CSS transition provides the
+             visual ramp. Staggered delays caused above-the-fold
+             elements to stay hidden for hundreds of ms, which
+             broke OG-preview screenshots and looked broken on
+             slow first-paints. */
+          e.target.classList.add('visible');
           io.unobserve(e.target);
         }
       });
-    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.1 });
+    }, { rootMargin: '0px 0px -4% 0px', threshold: 0.05 });
     els.forEach(el => io.observe(el));
   })();
 
