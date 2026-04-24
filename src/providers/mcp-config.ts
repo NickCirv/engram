@@ -343,7 +343,11 @@ export function applyArgTemplate(
   const src = template ?? defaults;
   const out: Record<string, unknown> = {};
 
-  const basename = ctx.fileBasename ?? ctx.filePath.split("/").pop() ?? ctx.filePath;
+  // Split on EITHER separator — defence in depth. NodeContext.filePath is
+  // contract-POSIX, but a plugin author could theoretically pass a native
+  // Windows path through this helper. Better to degrade gracefully.
+  const basename =
+    ctx.fileBasename ?? ctx.filePath.split(/[\\/]/).pop() ?? ctx.filePath;
   const tokens: Record<string, string> = {
     filePath: ctx.filePath,
     projectRoot: ctx.projectRoot,

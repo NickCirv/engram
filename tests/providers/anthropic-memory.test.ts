@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import {
   anthropicMemoryProvider,
   encodeProjectPath,
@@ -55,8 +55,21 @@ describe("encodeProjectPath", () => {
 
 describe("getMemoryIndexPath", () => {
   it("ends in projects/<encoded>/memory/MEMORY.md", () => {
-    const path = getMemoryIndexPath("/Users/alice/proj");
-    expect(path).toMatch(/\.claude\/projects\/-Users-alice-proj\/memory\/MEMORY\.md$/);
+    // Platform-agnostic expectation: the implementation uses path.join, which
+    // emits native separators (/ on POSIX, \ on Windows). We build the
+    // expected value through the same join() so the assertion works on both
+    // platforms. Regex-with-forward-slash assertions were the v2.1 Windows
+    // path-separator trap — see docs/superpowers/specs/postmortem-*.md.
+    const actual = getMemoryIndexPath("/Users/alice/proj");
+    const expected = join(
+      homedir(),
+      ".claude",
+      "projects",
+      "-Users-alice-proj",
+      "memory",
+      "MEMORY.md"
+    );
+    expect(actual).toBe(expected);
   });
 });
 
@@ -136,6 +149,25 @@ describe("scoreEntry", () => {
       filePath: "src/auth/login.ts",
       imports: [],
     });
+    expect(score).toBeGreaterThan(0);
+  });
+
+  it("handles a Windows-style path defensively (regression for CI Windows failure)", () => {
+    // NodeContext.filePath is contract-POSIX, but defense-in-depth: if an
+    // upstream caller ever passes a native Windows path, the basename
+    // extractor must still produce the right string. Regressing this
+    // check (e.g., re-splitting on "/" only) would break ONLY on Windows
+    // CI — this test asserts symmetric behaviour locally.
+    const entry = {
+      title: "login handler",
+      file: "x.md",
+      description: "works on windows too",
+    };
+    const score = scoreEntry(entry, {
+      filePath: "src\\auth\\login.ts",
+      imports: [],
+    });
+    // basename should resolve to "login" → matches "login" in title
     expect(score).toBeGreaterThan(0);
   });
 });

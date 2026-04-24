@@ -314,6 +314,19 @@ describe("mcp-config: applyArgTemplate", () => {
     expect(result).toEqual({ bn: "README.md" });
   });
 
+  it("handles a Windows-style native path defensively (regression for CI Windows failure)", () => {
+    // Defence-in-depth: NodeContext.filePath is contract-POSIX, but a
+    // plugin author passing a raw Windows path through the helper used
+    // to crash basename extraction. Fixed by splitting on either separator.
+    // Regression check: if this starts failing locally, whoever reverted
+    // the split(/[\\/]/) broke Windows CI silently.
+    const result = applyArgTemplate(
+      { bn: "{fileBasename}" },
+      { ...ctx, filePath: "C:\\Users\\alice\\proj\\src\\auth.ts" }
+    );
+    expect(result).toEqual({ bn: "auth.ts" });
+  });
+
   it("does not mutate the input template", () => {
     const template = { x: "{filePath}" };
     const frozen = Object.freeze(template);

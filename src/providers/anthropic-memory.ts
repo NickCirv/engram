@@ -116,7 +116,11 @@ export function scoreEntry(
   entry: MemoryIndexEntry,
   ctx: { filePath: string; imports: readonly string[] }
 ): number {
-  const basename = ctx.filePath.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
+  // Accept either separator so an accidentally-native Windows path from an
+  // upstream caller (should never happen per NodeContext contract, but
+  // defensive) still splits correctly. The rest of the logic is
+  // case-insensitive, so this matches symmetrically with `segments`.
+  const basename = ctx.filePath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") ?? "";
   const segments = ctx.filePath.split(/[\\/]/).filter((s) => s.length > 2);
   const t = entry.title.toLowerCase();
   const d = entry.description.toLowerCase();
