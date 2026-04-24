@@ -45,15 +45,55 @@ const BUILTIN_PROVIDERS: readonly ContextProvider[] = [
 const BUILTIN_NAMES = new Set(BUILTIN_PROVIDERS.map((p) => p.name));
 
 /**
- * Full provider list = built-ins + user plugins (deduped against built-in
- * names). Loaded lazily via getLoadedPlugins(). Safe: a broken plugin
- * can never break engram — validation is in plugin-loader.ts.
+ * MCP-backed providers loaded from `~/.engram/mcp-providers.json`. Cached
+ * across Reads for the session lifetime — config is read once on first
+ * call. Test hooks use `_resetMcpProvidersCache()` to force reload.
+ */
+let mcpProvidersCache: readonly ContextProvider[] | null = null;
+async function getMcpProviders(): Promise<readonly ContextProvider[]> {
+  if (mcpProvidersCache) return mcpProvidersCache;
+  try {
+    const [{ loadMcpConfigs }, { createMcpProvider }] = await Promise.all([
+      import("./mcp-config.js"),
+      import("./mcp-client.js"),
+    ]);
+    const { configs, failed } = loadMcpConfigs();
+    if (failed.length > 0) {
+      for (const f of failed) {
+        // One-line stderr warning per bad entry — don't crash, don't
+        // noop-swallow. Users need to know their config didn't take.
+        process.stderr.write(
+          `[engram] mcp-providers.json entry ${f.index}: ${f.reason}\n`
+        );
+      }
+    }
+    mcpProvidersCache = configs.map(createMcpProvider);
+  } catch {
+    mcpProvidersCache = [];
+  }
+  return mcpProvidersCache;
+}
+
+/** Test-only: clear the MCP provider cache so config reload picks up changes. */
+export function _resetMcpProvidersCache(): void {
+  mcpProvidersCache = null;
+}
+
+/**
+ * Full provider list = built-ins + user plugins + MCP-configured providers
+ * (all deduped against built-in names so users can't shadow core providers).
+ * Loaded lazily. Safe: a broken plugin or malformed MCP config can never
+ * break engram — validation is in plugin-loader.ts / mcp-config.ts.
  */
 async function getAllProviders(): Promise<readonly ContextProvider[]> {
-  const { getLoadedPlugins } = await import("./plugin-loader.js");
+  const [{ getLoadedPlugins }, mcpProviders] = await Promise.all([
+    import("./plugin-loader.js"),
+    getMcpProviders(),
+  ]);
   const { loaded } = await getLoadedPlugins();
   const safePlugins = loaded.filter((p) => !BUILTIN_NAMES.has(p.name));
-  return [...BUILTIN_PROVIDERS, ...safePlugins];
+  const safeMcp = mcpProviders.filter((p) => !BUILTIN_NAMES.has(p.name));
+  return [...BUILTIN_PROVIDERS, ...safePlugins, ...safeMcp];
 }
 
 /** Back-compat alias — built-ins only. Plugins flow through getAllProviders(). */
