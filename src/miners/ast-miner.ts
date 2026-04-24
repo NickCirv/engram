@@ -3,7 +3,7 @@
  * Zero LLM cost. Extracts classes, functions, imports, call graphs.
  * Supports: TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, Ruby, PHP
  */
-import { readFileSync, existsSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, realpathSync, statSync, type Dirent } from "node:fs";
 import { basename, extname, join, relative } from "node:path";
 import type { GraphEdge, GraphNode } from "../graph/schema.js";
 import { toPosixPath } from "../graph/path-utils.js";
@@ -506,42 +506,13 @@ function getPatterns(lang: string): LangPatterns {
 
 const MAX_DEPTH = 100;
 
-const DEFAULT_EXCLUDED_DIRS = new Set([
-  "node_modules",
-  "dist",
-  "build",
-  "__pycache__",
-  "vendor",
-  ".engram",
-  "target",
-  ".venv",
-  ".next",
-  ".nuxt",
-  ".output",
-  "coverage",
-  ".turbo",
-  ".cache",
-]);
-
-function loadEngramIgnore(rootDir: string): Set<string> {
-  const ignoreFile = join(rootDir, ".engramignore");
-  const excluded = new Set(DEFAULT_EXCLUDED_DIRS);
-  try {
-    const content = readFileSync(ignoreFile, "utf-8");
-    for (const line of content.split("\n")) {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith("#")) {
-        excluded.add(trimmed);
-      }
-    }
-  } catch {
-    // no .engramignore file
-  }
-  return excluded;
-}
-
 /**
  * Scan a directory recursively and extract all supported code files.
+ *
+ * NOTE: an earlier `DEFAULT_EXCLUDED_DIRS` + `loadEngramIgnore` pair
+ * lived here as a parallel implementation of the same feature shipped
+ * separately as `DEFAULT_SKIP_DIRS` + `loadIgnorePatterns` (below).
+ * They were redundant and the cleaner pair is canonical — removed.
  */
 /** Default directories always skipped during extraction. */
 const DEFAULT_SKIP_DIRS = new Set([
@@ -639,7 +610,7 @@ export function extractDirectory(
     if (visitedDirs.has(realDir)) return;
     visitedDirs.add(realDir);
 
-    let entries: ReturnType<typeof readdirSync>;
+    let entries: Dirent[];
     try {
       entries = readdirSync(dir, { withFileTypes: true });
     } catch {
