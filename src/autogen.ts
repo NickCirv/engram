@@ -359,7 +359,15 @@ export function writeToFile(filePath: string, summary: string): void {
 
 /**
  * Auto-generate AI instructions for a project.
- * Detects which instruction file exists and updates it.
+ *
+ * v3.0 behavior: when no explicit `target` is given, emits BOTH `CLAUDE.md`
+ * AND `AGENTS.md` so the same project works in Claude Code AND in any
+ * AGENTS.md-aware tool (Codex CLI, Cursor, Windsurf, Copilot Chat,
+ * JetBrains Junie, Antigravity). Existing `.cursorrules` is also updated
+ * if present so legacy Cursor users aren't broken.
+ *
+ * Explicit `target` (claude / cursor / agents) preserves single-file
+ * behavior for users who want it.
  *
  * v0.2: optional `task` selects a preset View from VIEWS. Unknown task
  * names throw with a descriptive error listing the valid keys.
@@ -368,7 +376,7 @@ export async function autogen(
   projectRoot: string,
   target?: "claude" | "cursor" | "agents",
   task?: string
-): Promise<{ file: string; nodesIncluded: number; view: string }> {
+): Promise<{ files: string[]; nodesIncluded: number; view: string }> {
   const { getStore } = await import("./core.js");
   const store = await getStore(projectRoot);
 
@@ -388,28 +396,33 @@ export async function autogen(
     const summary = generateSummary(store, view);
     const stats = store.getStats();
 
-    let targetFile: string;
+    const targetFiles: string[] = [];
     if (target === "claude") {
-      targetFile = join(projectRoot, "CLAUDE.md");
+      targetFiles.push(join(projectRoot, "CLAUDE.md"));
     } else if (target === "cursor") {
-      targetFile = join(projectRoot, ".cursorrules");
+      targetFiles.push(join(projectRoot, ".cursorrules"));
     } else if (target === "agents") {
-      targetFile = join(projectRoot, "AGENTS.md");
+      targetFiles.push(join(projectRoot, "AGENTS.md"));
     } else {
-      // Auto-detect
-      if (existsSync(join(projectRoot, "CLAUDE.md"))) {
-        targetFile = join(projectRoot, "CLAUDE.md");
-      } else if (existsSync(join(projectRoot, ".cursorrules"))) {
-        targetFile = join(projectRoot, ".cursorrules");
-      } else if (existsSync(join(projectRoot, "AGENTS.md"))) {
-        targetFile = join(projectRoot, "AGENTS.md");
-      } else {
-        targetFile = join(projectRoot, "CLAUDE.md");
+      // Auto: emit BOTH CLAUDE.md AND AGENTS.md. AGENTS.md is the Linux
+      // Foundation universal standard (Codex/Cursor/Windsurf/Copilot/Junie);
+      // CLAUDE.md remains the canonical Claude Code instruction file.
+      // Both must be kept in sync — single-source-of-truth via the same
+      // generated `summary`.
+      targetFiles.push(join(projectRoot, "CLAUDE.md"));
+      targetFiles.push(join(projectRoot, "AGENTS.md"));
+      // If a legacy .cursorrules exists, update it too — don't break
+      // existing Cursor users who haven't migrated to AGENTS.md.
+      const cursorRules = join(projectRoot, ".cursorrules");
+      if (existsSync(cursorRules)) {
+        targetFiles.push(cursorRules);
       }
     }
 
-    writeToFile(targetFile, summary);
-    return { file: targetFile, nodesIncluded: stats.nodes, view: view.name };
+    for (const f of targetFiles) {
+      writeToFile(f, summary);
+    }
+    return { files: targetFiles, nodesIncluded: stats.nodes, view: view.name };
   } finally {
     store.close();
   }

@@ -439,3 +439,71 @@ describe("autogen() — task flag", () => {
   });
 });
 
+describe("autogen() — v3.0 dual-emit (CLAUDE.md + AGENTS.md by default)", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "engram-autogen-dual-"));
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, "src", "index.ts"),
+      `export function main() { return 42; }\n`
+    );
+    await init(tmpDir);
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("auto target (no flag) emits BOTH CLAUDE.md and AGENTS.md", async () => {
+    const result = await autogen(tmpDir);
+    expect(result.files).toHaveLength(2);
+    expect(result.files).toEqual(
+      expect.arrayContaining([
+        join(tmpDir, "CLAUDE.md"),
+        join(tmpDir, "AGENTS.md"),
+      ])
+    );
+    expect(existsSync(join(tmpDir, "CLAUDE.md"))).toBe(true);
+    expect(existsSync(join(tmpDir, "AGENTS.md"))).toBe(true);
+  });
+
+  it("auto target also updates legacy .cursorrules if present", async () => {
+    writeFileSync(join(tmpDir, ".cursorrules"), "# legacy cursor rules\n");
+    const result = await autogen(tmpDir);
+    expect(result.files).toHaveLength(3);
+    expect(result.files).toEqual(
+      expect.arrayContaining([
+        join(tmpDir, "CLAUDE.md"),
+        join(tmpDir, "AGENTS.md"),
+        join(tmpDir, ".cursorrules"),
+      ])
+    );
+  });
+
+  it("explicit --target=claude emits ONLY CLAUDE.md", async () => {
+    const result = await autogen(tmpDir, "claude");
+    expect(result.files).toEqual([join(tmpDir, "CLAUDE.md")]);
+    expect(existsSync(join(tmpDir, "AGENTS.md"))).toBe(false);
+  });
+
+  it("explicit --target=agents emits ONLY AGENTS.md", async () => {
+    const result = await autogen(tmpDir, "agents");
+    expect(result.files).toEqual([join(tmpDir, "AGENTS.md")]);
+    expect(existsSync(join(tmpDir, "CLAUDE.md"))).toBe(false);
+  });
+
+  it("CLAUDE.md and AGENTS.md contain identical engram-generated content", async () => {
+    await autogen(tmpDir);
+    const claudeContent = readFileSync(join(tmpDir, "CLAUDE.md"), "utf-8");
+    const agentsContent = readFileSync(join(tmpDir, "AGENTS.md"), "utf-8");
+    // Both should have the same engram block (single source of truth)
+    const claudeBlock = claudeContent.match(/<!-- engram:start -->[\s\S]*<!-- engram:end -->/)?.[0];
+    const agentsBlock = agentsContent.match(/<!-- engram:start -->[\s\S]*<!-- engram:end -->/)?.[0];
+    expect(claudeBlock).toBeDefined();
+    expect(agentsBlock).toBeDefined();
+    expect(claudeBlock).toEqual(agentsBlock);
+  });
+});
+

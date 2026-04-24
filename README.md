@@ -77,6 +77,18 @@ That's the full setup. The next Claude Code session starts with a project brief 
 
 ---
 
+## What engramx is not
+
+The "engram" name is contested. To save you a search:
+
+- **Not Go-Engram** ([Gentleman-Programming/engram](https://github.com/Gentleman-Programming/engram)) — different project, Go binary, salience-gated chat memory. Ships under `engram` (without the `x`).
+- **Not DeepSeek's "Engram" paper** — January 2026 academic work on conditional memory. Research artifact, not a product.
+- **Not MemPalace** — adjacent positioning ("knowledge-graph memory," "method-of-loci"), but conversational memory, not code-structural.
+
+`engramx` is specifically: **a local-first context spine for AI coding agents that hooks into your IDE's tool boundary, indexes your code via tree-sitter + LSP, remembers past mistakes, and assembles ~500-token context packets in place of raw file reads.** Open source, Apache 2.0, single npm install.
+
+---
+
 ## Dashboard
 
 A zero-dependency web dashboard ships built-in. One command, opens in your browser:
