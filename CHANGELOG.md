@@ -6,6 +6,19 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+## [3.0.2] — 2026-04-24 — "MCP Registry"
+
+Chore release. No runtime changes. Adds the `mcpName` field to `package.json`
+required by the Official MCP Registry (`registry.modelcontextprotocol.io`)
+for namespace-ownership proof.
+
+### Added
+- `package.json` → top-level `"mcpName": "io.github.NickCirv/engram"`. Registry-side check reads the published npm tarball's `package.json` and verifies the field matches the server name in `server.json`. Without it, `mcp-publisher publish` returns HTTP 400 with the guidance message.
+- Also tightened `server.json` description fields to the registry's 100-char limit (top-level description + 5 environment-variable descriptions).
+
+### Why not bundled into 3.0.1
+The `preuninstall` fix needed to ship ASAP to stop new users hitting the orphaned-hooks bug. MCP Registry integration was a separate problem surfaced during the submission flow.
+
 ## [3.0.1] — 2026-04-24 — "Clean Uninstall"
 
 **Patch release fixing the orphaned-hooks bug reported by @freenow82 within
