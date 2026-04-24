@@ -3,7 +3,7 @@
  * Zero LLM cost. Extracts classes, functions, imports, call graphs.
  * Supports: TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, Ruby, PHP
  */
-import { readFileSync, existsSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, realpathSync, statSync, type Dirent } from "node:fs";
 import { basename, extname, join, relative } from "node:path";
 import type { GraphEdge, GraphNode } from "../graph/schema.js";
 import { toPosixPath } from "../graph/path-utils.js";
@@ -504,8 +504,15 @@ function getPatterns(lang: string): LangPatterns {
   }
 }
 
+const MAX_DEPTH = 100;
+
 /**
  * Scan a directory recursively and extract all supported code files.
+ *
+ * NOTE: an earlier `DEFAULT_EXCLUDED_DIRS` + `loadEngramIgnore` pair
+ * lived here as a parallel implementation of the same feature shipped
+ * separately as `DEFAULT_SKIP_DIRS` + `loadIgnorePatterns` (below).
+ * They were redundant and the cleaner pair is canonical — removed.
  */
 /** Default directories always skipped during extraction. */
 const DEFAULT_SKIP_DIRS = new Set([
@@ -588,24 +595,34 @@ export function extractDirectory(
     return false;
   }
 
-  function walk(dir: string): void {
-    // Symlink loop protection
+  // MAX_DEPTH guard prevents stack overflow + runaway recursion on
+  // pathological directory trees (symlink cycles that escape the visitedDirs
+  // check, deliberately-deep scratch dirs, etc.). Credit: PR #6 / mechtar-ru.
+  function walk(dir: string, depth: number): void {
+    if (depth > MAX_DEPTH) return;
+
     let realDir: string;
     try {
       realDir = realpathSync(dir);
     } catch {
-      return; // broken symlink
+      return;
     }
     if (visitedDirs.has(realDir)) return;
     visitedDirs.add(realDir);
 
-    const entries = readdirSync(dir, { withFileTypes: true });
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
     for (const entry of entries) {
       const fullPath = join(dir, entry.name);
 
       if (entry.isDirectory()) {
         if (shouldSkipDir(entry.name)) continue;
-        walk(fullPath);
+        walk(fullPath, depth + 1);
         continue;
       }
 
@@ -640,6 +657,6 @@ export function extractDirectory(
     }
   }
 
-  walk(dirPath);
+  walk(dirPath, 0);
   return { nodes: allNodes, edges: allEdges, fileCount, totalLines, mtimes, skippedCount };
 }

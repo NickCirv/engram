@@ -13,6 +13,20 @@ export interface GraphNode {
   readonly lastVerified: number; // unix ms
   readonly queryCount: number;
   readonly metadata: Record<string, unknown>;
+  /**
+   * v3.0 bi-temporal validity (primarily for `mistake` nodes).
+   * Unix-ms timestamp after which this node should NO LONGER surface in
+   * context (e.g. the referenced code was refactored away). `undefined`
+   * means "still valid" — this is the default for all existing rows and
+   * for newly-mined mistakes that haven't been invalidated yet.
+   */
+  readonly validUntil?: number;
+  /**
+   * v3.0 audit trail. The git commit SHA that triggered invalidation
+   * (set by the git miner when it detects the source file changed).
+   * `undefined` if never invalidated.
+   */
+  readonly invalidatedByCommit?: string;
 }
 
 export type NodeKind =

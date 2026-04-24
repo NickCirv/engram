@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="engram — AI coding memory" width="100%">
+  <img src="assets/banner-v3.png" alt="EngramX — the cached context spine for AI coding agents (v3.0 'Spine')" width="100%">
 </p>
 
 <!-- ============================================================
@@ -47,33 +47,96 @@
   <a href="https://www.npmjs.com/package/engramx"><img src="https://img.shields.io/npm/v/engramx?color=blue" alt="npm version"></a>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node">
-  <img src="https://img.shields.io/badge/tests-640%20passing-brightgreen" alt="Tests">
-  <img src="https://img.shields.io/badge/providers-8%20%2B%20plugins-blue" alt="8 Providers + plugins">
-  <img src="https://img.shields.io/badge/token%20savings-88.1%25%20measured-orange" alt="88% Proven Savings">
+  <img src="https://img.shields.io/badge/tests-876%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/providers-9%20%2B%20plugins-blue" alt="9 Providers + plugins">
+  <img src="https://img.shields.io/badge/token%20savings-90.8%25%20measured-orange" alt="90.8% measured savings">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
   <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
 </p>
 
 ---
 
-> **v2.0 "Ecosystem" shipped 2026-04-17** — web dashboard at `engram ui`, 3-layer memory cache (23μs/op at 99% hit rate), provider plugin system (`~/.engram/plugins/*.mjs`), `engram cache` CLI, schema rollback with automatic backup, incremental re-indexing (78% faster on large repos), auto-bundled tree-sitter grammars, Windsurf + Neovim + Emacs integrations. See [CHANGELOG.md](CHANGELOG.md) for the full diff.
+> **EngramX v3.0 "Spine" shipped 2026-04-24** — the biggest release since v1.0. The spine is now **extensible**: any MCP server becomes an EngramX provider via a 10-line plugin file. **Pre-mortem mistake-guard** warns before you repeat a bug. **Bi-temporal mistake memory** — refactored-away mistakes stop firing. **Anthropic Auto-Memory bridge** reads Claude Code's own consolidated memory. **SSE-streaming** packets render progressively. `engram gen` dual-emits `AGENTS.md` + `CLAUDE.md` by default. **89.1% measured real-world token savings** on 87 source files — reproducible in one command. 878 tests, CI green on Ubuntu + Windows × Node 20 + 22. Zero cloud, zero telemetry. See [CHANGELOG.md](CHANGELOG.md) for the full diff.
 
 ---
 
-# The context spine for AI coding agents.
+# EngramX — the cached context spine for AI coding agents.
 
-engram intercepts every file read your AI agent makes and replaces it with a pre-assembled context packet — structure, decisions, git history, library docs, and known issues — from 8 providers, delivered in a single ~500-token response. The agent gets what it needs without reading the file. You stop paying for context you've already paid for.
+Your AI coding agent keeps re-reading the same files. Every `Read`, every `Edit`, every `cat` re-pays for context you've already paid for.
 
-This is not a tool the agent calls. It hooks at the Claude Code tool boundary. Every `Read`, `Edit`, `Write`, and `cat` is intercepted automatically.
+**EngramX is the spine.** It intercepts every file read at the tool boundary, answers from a pre-assembled context packet held in **three layers of cache** — a knowledge graph the agent has already "paid" to build, a per-provider SQLite cache of external lookups, and an in-memory LRU of recent queries — and hands the agent a single ~500-token response instead of a raw file.
+
+The agent gets what it needs. You stop paying for context you've already paid for. And **every plugin you add elevates the savings further** — Serena for LSP symbols, GitHub MCP for issue context, Sentry MCP for production errors, Supabase / Neon for schema. Each one closes another context leak the agent would otherwise burn tokens researching.
+
+**Measured savings on a reproducible benchmark: 89.1%.** Not estimated. 85 of 87 real source files saved tokens. Best case 98.4% (18,820 tokens → 306).
+
+### One command to everything
 
 ```bash
 npm install -g engramx
 cd ~/my-project
-engram init
-engram install-hook
+engram setup
 ```
 
-That's the full setup. The next Claude Code session starts with a project brief already loaded, file reads intercepted, and a live HUD showing cumulative savings.
+That's the install. `engram setup` runs `engram init` (builds the graph), `engram install-hook` (wires the Sentinel into your AI tool), detects your IDE, dual-emits `AGENTS.md` + `CLAUDE.md`, then runs `engram doctor` to verify everything green. Under 30 seconds on most projects. Works in Claude Code, Cursor, Codex CLI, Windsurf, GitHub Copilot Chat, JetBrains Junie, Aider, Zed, Continue — any agent that reads `AGENTS.md` or uses MCP.
+
+The **next session** you open starts with the spine pre-loaded: project brief already in context, file reads intercepted, a live HUD showing cumulative savings, bi-temporal mistakes waiting to warn you, and any plugins you've added already answering their domains.
+
+---
+
+## I'm not a developer — what does this actually do?
+
+Short answer: **your AI coding assistant stops charging you for the same information twice.**
+
+Long answer:
+
+1. You ask your AI assistant (Claude Code, Cursor, Codex, whatever) to help with a file.
+2. The assistant tries to read that file. Normally it reads the whole thing, pays for every byte in tokens, and throws most of it away.
+3. EngramX catches the read, answers with a cached summary (the 50–200 lines the agent actually needs, plus context from your git history, past mistakes, library docs, and anything else useful), and lets the agent work from that.
+4. Your monthly AI bill drops. Multi-hour sessions stop hitting rate limits. The agent stops re-introducing bugs you already fixed — because EngramX remembers what broke.
+
+It runs on your laptop. It doesn't send your code anywhere. It's Apache 2.0. There's no account, no login, no cloud. You install it once and forget it's there.
+
+**Want even bigger savings?** Install a plugin. Each one closes a different context leak — see [Plugins multiply the savings](#plugins-multiply-the-savings) below. Drop a 10-line `.mjs` file in `~/.engram/plugins/` and the next session uses it.
+
+---
+
+## Proof, not promises
+
+Everything above is measured, not estimated. `bench/real-world.ts` runs the full resolver against real files in this repo and compares the rich-packet token cost to the raw-file-read cost. Reproducible in one command on any project.
+
+Latest run (2026-04-24, 87 source files — full report at [`bench/results/real-world-2026-04-24.md`](bench/results/real-world-2026-04-24.md)):
+
+| Metric | Value |
+|---|---|
+| Baseline tokens (87 files read raw) | **163,122** |
+| engramx tokens (rich packets) | **17,722** |
+| Aggregate savings | **89.1%** |
+| Median per-file savings | 84.2% |
+| Files where engramx saved tokens | 85 of 87 |
+| Best case (`src/cli.ts`) | 98.4% (18,820 → 306) |
+
+Reproduce on your own code:
+
+```bash
+cd your-project
+engram init                          # first-time setup for this project
+npx tsx /path/to/engram/bench/real-world.ts --project . --files 50
+```
+
+The bench writes a JSON + Markdown report per run into `bench/results/`. Small projects score lower; dense structural projects score higher. It's real arithmetic on your files — you can audit every number.
+
+---
+
+## What engramx is not
+
+The "engram" name is contested. To save you a search:
+
+- **Not Go-Engram** ([Gentleman-Programming/engram](https://github.com/Gentleman-Programming/engram)) — different project, Go binary, salience-gated chat memory. Ships under `engram` (without the `x`).
+- **Not DeepSeek's "Engram" paper** — January 2026 academic work on conditional memory. Research artifact, not a product.
+- **Not MemPalace** — adjacent positioning ("knowledge-graph memory," "method-of-loci"), but conversational memory, not code-structural.
+
+`engramx` is specifically: **a local-first context spine for AI coding agents that hooks into your IDE's tool boundary, indexes your code via tree-sitter + LSP, remembers past mistakes, and assembles ~500-token context packets in place of raw file reads.** Open source, Apache 2.0, single npm install.
 
 ---
 
@@ -128,6 +191,14 @@ See also the **Sessions** tab (cumulative breakdown + sparkline) in [`assets/scr
 
 ## Benchmark
 
+engramx ships with two benchmarks — use whichever fits your workflow.
+
+### Real-world bench (new in v3.0, preferred)
+
+`npx tsx bench/real-world.ts --project . --files 50` runs the full resolver against real files in any project and outputs exact token numbers. See the [Proof](#proof-not-promises) section above for the reproducible 89.1% result on engramx itself.
+
+### Structured task bench (CI regression)
+
 Measured across 10 structured coding tasks against a baseline of reading the relevant files directly. No synthetic data. No cherry-picked queries.
 
 | Task | Baseline (tokens) | engram (tokens) | Savings |
@@ -144,28 +215,46 @@ Measured across 10 structured coding tasks against a baseline of reading the rel
 | task-10-cross-file-flow | 12,800 | 1,400 | 89.1% |
 | **Aggregate** | **7,130** | **845** | **88.1%** |
 
-Run the benchmark yourself: `engram bench` or `engram stress-test` for the full suite.
+Run it yourself: `npx tsx bench/runner.ts` (structured fixtures) or `npx tsx bench/real-world.ts` (live resolver on real files).
+
+---
+
+## Plugins multiply the savings
+
+The 89.1% number is engramx with its 9 built-in providers. Every MCP server you plug in closes another context gap the agent would otherwise burn tokens researching. And because every provider is budget-capped and the resolver is budget-weighted + mistakes-boost reranked, more plugins = more *relevant* context without packet bloat.
+
+| Plugin | Closes this gap | Install |
+|---|---|---|
+| **Serena** (LSP symbols, 20+ languages) | Cross-file references engramx's AST can't resolve precisely — kills the grep-then-read loop | `cp docs/plugins/examples/serena-plugin.mjs ~/.engram/plugins/` |
+| **GitHub MCP** (issues, PRs, commits) | Recent PR discussion & issue history for the file being edited | `engram plugin install github` |
+| **Sentry MCP** (production errors) | "What broke in prod for this file" — cuts the open-dashboard → paste-trace loop | `engram plugin install sentry` |
+| **Supabase / Neon** (schema, RLS) | Database schema context when editing queries / migrations / ORM models | `engram plugin install supabase` |
+| **Context7** (library docs) | Always-current API surface for your actual imports | shipped as a built-in |
+| **Anthropic Auto-Memory** | Claude Code's own consolidated project memory | shipped — auto-detected when `~/.claude/projects/…/memory/MEMORY.md` exists |
+
+Writing a plugin is **~10 lines** — see [`docs/plugins/README.md`](docs/plugins/README.md) for the full spec + examples.
 
 ---
 
 ## What It Does
 
-engram sits between your AI agent and the filesystem. When the agent reads a file, engram checks its knowledge graph. If the file is covered with sufficient confidence, it blocks the read and injects a compact context packet instead. The packet is assembled from up to 8 providers in parallel, all pre-cached at session start.
+engram sits between your AI agent and the filesystem. When the agent reads a file, engram checks its knowledge graph. If the file is covered with sufficient confidence, it blocks the read and injects a compact context packet instead. The packet is assembled from up to 9 built-in providers plus any plugins you've added, all pre-cached at session start.
 
-**The 8 providers:**
+**The 9 built-in providers (v3.0):**
 
 | Provider | Source | Confidence | Latency |
 |----------|--------|:-----------:|:-------:|
 | `engram:ast` | Tree-sitter parse (10 languages) | 1.0 | <50ms |
 | `engram:structure` | Regex heuristics (fallback) | 0.85 | <50ms |
-| `engram:mistakes` | Past failure nodes from graph | — | <10ms |
+| `engram:mistakes` | Past failure nodes (bi-temporal — stale mistakes filtered out) | — | <10ms |
+| `anthropic:memory` | Claude Code's auto-managed `MEMORY.md` index (v3.0) | 0.85 | <10ms |
 | `engram:git` | Co-change patterns, churn, authorship | — | <100ms |
 | `mempalace` | Decisions, learnings, project context | — | <5ms cached |
 | `context7` | Library API docs for detected imports | — | <5ms cached |
 | `obsidian` | Project notes, architecture docs | — | <5ms cached |
 | `engram:lsp` | Live diagnostics captured as mistake nodes | — | on-event |
 
-External providers cache into SQLite at SessionStart. Per-read resolution is a cache lookup, not a live call. If a provider is unavailable it is skipped silently — you always get at least the structural summary.
+External providers cache into SQLite at SessionStart. Per-read resolution is a cache lookup, not a live call. If a provider is unavailable it is skipped silently — you always get at least the structural summary. **Plus: any MCP server becomes a provider via a 10-line plugin file** — see [Plugins multiply the savings](#plugins-multiply-the-savings) above.
 
 **The 9 hook handlers:**
 
@@ -262,7 +351,7 @@ engram hooks install             # auto-rebuild graph on every git commit
 |------|-------------|-------------|
 | Graph only | `engram init` | CLI queries, MCP server, `engram gen` for CLAUDE.md |
 | + Sentinel | `engram install-hook` | Automatic Read interception, Edit warnings, session briefs, HUD |
-| + Context Spine | Configure providers.json | Rich packets from all 8 providers per read |
+| + Context Spine | Configure providers.json | Rich packets from 9 built-ins + any MCP plugin per read |
 | + Skills index | `engram init --with-skills` | Graph includes your `~/.claude/skills/` |
 | + Git hooks | `engram hooks install` | Graph rebuilds on every commit, stays current |
 | + HTTP server | `engram server --http` | REST API on port 7337 for external tooling |

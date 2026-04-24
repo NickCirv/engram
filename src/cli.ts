@@ -630,9 +630,14 @@ hooks
 // ── autogen ─────────────────────────────────────────────────────────────────
 program
   .command("gen")
-  .description("Generate CLAUDE.md / .cursorrules section from graph")
+  .description(
+    "Generate CLAUDE.md + AGENTS.md (default) or a single file via --target"
+  )
   .option("-p, --project <path>", "Project directory", ".")
-  .option("-t, --target <type>", "Target file: claude, cursor, agents")
+  .option(
+    "-t, --target <type>",
+    "Single-file target: claude, cursor, agents. Default: emit both CLAUDE.md and AGENTS.md."
+  )
   .option(
     "--task <name>",
     "Task-aware view: general (default), bug-fix, feature, refactor"
@@ -641,9 +646,10 @@ program
     async (opts: { project: string; target?: string; task?: string }) => {
       const target = opts.target as "claude" | "cursor" | "agents" | undefined;
       const result = await autogen(opts.project, target, opts.task);
+      const fileList = result.files.map((f) => chalk.bold(f)).join(", ");
       console.log(
         chalk.green(
-          `✅ Updated ${result.file} (${result.nodesIncluded} nodes, view: ${result.view})`
+          `✅ Updated ${fileList} (${result.nodesIncluded} nodes, view: ${result.view})`
         )
       );
     }

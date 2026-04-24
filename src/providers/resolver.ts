@@ -27,6 +27,7 @@ import { mempalaceProvider } from "./mempalace.js";
 import { context7Provider } from "./context7.js";
 import { obsidianProvider } from "./obsidian.js";
 import { lspProvider } from "./lsp.js";
+import { anthropicMemoryProvider } from "./anthropic-memory.js";
 import { readConfig } from "../tuner/config.js";
 
 /** Built-in providers (first-party, always available). */
@@ -34,6 +35,7 @@ const BUILTIN_PROVIDERS: readonly ContextProvider[] = [
   astProvider,
   structureProvider,
   mistakesProvider,
+  anthropicMemoryProvider,
   gitProvider,
   mempalaceProvider,
   context7Provider,
@@ -45,15 +47,55 @@ const BUILTIN_PROVIDERS: readonly ContextProvider[] = [
 const BUILTIN_NAMES = new Set(BUILTIN_PROVIDERS.map((p) => p.name));
 
 /**
- * Full provider list = built-ins + user plugins (deduped against built-in
- * names). Loaded lazily via getLoadedPlugins(). Safe: a broken plugin
- * can never break engram — validation is in plugin-loader.ts.
+ * MCP-backed providers loaded from `~/.engram/mcp-providers.json`. Cached
+ * across Reads for the session lifetime — config is read once on first
+ * call. Test hooks use `_resetMcpProvidersCache()` to force reload.
+ */
+let mcpProvidersCache: readonly ContextProvider[] | null = null;
+async function getMcpProviders(): Promise<readonly ContextProvider[]> {
+  if (mcpProvidersCache) return mcpProvidersCache;
+  try {
+    const [{ loadMcpConfigs }, { createMcpProvider }] = await Promise.all([
+      import("./mcp-config.js"),
+      import("./mcp-client.js"),
+    ]);
+    const { configs, failed } = loadMcpConfigs();
+    if (failed.length > 0) {
+      for (const f of failed) {
+        // One-line stderr warning per bad entry — don't crash, don't
+        // noop-swallow. Users need to know their config didn't take.
+        process.stderr.write(
+          `[engram] mcp-providers.json entry ${f.index}: ${f.reason}\n`
+        );
+      }
+    }
+    mcpProvidersCache = configs.map(createMcpProvider);
+  } catch {
+    mcpProvidersCache = [];
+  }
+  return mcpProvidersCache;
+}
+
+/** Test-only: clear the MCP provider cache so config reload picks up changes. */
+export function _resetMcpProvidersCache(): void {
+  mcpProvidersCache = null;
+}
+
+/**
+ * Full provider list = built-ins + user plugins + MCP-configured providers
+ * (all deduped against built-in names so users can't shadow core providers).
+ * Loaded lazily. Safe: a broken plugin or malformed MCP config can never
+ * break engram — validation is in plugin-loader.ts / mcp-config.ts.
  */
 async function getAllProviders(): Promise<readonly ContextProvider[]> {
-  const { getLoadedPlugins } = await import("./plugin-loader.js");
+  const [{ getLoadedPlugins }, mcpProviders] = await Promise.all([
+    import("./plugin-loader.js"),
+    getMcpProviders(),
+  ]);
   const { loaded } = await getLoadedPlugins();
   const safePlugins = loaded.filter((p) => !BUILTIN_NAMES.has(p.name));
-  return [...BUILTIN_PROVIDERS, ...safePlugins];
+  const safeMcp = mcpProviders.filter((p) => !BUILTIN_NAMES.has(p.name));
+  return [...BUILTIN_PROVIDERS, ...safePlugins, ...safeMcp];
 }
 
 /** Back-compat alias — built-ins only. Plugins flow through getAllProviders(). */
@@ -136,11 +178,29 @@ export async function resolveRichPacket(
     ? results.filter((r) => r.provider !== "engram:structure")
     : results;
 
-  // Sort by priority order
-  const sorted = deduped.sort((a, b) => {
+  // v3.0 — per-provider budget backstop. Providers are supposed to
+  // self-truncate to their `tokenBudget`, but a bad plugin or a server
+  // that ignores its contract shouldn't be able to spend our whole
+  // total budget on one section. Truncate here before assembly.
+  const budgetedResults = enforcePerProviderBudget(deduped, allProviders);
+
+  // v3.0 — mistakes-boost reranking. Results that mention a label from
+  // the engram:mistakes provider get their confidence boosted (capped
+  // at 1.0) so they sort up within their priority tier. This surfaces
+  // structural context that touches known-broken areas ahead of other
+  // structural context of equal priority.
+  const boosted = boostByMistakes(budgetedResults);
+
+  // Sort by (priority index, boosted confidence desc). Priority is the
+  // primary axis — boost only breaks ties within the same priority tier.
+  // Unknown providers sort last (priority index 99).
+  const sorted = [...boosted].sort((a, b) => {
     const aIdx = PROVIDER_PRIORITY.indexOf(a.provider);
     const bIdx = PROVIDER_PRIORITY.indexOf(b.provider);
-    return (aIdx === -1 ? 99 : aIdx) - (bIdx === -1 ? 99 : bIdx);
+    const pa = aIdx === -1 ? 99 : aIdx;
+    const pb = bIdx === -1 ? 99 : bIdx;
+    if (pa !== pb) return pa - pb;
+    return b.confidence - a.confidence;
   });
 
   // Assemble within budget (config-driven, falls back to compile-time constant)
@@ -183,6 +243,98 @@ export async function resolveRichPacket(
     providerCount: providerNames.length,
     providers: providerNames,
     estimatedTokens: totalTokens + estimateTokens(header),
+    durationMs: Date.now() - start,
+  };
+}
+
+/**
+ * v3.0 item #5 — streaming event shape. One per provider as it resolves,
+ * then a final `done` event with totals. Order of `provider` events
+ * is ARRIVAL order (not priority order) — slow providers don't block
+ * fast ones. Consumers who want priority order can sort client-side
+ * or use the non-streaming `resolveRichPacket()` which applies full
+ * priority + boost + budget logic.
+ */
+export type StreamEvent =
+  | { readonly type: "provider"; readonly result: ProviderResult }
+  | {
+      readonly type: "done";
+      readonly providerCount: number;
+      readonly durationMs: number;
+    };
+
+/**
+ * Streaming counterpart to resolveRichPacket. Yields one event per
+ * provider as soon as its result lands, then a final `done` event.
+ * Clients can render progressively — the Serena provider's 2-3s
+ * cold-start doesn't hide the AST provider's 8 ms result.
+ *
+ * Protocol alignment: this matches MCP SEP-1699 (SSE resumption with
+ * event IDs) — the HTTP /context/stream endpoint wraps each event in
+ * an SSE frame with an incrementing `id` so clients reconnecting via
+ * `Last-Event-ID` can skip already-delivered providers.
+ */
+export async function* resolveRichPacketStreaming(
+  filePath: string,
+  context: NodeContext,
+  enabledProviders?: readonly string[]
+): AsyncGenerator<StreamEvent, void, undefined> {
+  const start = Date.now();
+
+  let allProviders: readonly ContextProvider[];
+  try {
+    allProviders = await getAllProviders();
+  } catch {
+    allProviders = BUILTIN_PROVIDERS;
+  }
+
+  const providers = allProviders.filter(
+    (p) => !enabledProviders || enabledProviders.includes(p.name)
+  );
+  const available = await filterAvailable(providers);
+  if (available.length === 0) {
+    yield { type: "done", providerCount: 0, durationMs: Date.now() - start };
+    return;
+  }
+
+  // Fan out: one promise per provider. Each promise pushes its outcome
+  // into a FIFO queue + wakes the consumer via a resolver. The generator
+  // consumes the queue until it's empty AND all promises have landed.
+  type Outcome = { result: ProviderResult | null; provider: ContextProvider };
+  const queue: Outcome[] = [];
+  let wake: (() => void) | null = null;
+  let remaining = available.length;
+
+  for (const p of available) {
+    resolveWithTimeout(p, filePath, context)
+      .then((r) => queue.push({ result: r, provider: p }))
+      .catch(() => queue.push({ result: null, provider: p }))
+      .finally(() => {
+        remaining--;
+        wake?.();
+        wake = null;
+      });
+  }
+
+  let yielded = 0;
+  while (remaining > 0 || queue.length > 0) {
+    while (queue.length > 0) {
+      const outcome = queue.shift()!;
+      if (outcome.result) {
+        yielded++;
+        yield { type: "provider", result: outcome.result };
+      }
+    }
+    if (remaining > 0) {
+      await new Promise<void>((r) => {
+        wake = r;
+      });
+    }
+  }
+
+  yield {
+    type: "done",
+    providerCount: yielded,
     durationMs: Date.now() - start,
   };
 }
@@ -237,6 +389,92 @@ export async function warmAllProviders(
 }
 
 // ─── Internals ──────────────────────────────────────────────────
+
+/**
+ * Truncate every result's content to its provider's declared tokenBudget.
+ * Providers are supposed to self-truncate; this is a backstop so a bad
+ * plugin or a non-conforming MCP server can't spend the whole total
+ * budget on one section. Truncates by whole lines when possible so we
+ * don't cut mid-word.
+ */
+export function enforcePerProviderBudget(
+  results: readonly ProviderResult[],
+  providers: readonly ContextProvider[]
+): ProviderResult[] {
+  const out: ProviderResult[] = [];
+  for (const r of results) {
+    const provider = providers.find((p) => p.name === r.provider);
+    const budget = provider?.tokenBudget ?? 200;
+    if (estimateTokens(r.content) <= budget) {
+      out.push(r);
+      continue;
+    }
+    // Over budget — truncate by lines, then hard-cap by chars as last resort
+    const lines = r.content.split("\n");
+    const kept: string[] = [];
+    let used = 0;
+    for (const line of lines) {
+      const lineTokens = estimateTokens(line) + 1;
+      if (used + lineTokens > budget) break;
+      kept.push(line);
+      used += lineTokens;
+    }
+    const truncated =
+      kept.length > 0
+        ? kept.join("\n") + "\n… [truncated]"
+        : r.content.slice(0, budget * 4 - 20) + "… [truncated]";
+    out.push({ ...r, content: truncated });
+  }
+  return out;
+}
+
+/**
+ * Extract mistake labels from an engram:mistakes provider result. The
+ * provider formats mistakes as `  ! <label> (flagged <age>)` — one per
+ * line. Returns the labels only, trimmed, lowercased for case-insensitive
+ * matching.
+ */
+function extractMistakeLabels(mistakesContent: string): string[] {
+  const labels: string[] = [];
+  for (const line of mistakesContent.split("\n")) {
+    const match = line.match(/^\s*!\s+(.+?)\s+\(flagged/);
+    if (match && match[1]) {
+      labels.push(match[1].trim().toLowerCase());
+    }
+  }
+  return labels;
+}
+
+/**
+ * Boost the confidence of results whose content mentions a known-mistake
+ * label from the engram:mistakes provider. Boost = 1.5x, capped at 1.0.
+ * The mistakes result itself is NOT boosted (it's already at confidence
+ * 0.95 — boosting would flatten the distinction between the signal and
+ * the signal-holders).
+ *
+ * Runs BEFORE the priority sort so the boosted confidence participates
+ * in the secondary-sort tie-breaker. Priority still wins across tiers.
+ */
+export function boostByMistakes(
+  results: readonly ProviderResult[]
+): ProviderResult[] {
+  const mistakesResult = results.find((r) => r.provider === "engram:mistakes");
+  if (!mistakesResult) return [...results];
+
+  const labels = extractMistakeLabels(mistakesResult.content);
+  if (labels.length === 0) return [...results];
+
+  return results.map((r) => {
+    if (r.provider === "engram:mistakes") return r;
+    const lower = r.content.toLowerCase();
+    const matched = labels.some((label) => lower.includes(label));
+    if (!matched) return r;
+    return {
+      ...r,
+      confidence: Math.min(1.0, r.confidence * 1.5),
+    };
+  });
+}
 
 const availabilityCache = new Map<string, boolean>();
 

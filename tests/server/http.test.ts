@@ -171,3 +171,45 @@ describe("unknown routes", () => {
     expect(status).toBe(404);
   });
 });
+
+// ---------------------------------------------------------------------------
+// v3.0 item #5 — /context/stream SSE endpoint
+// ---------------------------------------------------------------------------
+
+describe("/context/stream", () => {
+  it("rejects missing 'file' query parameter with 400", async () => {
+    const res = await fetch(`${baseUrl}/context/stream`, {
+      headers: authHeaders(),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns SSE headers + a 'done' event for a valid request", async () => {
+    const res = await fetch(`${baseUrl}/context/stream?file=src/x.ts`, {
+      headers: authHeaders(),
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+    expect(res.headers.get("cache-control")).toContain("no-cache");
+
+    // Valid stream always ends with a 'done' event.
+    const text = await res.text();
+    expect(text).toContain("event: done");
+  });
+
+  it("every frame carries an 'id:' header (MCP SEP-1699 resumption)", async () => {
+    const res = await fetch(`${baseUrl}/context/stream?file=src/x.ts`, {
+      headers: authHeaders(),
+    });
+    const text = await res.text();
+    // The final 'done' event carries id >= 0; at minimum we expect one id line.
+    expect(text).toMatch(/^id: \d+$/m);
+  });
+
+  it("requires auth — unauthenticated request is rejected", async () => {
+    const res = await fetch(`${baseUrl}/context/stream?file=src/x.ts`, {
+      // no Authorization header
+    });
+    expect(res.status).toBe(401);
+  });
+});

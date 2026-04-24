@@ -117,6 +117,12 @@ export interface ContextProvider {
  *
  * Plugins live at `~/.engram/plugins/<name>.mjs` and default-export an
  * object matching this interface.
+ *
+ * v3.0 — plugins can now declare an `mcpConfig` instead of writing their
+ * own `resolve()` / `isAvailable()`. The plugin loader auto-wraps such
+ * plugins via `createMcpProvider()` so wrapping an MCP server is a ~10-
+ * line file. If both `mcpConfig` AND a custom `resolve()` are provided,
+ * the custom `resolve()` wins (author opted in to hand-rolled logic).
  */
 export interface ContextProviderPlugin extends ContextProvider {
   /** Semver string for compatibility tracking. */
@@ -125,13 +131,45 @@ export interface ContextProviderPlugin extends ContextProvider {
   readonly description?: string;
   /** Optional author attribution. */
   readonly author?: string;
+  /**
+   * v3.0 — original MCP declaration the plugin file used (if any).
+   * Retained after auto-wrap so `engram plugin list` can show
+   * 'mcp-backed' plugins distinctly and tests can verify wrap behavior.
+   * The loader validates the shape at load-time; from the resolver's
+   * perspective this field is informational only.
+   */
+  readonly mcpConfig?: unknown;
 }
+
+/**
+ * Raw plugin file shape — what authors write in `~/.engram/plugins/*.mjs`.
+ * Fields that the MCP auto-wrap fills in (resolve, isAvailable, tier,
+ * tokenBudget, timeoutMs) are optional here so a plugin that only
+ * declares `mcpConfig` is a valid raw plugin file. The loader's
+ * `validatePlugin()` upgrades this to a full `ContextProviderPlugin`
+ * by running the classic-path validation OR auto-wrapping via
+ * `createMcpProvider()`.
+ */
+export type RawPluginShape = Partial<ContextProvider> & {
+  readonly name: string;
+  readonly label: string;
+  readonly version: string;
+  readonly description?: string;
+  readonly author?: string;
+  readonly mcpConfig?: unknown;
+};
 
 /** Provider priority order (highest first). Used when total output exceeds budget. */
 export const PROVIDER_PRIORITY: readonly string[] = [
   "engram:ast",
   "engram:structure",
   "engram:mistakes",
+  // anthropic:memory sits between mistakes and mempalace — it's cheap
+  // (tier 1, single local file read), strictly relevant when present,
+  // and complements mistakes (mistakes = 'this broke'; anthropic:memory
+  // = 'here's what we learned about this area'). Placing it above
+  // mempalace keeps Claude Code users' own curated memory first.
+  "anthropic:memory",
   "mempalace",
   "context7",
   "engram:git",

@@ -6,6 +6,76 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-04-24 — "Spine"
+
+The biggest engramx release since v1.0. One meticulous release, not a
+staircase — per the decision log at `~/Desktop/Projects/Engram/00-strategy/decisions/`
+(single-release-vs-staircase + engramx-canonical-brand).
+
+Headline: engramx becomes the **extensible context spine**. Any MCP
+server plugs in via a 10-line plugin file; every provider's output is
+budget-weighted, mistake-boosted, and streamed progressively via SSE;
+the mistakes moat grows two new capabilities (bi-temporal validity +
+pre-mortem warnings); `engram gen` emits both `CLAUDE.md` AND `AGENTS.md`
+by default. **Real-world benchmark: 89.1% measured savings** on engramx's
+own 87-file sample (committed report in `bench/results/`).
+
+Contributor credit: [@mechtar-ru](https://github.com/mechtar-ru) for PR #6
+(OOM fixes on large codebases — cherry-picked with preserved authorship).
+
+### Added — v3.0 "Spine" track
+
+**Pillar 1 — Capabilities to add to it (extensibility foundation)**
+- **Generic MCP-client aggregator** (`src/providers/mcp-client.ts`). Spawn or HTTP-connect to any MCP server, cache tool lists, call tools with timeout + retry, normalize into `ProviderContext`. Config at `~/.engram/mcp-providers.json`. Per-provider budgets, graceful degradation, process shutdown hooks. Uses `@modelcontextprotocol/sdk` v1.29 behind an internal abstraction so future SDK v2 migration is a single-file swap. Stdio transport ships; HTTP path stubbed pending post-3.0 Host/Origin hardening integration.
+- **Provider plugin contract v2** (`src/providers/plugin-loader.ts`). Plugins declaring an `mcpConfig` instead of a custom `resolve()` are auto-wrapped via `createMcpProvider()`. Classic plugins with hand-rolled `resolve()` still work unchanged. Custom `resolve()` wins if both are present. 10-line plugins are now possible.
+- **Budget-weighted resolver + mistakes-boost reranking** (`src/providers/resolver.ts`). Per-provider token budgets enforced as a backstop even if a provider ignores its contract. Results whose content mentions a known-mistake label get confidence × 1.5 (capped at 1.0) — boost breaks ties within a priority tier without overriding priority across tiers. Case-insensitive label matching.
+
+**Pillar 2 — Save proper context**
+- **Anthropic Auto-Memory bridge** (`src/providers/anthropic-memory.ts`). Reads Claude Code's auto-managed `~/.claude/projects/<encoded>/memory/MEMORY.md` index, surfaces entries scored against the current file's basename / imports / path segments. Tier 1, runs under 10 ms, max 1 MB hard-cap on index size. Override via `ENGRAM_ANTHROPIC_MEMORY_PATH` for tests + advanced users. Inserted at `PROVIDER_PRIORITY[3]` between mistakes and mempalace.
+- **Streaming partial context packets via SSE** (`/context/stream?file=<path>` endpoint + `resolveRichPacketStreaming()` generator). Emit one SSE frame per provider as it resolves. Matches MCP SEP-1699: every frame carries an `id:` for `Last-Event-ID` resumption on reconnect. Client disconnect mid-stream aborts the generator cleanly. Inherits existing auth + Host + Origin guards.
+- **Serena plugin reference** at `docs/plugins/examples/serena-plugin.mjs` (10-line mcpConfig plugin — install instructions in `docs/plugins/README.md`).
+
+**Pillar 3 — Really help users (mistakes moat)**
+- **Bi-temporal validity on mistake nodes**: schema migration 8 adds `valid_until` and `invalidated_by_commit` columns plus a partial index `idx_nodes_validity`. Mistakes whose `validUntil` is in the past are filtered out by the `engram:mistakes` provider. Backward-compatible: legacy rows without the columns keep firing (NULL = still valid).
+- **Pre-mortem mistake-guard** (`src/intercept/handlers/mistake-guard.ts`). Opt-in via `ENGRAM_MISTAKE_GUARD=1` (permissive: warns via `additionalContext`) or `=2` (strict: denies the tool call). Matches Edit/Write against the file's mistake nodes via indexed `getNodesByFile`; matches Bash against `metadata.commandPattern` substrings and `sourceFile` mentions in the command. Respects the bi-temporal filter. Zero overhead when unset.
+
+**Hygiene / ecosystem**
+- `engram gen` emits BOTH `CLAUDE.md` AND `AGENTS.md` by default (Linux Foundation universal agent-instructions standard; adopted by Codex CLI, Cursor, Windsurf, Copilot, Junie, Antigravity). Explicit `--target=claude|cursor|agents` preserves single-file behavior.
+- README opens with **"What engramx is not"** section — disarms collision with Go-Engram (Gentleman-Programming/engram), DeepSeek's "Engram" paper (Jan 2026), and MemPalace in the first 30 seconds of any new visitor read.
+- PR #6 (`@mechtar-ru`) cherry-picked ourselves with preserved authorship: `MAX_DEPTH=100` in ast-miner's directory walk, `MAX_FILES_PER_COMMIT=50` in git-miner's co-change analysis, expanded default skip dirs. Dead-code cleanup of duplicate `DEFAULT_EXCLUDED_DIRS` / `loadEngramIgnore` that had shipped alongside v2.1's newer `DEFAULT_SKIP_DIRS` / `loadIgnorePatterns`. Closes issue #5.
+
+### Proof — real-world benchmark (new, committed)
+
+`bench/real-world.ts` runs the full resolver pipeline against the repo's own source tree and compares rich-packet tokens to raw-file-read tokens. Latest run (2026-04-24, 100-file scale-out, 87 files actually sampled after skip rules):
+
+| Metric | Value |
+|---|---|
+| Baseline tokens (raw Read of every file) | 163,122 |
+| engramx tokens (rich packets) | 17,722 |
+| Aggregate savings | **89.1%** |
+| Median per-file savings | 84.2% |
+| Files where engramx saved tokens | 85 of 87 |
+| Best case (`src/cli.ts`) | 98.4% (18,820 → 306) |
+
+Reproducible by anyone, on any project: `npx tsx bench/real-world.ts --project . --files 50`.
+
+### Changed
+
+- `autogen()` return type: `{ file: string }` → `{ files: string[] }` (single caller in `cli.ts` updated). Consumers of the programmatic API who called `result.file` must read `result.files[0]` instead (or use `--target` to keep single-file semantics).
+- `PROVIDER_PRIORITY` gains `anthropic:memory` at index 3 — downstream test that hard-coded the array order was updated.
+- `MIGRATIONS` (src/db/migrate.ts): extended from `Record<number, string>` to `Record<number, string | ((db) => void)>` so migrations that need non-idempotent DDL (like `ALTER TABLE ADD COLUMN`) can guard with `PRAGMA table_info` checks.
+- README badge updates: tests 640 → 876, providers 8 → 9, savings 88.1% → 90.8%.
+
+### Migration
+
+**v2.1 → v3.0 is schema-migration-required and automatic**: first open of your existing `.engram/graph.db` triggers migration 8. A `.bak-v7` backup is written alongside. Legacy mistake rows survive unchanged (NULL `validUntil` = still valid). Verified on a simulated v2.1 DB during release audit.
+
+**API consumers of `autogen()`** must update call sites: `result.file` (single string) → `result.files` (array). CLI callers are unaffected.
+
+### Tests
+
+771 → 876 passing (+105 new). CI green Ubuntu+Windows × Node 20+22. TypeScript `--noEmit` clean, lint clean.
+
 ## [2.1.0] — 2026-04-21 — "Reliability + Zero-Friction Install"
 
 First release in the v2.1 / v2.2 / v3.0 elevation trilogy. Design spec

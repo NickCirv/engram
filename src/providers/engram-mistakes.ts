@@ -21,9 +21,15 @@ export const mistakesProvider: ContextProvider = {
     try {
       const store = await getStore(context.projectRoot);
       try {
+        const now = Date.now();
         const allMistakes = store
           .getNodesByFile(filePath)
-          .filter((n) => n.kind === "mistake");
+          .filter((n) => n.kind === "mistake")
+          // v3.0 bi-temporal: hide mistakes whose source code has been
+          // refactored away (`validUntil` set by the git miner when it
+          // detected the source file changed). `validUntil === undefined`
+          // = still valid (back-compat for all v2.x mistakes).
+          .filter((n) => n.validUntil === undefined || n.validUntil > now);
 
         if (allMistakes.length === 0) return null;
 

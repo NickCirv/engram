@@ -31,6 +31,7 @@ import {
   type EditWriteHookPayload,
 } from "./handlers/edit-write.js";
 import { handleBash, type BashHookPayload } from "./handlers/bash.js";
+import { applyMistakeGuard } from "./handlers/mistake-guard.js";
 import {
   handleSessionStart,
   type SessionStartHookPayload,
@@ -181,12 +182,16 @@ async function dispatchPreToolUse(
       result = await runHandler(() =>
         handleEditOrWrite(handlerPayload as unknown as EditWriteHookPayload)
       );
+      // v3.0 item #8 — wrap with mistake-guard (opt-in via
+      // ENGRAM_MISTAKE_GUARD). Zero overhead when the env var is unset.
+      result = await applyMistakeGuard(result, handlerPayload, "edit-write");
       break;
 
     case "Bash":
       result = await runHandler(() =>
         handleBash(handlerPayload as unknown as BashHookPayload)
       );
+      result = await applyMistakeGuard(result, handlerPayload, "bash");
       break;
 
     default:
