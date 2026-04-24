@@ -56,13 +56,21 @@
 
 ---
 
-> **v3.0 "Spine" shipped 2026-04-24** — extensible MCP-client aggregator (any MCP server is a 10-line plugin), pre-mortem mistake-guard that warns before you repeat a bug, bi-temporal mistake memory (refactored-away mistakes stop firing), Anthropic Auto-Memory bridge, SSE-streaming rich packets, and `engram gen` dual-emits `AGENTS.md` + `CLAUDE.md` by default. **89.1% measured real-world token savings** on 87 source files of engramx itself. 876 tests, zero cloud. See [CHANGELOG.md](CHANGELOG.md) for the full diff.
+> **EngramX v3.0 "Spine" shipped 2026-04-24** — the biggest release since v1.0. The spine is now **extensible**: any MCP server becomes an EngramX provider via a 10-line plugin file. **Pre-mortem mistake-guard** warns before you repeat a bug. **Bi-temporal mistake memory** — refactored-away mistakes stop firing. **Anthropic Auto-Memory bridge** reads Claude Code's own consolidated memory. **SSE-streaming** packets render progressively. `engram gen` dual-emits `AGENTS.md` + `CLAUDE.md` by default. **89.1% measured real-world token savings** on 87 source files — reproducible in one command. 878 tests, CI green on Ubuntu + Windows × Node 20 + 22. Zero cloud, zero telemetry. See [CHANGELOG.md](CHANGELOG.md) for the full diff.
 
 ---
 
-# The context spine for AI coding agents.
+# EngramX — the cached context spine for AI coding agents.
 
-Your AI coding agent keeps re-reading the same files. Every `Read`, every `Edit`, every `cat` re-pays for context you've already paid for. engramx fixes this at the tool boundary: it intercepts file reads, replaces them with a ~500-token pre-assembled context packet — structure, past decisions, git history, library docs, known mistakes, and anything else you plug in — and hands that to the agent instead. Measured savings on a real benchmark: **89.1%**.
+Your AI coding agent keeps re-reading the same files. Every `Read`, every `Edit`, every `cat` re-pays for context you've already paid for.
+
+**EngramX is the spine.** It intercepts every file read at the tool boundary, answers from a pre-assembled context packet held in **three layers of cache** — a knowledge graph the agent has already "paid" to build, a per-provider SQLite cache of external lookups, and an in-memory LRU of recent queries — and hands the agent a single ~500-token response instead of a raw file.
+
+The agent gets what it needs. You stop paying for context you've already paid for. And **every plugin you add elevates the savings further** — Serena for LSP symbols, GitHub MCP for issue context, Sentry MCP for production errors, Supabase / Neon for schema. Each one closes another context leak the agent would otherwise burn tokens researching.
+
+**Measured savings on a reproducible benchmark: 89.1%.** Not estimated. 85 of 87 real source files saved tokens. Best case 98.4% (18,820 tokens → 306).
+
+### One command to everything
 
 ```bash
 npm install -g engramx
@@ -70,11 +78,13 @@ cd ~/my-project
 engram setup
 ```
 
-That's the whole setup. `engram setup` runs `init` + `install-hook` + detects your AI tool + generates `AGENTS.md` and `CLAUDE.md` + verifies everything green. The next Claude Code / Cursor / Codex session starts with a project brief already loaded, file reads intercepted, a live HUD showing cumulative savings, and any MCP-backed plugins you've added.
+That's the install. `engram setup` runs `engram init` (builds the graph), `engram install-hook` (wires the Sentinel into your AI tool), detects your IDE, dual-emits `AGENTS.md` + `CLAUDE.md`, then runs `engram doctor` to verify everything green. Under 30 seconds on most projects. Works in Claude Code, Cursor, Codex CLI, Windsurf, GitHub Copilot Chat, JetBrains Junie, Aider, Zed, Continue — any agent that reads `AGENTS.md` or uses MCP.
+
+The **next session** you open starts with the spine pre-loaded: project brief already in context, file reads intercepted, a live HUD showing cumulative savings, bi-temporal mistakes waiting to warn you, and any plugins you've added already answering their domains.
 
 ---
 
-## I'm not a hardcore developer — what does this actually do?
+## I'm not a developer — what does this actually do?
 
 Short answer: **your AI coding assistant stops charging you for the same information twice.**
 
@@ -82,10 +92,12 @@ Long answer:
 
 1. You ask your AI assistant (Claude Code, Cursor, Codex, whatever) to help with a file.
 2. The assistant tries to read that file. Normally it reads the whole thing, pays for every byte in tokens, and throws most of it away.
-3. engramx catches the read, answers with a pre-built summary (the 50–200 lines the agent actually needs, plus context from your git history, past mistakes, library docs, and anything else useful), and lets the agent work from that.
-4. Your monthly AI bill drops. Multi-hour sessions stop hitting rate limits. The agent stops re-introducing bugs you already fixed — because engramx remembers what broke.
+3. EngramX catches the read, answers with a cached summary (the 50–200 lines the agent actually needs, plus context from your git history, past mistakes, library docs, and anything else useful), and lets the agent work from that.
+4. Your monthly AI bill drops. Multi-hour sessions stop hitting rate limits. The agent stops re-introducing bugs you already fixed — because EngramX remembers what broke.
 
 It runs on your laptop. It doesn't send your code anywhere. It's Apache 2.0. There's no account, no login, no cloud. You install it once and forget it's there.
+
+**Want even bigger savings?** Install a plugin. Each one closes a different context leak — see [Plugins multiply the savings](#plugins-multiply-the-savings) below. Drop a 10-line `.mjs` file in `~/.engram/plugins/` and the next session uses it.
 
 ---
 
