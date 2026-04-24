@@ -47,9 +47,9 @@
   <a href="https://www.npmjs.com/package/engramx"><img src="https://img.shields.io/npm/v/engramx?color=blue" alt="npm version"></a>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node">
-  <img src="https://img.shields.io/badge/tests-640%20passing-brightgreen" alt="Tests">
-  <img src="https://img.shields.io/badge/providers-8%20%2B%20plugins-blue" alt="8 Providers + plugins">
-  <img src="https://img.shields.io/badge/token%20savings-88.1%25%20measured-orange" alt="88% Proven Savings">
+  <img src="https://img.shields.io/badge/tests-876%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/providers-9%20%2B%20plugins-blue" alt="9 Providers + plugins">
+  <img src="https://img.shields.io/badge/token%20savings-90.8%25%20measured-orange" alt="90.8% measured savings">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
   <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
 </p>
@@ -74,6 +74,33 @@ engram install-hook
 ```
 
 That's the full setup. The next Claude Code session starts with a project brief already loaded, file reads intercepted, and a live HUD showing cumulative savings.
+
+---
+
+## Proof, not promises
+
+The savings claim is measured — `bench/real-world.ts` runs the full resolver pipeline against real files in this repository and compares rich-packet tokens to raw-file-read tokens.
+
+Latest run (2026-04-24, 30 files, committed report at [`bench/results/real-world-2026-04-24.md`](bench/results/real-world-2026-04-24.md)):
+
+| Metric | Value |
+|---|---|
+| Baseline tokens (30 files read raw) | **67,435** |
+| engramx tokens (rich packets) | **6,185** |
+| Aggregate savings | **90.8%** |
+| Median per-file savings | 85.5% |
+| Files where engramx saved tokens | 29 of 30 |
+| Best case (`src/cli.ts`) | 98.4% (18,820 → 306) |
+
+Reproduce on your own code:
+
+```bash
+cd your-project
+engram init
+npx tsx /path/to/engram/bench/real-world.ts --project . --files 50
+```
+
+The bench writes a JSON + Markdown report per run into `bench/results/`. Numbers go down when your project is tiny, up when your project is dense with structural context — it's real arithmetic on your files.
 
 ---
 
