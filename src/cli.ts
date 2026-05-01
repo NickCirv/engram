@@ -606,6 +606,62 @@ program
     console.log();
   });
 
+// ── cost lens (v3.3) ────────────────────────────────────────────────────────
+program
+  .command("cost")
+  .description("Show token-savings telemetry from engram hook logs")
+  .option(
+    "-p, --project <path...>",
+    "One or more project roots. Defaults to current dir if omitted.",
+  )
+  .option("--digest", "Write weekly Markdown digest to ~/.engram/")
+  .option("--json", "Emit machine-readable JSON instead of a terminal table")
+  .action(
+    async (opts: {
+      project?: string[];
+      digest?: boolean;
+      json?: boolean;
+    }) => {
+      const cost = await import("./cost/index.js");
+      const roots =
+        opts.project && opts.project.length > 0
+          ? opts.project.map((p) => pathResolve(p))
+          : [pathResolve(".")];
+      if (opts.digest) {
+        const result = cost.writeWeeklyDigest(roots);
+        console.log(
+          chalk.green(
+            `wrote ${result.isoWeek} digest → ${result.path} (${result.rows.length} project${result.rows.length === 1 ? "" : "s"})`,
+          ),
+        );
+        return;
+      }
+      const rows = cost.summarizeProjects(roots);
+      if (opts.json) {
+        console.log(JSON.stringify(rows, null, 2));
+        return;
+      }
+      console.log(chalk.bold("\nengram cost lens\n"));
+      console.log(cost.formatTable(rows));
+      const totalSaved = rows.reduce(
+        (a, r) => a + r.summary.tokensSaved,
+        0,
+      );
+      const totalEvents = rows.reduce((a, r) => a + r.summary.events, 0);
+      const totalUsd = rows.reduce(
+        (a, r) => a + r.summary.approxUsdSaved,
+        0,
+      );
+      console.log(
+        chalk.dim(
+          `\ntotal: ${cost.formatNumber(totalSaved)} tokens saved · ` +
+            `${cost.formatUsd(totalUsd)} · ` +
+            `${totalEvents} events\n`,
+        ),
+      );
+    },
+  );
+
 // ── hooks ───────────────────────────────────────────────────────────────────
 const hooks = program.command("hooks").description("Manage git hooks");
 

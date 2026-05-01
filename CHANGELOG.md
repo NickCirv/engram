@@ -6,6 +6,15 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+### Added — v3.3 "Cost Lens" (in progress, target: 2026-05-08)
+- New `engram cost` subcommand: aggregates token-savings telemetry from existing `.engram/hook-log.jsonl` files across one or many project roots. Outputs a terminal table, JSON, or a weekly Markdown digest at `~/.engram/cost-report-YYYY-Www.md`.
+- New `src/cost/` module: `types.ts` (CostEvent / CostSummary / CostConfig), `aggregator.ts` (read + summarize), `formatter.ts` (one-liner / table / Markdown digest), `digest.ts` (ISO-week digest writer with idempotent file output).
+- 13 new tests in `tests/cost.test.ts`, hermetic — use tmp dirs with synthetic logs, no real engram state required.
+- USD estimate uses configurable `inputUsdPerMillion` rate. Default $3.00/M matches Claude Sonnet 4.6 input pricing as of 2026-04-27.
+
+### Why
+Cost Lens is the baseline for everything in the v3.3 → v4.0 roadmap. We need a measured number that survives between releases so future features (Mesh, Vector, Bridge) can be evaluated against the real-world impact, not against a single benchmark file. The PRD lives at `01-prds/03-engram-mesh-ruflo-integration-PRD.md`.
+
 ## [3.0.2] — 2026-04-24 — "MCP Registry"
 
 Chore release. No runtime changes. Adds the `mcpName` field to `package.json`

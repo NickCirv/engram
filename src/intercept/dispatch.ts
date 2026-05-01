@@ -54,6 +54,7 @@ import {
 } from "./handlers/cwd-changed.js";
 import { findProjectRoot, isValidCwd } from "./context.js";
 import { logHookEvent } from "../intelligence/hook-log.js";
+import { composeCostFields } from "../cost/instrument.js";
 
 /**
  * Minimum validated shape of a hook payload as delivered to `dispatchHook`.
@@ -211,11 +212,13 @@ async function dispatchPreToolUse(
           typeof handlerPayload.tool_input?.file_path === "string"
             ? handlerPayload.tool_input.file_path
             : undefined;
+        const cost = composeCostFields(tool, filePath, result);
         logHookEvent(projectRoot, {
           event: "PreToolUse",
           tool,
           path: filePath,
           decision,
+          ...cost,
         });
       }
     }
