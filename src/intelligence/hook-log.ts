@@ -56,6 +56,10 @@ export interface HookLogEntry {
   readonly success?: boolean;
   readonly error?: string;
   readonly tokensSaved?: number;
+  /** v3.3 Cost Lens: tokens that would have been read without engram. */
+  readonly wouldHaveRead?: number;
+  /** v3.3 Cost Lens: tokens engram actually injected (deny reason or additional context). */
+  readonly injected?: number;
   readonly reason?: string;
 }
 

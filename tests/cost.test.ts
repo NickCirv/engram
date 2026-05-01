@@ -149,6 +149,40 @@ describe("cost.formatter", () => {
   });
 });
 
+describe("cost.aggregator + instrument round-trip", () => {
+  it("aggregator picks up wouldHaveRead/injected/tokensSaved emitted via composeCostFields", () => {
+    // Simulates what dispatch.ts produces when Read is intercepted on a 40KB file
+    // with a 1200-char engram summary: wouldHaveRead=10K tokens, injected=300, saved=9700.
+    const root = makeProject([
+      {
+        ts: "2026-05-01T10:00:00Z",
+        event: "PreToolUse",
+        tool: "Read",
+        path: "/tmp/big.txt",
+        decision: "deny",
+        wouldHaveRead: 10000,
+        injected: 300,
+        tokensSaved: 9700,
+      },
+      {
+        ts: "2026-05-01T10:00:01Z",
+        event: "PreToolUse",
+        tool: "Edit",
+        path: "/tmp/foo.ts",
+        decision: "allow",
+        injected: 200, // augmentation only — no wouldHaveRead/tokensSaved
+      },
+    ]);
+    const events = readEvents(root);
+    const summary = summarize(events);
+    expect(summary.tokensSaved).toBe(9700);
+    expect(summary.tokensInjected).toBe(500);
+    expect(summary.tokensWouldHave).toBe(10000);
+    expect(summary.reductionRatio).toBeCloseTo(0.97, 2);
+    expect(summary.events).toBe(2);
+  });
+});
+
 describe("cost.digest", () => {
   it("isoWeekLabel produces YYYY-Www", () => {
     expect(isoWeekLabel(new Date("2026-05-01T00:00:00Z"))).toMatch(/^2026-W\d{2}$/);
