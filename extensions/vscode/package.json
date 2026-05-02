@@ -1,0 +1,89 @@
+{
+  "name": "engram-vscode",
+  "displayName": "engram — context spine for AI coding",
+  "description": "Local-first knowledge graph that 10x's your AI coding sessions. Works in Cursor, VS Code, and any VS Code fork. Wraps the engramx CLI.",
+  "version": "0.1.0",
+  "publisher": "nick7777",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["AI", "Other"],
+  "keywords": [
+    "engram",
+    "engramx",
+    "cursor",
+    "context",
+    "mcp",
+    "agents-md",
+    "token-reduction",
+    "knowledge-graph"
+  ],
+  "icon": "assets/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NickCirv/engram.git",
+    "directory": "extensions/vscode"
+  },
+  "homepage": "https://github.com/NickCirv/engram",
+  "bugs": {
+    "url": "https://github.com/NickCirv/engram/issues"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "engram.init",
+        "title": "Engram: Initialize knowledge graph for this project"
+      },
+      {
+        "command": "engram.genMdc",
+        "title": "Engram: Generate Cursor rules (.cursor/rules/engram-context.mdc)"
+      },
+      {
+        "command": "engram.genAgentsMd",
+        "title": "Engram: Generate AGENTS.md + CLAUDE.md"
+      },
+      {
+        "command": "engram.cost",
+        "title": "Engram: Show token-savings telemetry"
+      },
+      {
+        "command": "engram.dashboard",
+        "title": "Engram: Open live dashboard"
+      },
+      {
+        "command": "engram.doctor",
+        "title": "Engram: Run health check"
+      }
+    ],
+    "configuration": {
+      "title": "engram",
+      "properties": {
+        "engram.cliPath": {
+          "type": "string",
+          "default": "engram",
+          "description": "Path to the engram CLI binary. Use absolute path if engram is not on PATH."
+        },
+        "engram.regenerateOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-regenerate Cursor rules MDC file when source files are saved."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

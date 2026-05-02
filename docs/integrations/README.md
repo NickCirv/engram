@@ -11,6 +11,7 @@ native hook. Pick the path that matches your IDE.
 | Claude Code | [claude-code.md](./claude-code.md) | Hook-based interception (native, automatic) |
 | Cursor | [cursor-mcp.md](./cursor-mcp.md) *(active)* + MDC file *(passive)* | MCP server + `.cursor/rules/*.mdc` |
 | Continue.dev | [continue.md](./continue.md) | `@engram` context provider |
+| Cline | [cline.md](./cline.md) | MCP server — `engram-serve` registered in Cline's MCP settings |
 | Zed | [zed.md](./zed.md) | Context server (JSON-RPC) — `/engram` slash command |
 | Aider | [aider.md](./aider.md) | `.aider-context.md` static snapshot |
 | Windsurf (Codeium) | MCP server — register `engram-serve` | See [cursor-mcp.md](./cursor-mcp.md); Windsurf supports MCP natively with the same config. Also: `engram gen-windsurfrules` for a `.windsurfrules` snapshot. |

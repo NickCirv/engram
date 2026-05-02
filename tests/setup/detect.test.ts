@@ -6,6 +6,9 @@ import {
   detectCursor,
   detectWindsurf,
   detectAider,
+  detectCline,
+  detectZed,
+  detectCodex,
   detectAllIdes,
 } from "../../src/setup/detect.js";
 
@@ -52,9 +55,35 @@ describe("setup/detect.ts", () => {
     const names = all.map((d) => d.name);
     expect(names).toContain("Claude Code");
     expect(names).toContain("Cursor");
-    expect(names).toContain("Windsurf");
+    expect(names).toContain("Cline");
     expect(names).toContain("Continue.dev");
+    expect(names).toContain("Windsurf");
     expect(names).toContain("Aider");
-    expect(all.length).toBeGreaterThanOrEqual(5);
+    expect(names).toContain("Zed");
+    expect(names).toContain("Codex CLI");
+    expect(all.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it("detectCline: returns shape even when not installed", () => {
+    const r = detectCline();
+    expect(typeof r.installed).toBe("boolean");
+    expect(typeof r.configured).toBe("boolean");
+    expect(r.name).toBe("Cline");
+  });
+
+  it("detectZed: marks configured when .zed/settings.json present", () => {
+    const zedDir = join(fx, ".zed");
+    mkdirSync(zedDir, { recursive: true });
+    writeFileSync(join(zedDir, "settings.json"), "{}", "utf-8");
+    const r = detectZed(fx);
+    expect(r.configured).toBe(true);
+    rmSync(zedDir, { recursive: true, force: true });
+  });
+
+  it("detectCodex: marks configured when AGENTS.md present", () => {
+    writeFileSync(join(fx, "AGENTS.md"), "# agents", "utf-8");
+    const r = detectCodex(fx);
+    expect(r.configured).toBe(true);
+    rmSync(join(fx, "AGENTS.md"));
   });
 });

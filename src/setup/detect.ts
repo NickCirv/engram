@@ -131,13 +131,86 @@ export function detectAider(projectRoot: string): IdeDetection {
   };
 }
 
+/** Detect Cline (VS Code AI agent) via its config dir. */
+export function detectCline(): IdeDetection {
+  const candidates = [
+    join(homedir(), "Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev"),
+    join(homedir(), ".config/Code/User/globalStorage/saoudrizwan.claude-dev"),
+    join(homedir(), "AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev"),
+  ];
+  const installed = candidates.some(existsSync);
+  let configured = false;
+  if (installed) {
+    try {
+      configured = candidates
+        .filter(existsSync)
+        .some((p) => {
+          const settings = join(p, "settings", "cline_mcp_settings.json");
+          return existsSync(settings) && readFileSync(settings, "utf-8").includes("engram");
+        });
+    } catch {
+      configured = false;
+    }
+  }
+  return {
+    name: "Cline",
+    installed,
+    configured,
+    status: !installed
+      ? "not detected"
+      : configured
+        ? "engram MCP server registered"
+        : "detected — add engram-serve to cline_mcp_settings.json",
+  };
+}
+
+/** Detect Zed via ~/.config/zed (Linux/macOS) or %APPDATA%/Zed (Windows). */
+export function detectZed(projectRoot: string): IdeDetection {
+  const candidates = [
+    join(homedir(), ".config/zed"),
+    join(homedir(), "Library/Application Support/Zed"),
+    join(homedir(), "AppData/Roaming/Zed"),
+  ];
+  const installed = candidates.some(existsSync);
+  const configured = existsSync(join(projectRoot, ".zed", "settings.json"));
+  return {
+    name: "Zed",
+    installed,
+    configured,
+    status: !installed
+      ? "not detected"
+      : configured
+        ? "Zed project settings present"
+        : "detected — add engram context server",
+  };
+}
+
+/** Detect OpenAI Codex CLI via ~/.codex or AGENTS.md presence. */
+export function detectCodex(projectRoot: string): IdeDetection {
+  const installed = existsSync(join(homedir(), ".codex"));
+  const configured = existsSync(join(projectRoot, "AGENTS.md"));
+  return {
+    name: "Codex CLI",
+    installed,
+    configured,
+    status: !installed
+      ? "not detected"
+      : configured
+        ? "AGENTS.md present"
+        : "detected — run `engram gen` to create AGENTS.md",
+  };
+}
+
 /** Run all detections. */
 export function detectAllIdes(projectRoot: string): readonly IdeDetection[] {
   return [
     detectClaudeCode(projectRoot),
     detectCursor(projectRoot),
-    detectWindsurf(projectRoot),
+    detectCline(),
     detectContinue(),
+    detectWindsurf(projectRoot),
     detectAider(projectRoot),
+    detectZed(projectRoot),
+    detectCodex(projectRoot),
   ];
 }
