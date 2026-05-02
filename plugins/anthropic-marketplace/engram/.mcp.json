@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "engram": {
+      "command": "engram-serve",
+      "args": ["${CLAUDE_PROJECT_DIR}"],
+      "env": {}
+    }
+  }
+}

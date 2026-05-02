@@ -1,0 +1,23 @@
+{
+  "name": "engram-marketplace",
+  "owner": {
+    "name": "Nicholas Ashkar",
+    "url": "https://github.com/NickCirv"
+  },
+  "plugins": [
+    {
+      "name": "engram",
+      "source": "./engram",
+      "description": "Local-first context spine for Claude Code. 89% measured token reduction. Knowledge graph + bi-temporal mistakes + MCP server.",
+      "version": "3.4.0",
+      "category": "context",
+      "keywords": ["context", "memory", "token-reduction", "mcp", "local-first"],
+      "author": {
+        "name": "Nicholas Ashkar",
+        "url": "https://github.com/NickCirv"
+      },
+      "homepage": "https://github.com/NickCirv/engram",
+      "license": "Apache-2.0"
+    }
+  ]
+}

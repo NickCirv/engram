@@ -1,0 +1,22 @@
+{
+  "name": "engram",
+  "description": "The context spine that 10x's your Claude Code sessions. Local-first SQLite knowledge graph + MCP server that intercepts file reads and replaces them with structural summaries. Measured 89% token reduction on a real codebase. Apache 2.0, no cloud, no telemetry.",
+  "version": "3.4.0",
+  "author": {
+    "name": "Nicholas Ashkar",
+    "url": "https://github.com/NickCirv"
+  },
+  "homepage": "https://github.com/NickCirv/engram",
+  "repository": "https://github.com/NickCirv/engram",
+  "license": "Apache-2.0",
+  "keywords": [
+    "context",
+    "memory",
+    "token-reduction",
+    "knowledge-graph",
+    "local-first",
+    "mcp",
+    "agents-md",
+    "code-search"
+  ]
+}
