@@ -397,7 +397,7 @@ engram hooks install             # auto-rebuild graph on every git commit
 | **Windsurf** (Codeium) | `.windsurfrules` snapshot + MCP | `engram gen-windsurfrules` |
 | **Zed** | Context server (`/engram`) | `engram context-server` &middot; [docs/integrations/zed.md](docs/integrations/zed.md) |
 | **OpenAI Codex CLI** | `AGENTS.md` auto-emit (universal Linux Foundation standard) | `engram gen` (default emits both `AGENTS.md` + `CLAUDE.md`) |
-| **VS Code (any agent)** | Status-bar entry + 6 commands wrapping the CLI | `code --install-extension engram-vscode` (OpenVSX) |
+| **VS Code (any agent)** | Status-bar entry + 6 commands wrapping the CLI | `code --install-extension nickcirv.engram-vscode` ([OpenVSX listing](https://open-vsx.org/extension/nickcirv/engram-vscode)) |
 | **Neovim** | MCP via codecompanion / avante | [docs/integrations/neovim.md](docs/integrations/neovim.md) |
 | **Emacs** | MCP via gptel-mcp | [docs/integrations/emacs.md](docs/integrations/emacs.md) |
 
