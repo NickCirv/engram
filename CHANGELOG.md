@@ -6,6 +6,20 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+### Added — v4.0 "Mesh + Spine" Phase 1 foundation (in progress, target ship: 2026-05-25)
+
+Federation foundation. Loopback transport + cross-machine TLS land in subsequent v4.0 phases. This commit ships the identity, signing, audit, and PII-stripping layers — everything that makes the wire safe before the wire exists.
+
+- **`src/mesh/types.ts`** — Envelope, MessageType, TrustScore, AuditEntry. Five message types defined: `peer.hello`, `peer.audit`, `mistake.shared`, `pattern.shared`, `decision.shared`. Wire constants: protocol v1, 64KB envelope cap, 5-min clock tolerance, 24h replay cache TTL. `computeTrust()` implements the `0.4*success + 0.2*uptime + 0.2*threat + 0.2*integrity` aggregate, clamped to [0,1].
+- **`src/mesh/jcs.ts`** — RFC 8785 canonical JSON serialization. ~150 LoC pure JS, no native dep. Produces deterministic byte sequences for ed25519 signing. Throws on non-finite numbers, circular references, functions, symbols, bigint. `canonicalizeEnvelopeForSigning()` strips `sig` before serializing.
+- **`src/mesh/identity.ts`** — ed25519 keypair generation, persistence, sign/verify. Uses Node's built-in `crypto` module (Node 12+ has stable ed25519). Storage at `~/.engram/mesh/`: `private.key` (DER, 0600), `public.key` (DER, 0644), `fingerprint` (base64url SHA-256). `initIdentity()` is idempotent. `loadIdentity()` throws if uninitialized. Cross-platform (private key mode check skipped on Windows).
+- **`src/mesh/pii-gate.ts`** — 14-category PII stripper. Categories: email, AWS access keys, JWT, Bearer tokens, ETH/BTC addresses, SSN, phone (US + E.164 international), IPv4 (incl. CIDR), filesystem paths, hostnames, high-entropy tokens (Shannon ≥ 4.0), Luhn-validated credit cards. `stripPiiDeep()` recurses through arrays/objects. Tested against fixture corpus at `tests/fixtures/pii-zoo.json`.
+- **`src/mesh/audit.ts`** — append-only JSONL audit log at `~/.engram/mesh/audit.jsonl`. Same atomicity contract as `intelligence/hook-log.ts`: never throws, 10MB rotation cap, swallow-on-error.
+- **CLI: `engram mesh init`, `engram mesh status`, `engram mesh audit`** — three commands wired into `src/cli.ts`. Verified end-to-end against an isolated `HOME` directory.
+- **+97 tests** across `tests/mesh/{types,jcs,identity,pii-gate,audit}.test.ts`. Hermetic — use `mkdtempSync` for filesystem state, no real `~/.engram/` interaction.
+
+PRD: `~/Desktop/Projects/Engram/01-prds/05-v4-mesh-spine-PRD.md`. RFC for the wire format: `~/Desktop/Projects/Engram/02-architecture/rfcs/RFC-0001-mesh-wire-format.md` (decision: JSON over WebSocket, defer Protobuf to RFC-0002 if v4.1 telemetry justifies migration).
+
 ## [3.4.0] — 2026-05-02 — "Universal Spine"
 
 The release that turns engram from a Claude Code tool into a universal context spine across every major AI coding tool. Same engram, same graph, same 89.1% reduction — now plugged into 8 IDEs out of the box.

@@ -1,0 +1,79 @@
+{
+  "_about": "v4.0 mesh PII gate test fixtures. One entry per category, plus edge cases.",
+  "categories": {
+    "email": [
+      "Reach me at nick@example.com tomorrow",
+      "[Email](mailto:foo.bar+tag@sub.example.co.uk) inside markdown",
+      "multiple emails: a@a.com and b@b.org"
+    ],
+    "aws-access-key": [
+      "AKIAIOSFODNN7EXAMPLE",
+      "ASIA1234567890ABCDEF in middle of a sentence"
+    ],
+    "jwt": [
+      "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+    ],
+    "bearer": [
+      "Bearer abcdef1234567890ABCDEF1234567890",
+      "Token x_long_random_token_string_that_should_be_stripped"
+    ],
+    "eth-address": [
+      "Send to 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7",
+      "address: 0xAbCdEf0123456789aBcDeF0123456789aBcDeF01"
+    ],
+    "btc-address": [
+      "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+      "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+    ],
+    "ssn-like": [
+      "SSN: 123-45-6789",
+      "form-456-78-1234-end"
+    ],
+    "phone": [
+      "+1-555-867-5309",
+      "(555) 867-5309",
+      "+44 20 7946 0958"
+    ],
+    "ipv4": [
+      "Server at 192.168.1.10",
+      "10.0.0.0/8 subnet description",
+      "external IP: 8.8.8.8"
+    ],
+    "fs-path": [
+      "Backup at /Users/alice/Documents/secret.txt",
+      "Linux: /home/bob/.ssh/id_rsa",
+      "Windows: C:\\Users\\charlie\\AppData\\Roaming\\app\\token"
+    ],
+    "hostname": [
+      "Connecting to api.example.com:443",
+      "internal.corp.local"
+    ],
+    "high-entropy-token": [
+      "GITHUB_TOKEN=ghp_x8sLZEkEhT3qP2yV9X4m7jR1nDqQwM6oFvZc",
+      "openai-key=sk-proj-1A2b3C4d5E6f7G8h9I0jK1lM2nO3pQ4rS5tU6vW7xY8zA9bC0dE1fG2hI3jK4lM5n",
+      "RANDOM_BASE64=qZ1xK8sLZEkEhT3qP2yV9X4m7jR1nDqQwM6oFvZcAaBb"
+    ],
+    "credit-card": [
+      "VISA: 4111 1111 1111 1111",
+      "MC: 5555-5555-5555-4444",
+      "AMEX: 378282246310005"
+    ]
+  },
+  "negatives": {
+    "_about": "These should NOT be redacted. Keeps the gate from getting too aggressive.",
+    "ordinary-numbers": [
+      "Port 8080 is listening",
+      "Status 404 not found",
+      "Response code 200 OK"
+    ],
+    "ordinary-versions": [
+      "engramx version 3.4.0",
+      "Node 20.19.2",
+      "Python 3.13"
+    ],
+    "ordinary-text": [
+      "The function returns a Promise<void>",
+      "package.json contains 26 versions"
+    ]
+  }
+}
