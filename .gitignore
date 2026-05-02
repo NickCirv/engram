@@ -19,3 +19,4 @@ bench/results/*.json
 
 # Hyperframes scratch/render directories (per-run intermediates)
 docs/demos/work-*/
+dist-extensions/

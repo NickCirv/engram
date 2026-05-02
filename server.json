@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.NickCirv/engram",
-  "description": "Cached context spine for AI coding agents. Any MCP server as a 10-line plugin. 89.1% saved.",
+  "description": "Universal context spine for AI coding tools. Works in 8 IDEs. 89.1% measured token reduction. Local SQLite, zero cloud, Apache 2.0.",
   "repository": {
     "url": "https://github.com/NickCirv/engram",
     "source": "github"
   },
-  "version": "3.0.2",
+  "version": "3.4.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "engramx",
-      "version": "3.0.2",
+      "version": "3.4.0",
       "transport": {
         "type": "stdio"
       },

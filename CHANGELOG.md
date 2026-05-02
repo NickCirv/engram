@@ -6,14 +6,46 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
-### Added — v3.3 "Cost Lens" (in progress, target: 2026-05-08)
-- New `engram cost` subcommand: aggregates token-savings telemetry from existing `.engram/hook-log.jsonl` files across one or many project roots. Outputs a terminal table, JSON, or a weekly Markdown digest at `~/.engram/cost-report-YYYY-Www.md`.
-- New `src/cost/` module: `types.ts` (CostEvent / CostSummary / CostConfig), `aggregator.ts` (read + summarize), `formatter.ts` (one-liner / table / Markdown digest), `digest.ts` (ISO-week digest writer with idempotent file output).
-- 13 new tests in `tests/cost.test.ts`, hermetic — use tmp dirs with synthetic logs, no real engram state required.
-- USD estimate uses configurable `inputUsdPerMillion` rate. Default $3.00/M matches Claude Sonnet 4.6 input pricing as of 2026-04-27.
+## [3.4.0] — 2026-05-02 — "Universal Spine"
+
+The release that turns engram from a Claude Code tool into a universal context spine across every major AI coding tool. Same engram, same graph, same 89.1% reduction — now plugged into 8 IDEs out of the box.
+
+### Added
+
+- **Universal init detector.** `src/setup/detect.ts` adds three new detectors: `detectCline` (probes for VS Code's Cline globalStorage), `detectZed` (probes for Zed's config and `.zed/settings.json`), `detectCodex` (probes for `~/.codex` and `AGENTS.md`). `detectAllIdes()` now returns 8 entries (was 5). Per-IDE setup hints in `wizard.ts` now include the exact MCP config snippet for Cline.
+- **Anthropic Claude Code plugin manifest.** `plugins/anthropic-marketplace/` — submission-ready `marketplace.json`, `plugin.json`, three skills (`/engram:cost`, `/engram:query`, `/engram:mistakes`), and the MCP server config that registers `engram-serve` automatically. Verified against `code.claude.com/docs/en/plugins`.
+- **VS Code / Cursor extension.** `extensions/vscode/` — thin wrapper around the engramx CLI. Six commands (init, gen-mdc, gen, cost, dashboard, doctor), status-bar entry, two configuration settings. Compiles to a single `out/extension.js` and packs via `vsce` for OpenVSX. Works in VS Code, Cursor, and any VS Code fork.
+- **Cline integration documented.** `docs/integrations/cline.md` — Cline supports MCP natively, so the integration is one config-snippet away. Cross-linked from `docs/integrations/README.md`.
+- **engramx-continue.** Sister npm package at `adapters/continue/` — Continue.dev `@engram` context provider with HTTP and CLI fallback transports. Tarball verified clean (2.2 KB, 4 files).
+
+### Changed
+
+- **README.md.** Top-of-file callout now leads with the May 2026 market context (Cursor pricing crisis + Claude Code rate-limit pain) so the positioning matches what users are actually searching for. IDE matrix expanded from 8 to 11. "How It Compares" rewritten as the May 2026 8-row competitive matrix (engramx vs Cursor index / Aider repo map / Cline / Continue / Mem0 / claude-mem / CartoGopher); legacy table moved to a collapsed details block.
+- **docs/install.html.** Title, meta description, OG title + description, hero pill, nav link, and IDE matrix all refreshed for v3.4 framing.
+- **GitHub repo description and topics.** Description shortened and re-led with "context spine that 10x's every AI coding session." Topics maxed at 20 with `cline` and `universal-spine` added.
+
+### Tests
+- Net-new: 3 detector tests in `tests/setup/detect.test.ts` (detectCline / detectZed / detectCodex).
+- Total: **910 passing** (was 907 baseline).
+
+### Process
+
+This is the first release that walks the new 8-phase release ritual codified at `~/.claude/skills/engram-release/SKILL.md`. Phase 3 (public surface refresh) caught README + install.html + topics drift in one pass. Future releases follow the same checklist by default.
 
 ### Why
-Cost Lens is the baseline for everything in the v3.3 → v4.0 roadmap. We need a measured number that survives between releases so future features (Mesh, Vector, Bridge) can be evaluated against the real-world impact, not against a single benchmark file. The PRD lives at `01-prds/03-engram-mesh-ruflo-integration-PRD.md`.
+
+Three things broke at the same time in 2026. Cursor went usage-based and people started getting $1,400 surprise bills. Anthropic tightened Claude Code limits, then quietly tested removing the product from the $20 Pro plan. AI coding fragmented into 8 IDEs with no common context layer. v3.4 puts engram into all of them — one install, one graph, every tool benefits. Audit at `~/Desktop/Projects/Engram/00-strategy/2026-05-02-strategic-audit-v34-pivot.md`.
+
+## [3.3.0] — 2026-05-02 — "Cost Lens"
+
+### Added
+- New `engram cost` subcommand: aggregates token-savings telemetry from existing `.engram/hook-log.jsonl` files across one or many project roots. Outputs a terminal table, JSON, or a weekly Markdown digest at `~/.engram/cost-report-YYYY-Www.md`.
+- New `src/cost/` module: `types.ts`, `aggregator.ts`, `formatter.ts`, `digest.ts`, `instrument.ts`. Pure functions, hermetic tests, NaN-safe math.
+- Dispatch instrumentation in `src/intercept/dispatch.ts` — every PreToolUse log entry now carries `wouldHaveRead`, `injected`, and `tokensSaved` fields when applicable.
+- 31 new tests across `tests/cost.test.ts` and `tests/cost-instrument.test.ts`, hermetic.
+
+### Why
+Cost Lens is the baseline for the v3.3 → v4.0 roadmap. Future features (Bridge, Mesh, Vector) get evaluated against the real-world impact, not a single static benchmark. PRD: `01-prds/03-engram-mesh-ruflo-integration-PRD.md`.
 
 ## [3.0.2] — 2026-04-24 — "MCP Registry"
 
