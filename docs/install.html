@@ -847,6 +847,7 @@
       eng<span class="accent">r</span><span class="accent">a</span>m
     </a>
     <ul class="nav-links">
+      <li><a class="nav-link" href="#coming-next">v4.0</a></li>
       <li><a class="nav-link" href="#whats-new">v3.4</a></li>
       <li><a class="nav-link" href="#install">Install</a></li>
       <li><a class="nav-link" href="#how">How it works</a></li>
@@ -940,6 +941,64 @@
         </p>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- ================== WHAT'S COMING IN v4.0 ================== -->
+<section class="block" id="coming-next" style="border-top: 1px solid var(--border);">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow">// v4.0 · in flight</div>
+        <h2 class="section-title">Mesh + Spine: federation lands May 25.</h2>
+      </div>
+      <div class="section-meta">Phase 1 foundation already merged · 1007 tests passing · target ship: 2026-05-25</div>
+    </div>
+
+    <p style="color: var(--text-secondary); max-width: 720px; margin-bottom: 2rem;">
+      v3.4 made engram the <em>universal</em> context spine across 8 IDEs. v4.0 makes it the
+      <em>federated</em> spine. Engram instances on different machines exchange mistakes, ADRs, and
+      patterns through an opt-in mesh. PII-stripped at the wire layer. mTLS plus ed25519 identity.
+      Local-first stays the default. Federation is opt-in only.
+    </p>
+
+    <div class="v3-grid">
+      <article class="v3-card">
+        <div class="v3-card-tag">mesh</div>
+        <h3 class="v3-card-title"><span class="accent">◆</span> Federation protocol</h3>
+        <p class="v3-card-body">
+          ed25519 identity, JCS-canonical signing, 14-category PII gate, 64KB envelope cap, replay
+          protection via ULID + 24h cache. Behavioral trust scoring auto-downgrades on
+          signature mismatch or PII-leak attempt.
+        </p>
+      </article>
+
+      <article class="v3-card">
+        <div class="v3-card-tag">decisions</div>
+        <h3 class="v3-card-title"><span class="accent">◇</span> ADR miner</h3>
+        <p class="v3-card-body">
+          Architecture Decision Records become queryable like code. Engram surfaces a relevant
+          ADR above mistakes when its keywords match. Federate them through the mesh and a fix
+          in one team's repo immunizes every other repo on the network.
+        </p>
+      </article>
+
+      <article class="v3-card">
+        <div class="v3-card-tag">cost lens v2</div>
+        <h3 class="v3-card-title"><span class="accent">$</span> Live token-savings dashboard</h3>
+        <p class="v3-card-body">
+          <code>engram cost --watch</code> for terminal live-tail. <code>~/.engram/cost-config.json</code>
+          for custom rate overrides. Telegram pipe via Jarvis when <code>JARVIS_TELEGRAM_TOKEN</code>
+          is set. Weekly digest auto-posts to your team channel.
+        </p>
+      </article>
+    </div>
+
+    <p style="color: var(--text-secondary); margin-top: 2rem; font-size: 0.95rem;">
+      Track v4.0 progress on <a href="https://github.com/NickCirv/engram/discussions" style="color: var(--accent);">GitHub Discussions</a>
+      or subscribe at <a href="https://engram.substack.com" style="color: var(--accent);">engram.substack.com</a>
+      for the launch deep-dive when it ships.
+    </p>
   </div>
 </section>
 

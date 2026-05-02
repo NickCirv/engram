@@ -606,6 +606,80 @@ program
     console.log();
   });
 
+// ── mesh (v4.0) ─────────────────────────────────────────────────────────────
+// Federation foundation. Loopback / cross-machine TLS lands in subsequent
+// phases of v4.0. This release ships identity + audit + status only.
+const mesh = program.command("mesh").description("Federation (v4.0): identity, peers, audit");
+
+mesh
+  .command("init")
+  .description("Initialize ed25519 identity at ~/.engram/mesh/")
+  .action(async () => {
+    const m = await import("./mesh/index.js");
+    const id = m.initIdentity();
+    m.logAudit({ ts: "", action: "key_rotate", peer: id.fingerprint, reason: "init" });
+    console.log(chalk.bold("\nengram mesh — identity\n"));
+    console.log(`  fingerprint:  ${chalk.cyan(id.fingerprint)}`);
+    console.log(`  private key:  ${chalk.dim(id.privatePath)} (mode 0600)`);
+    console.log(`  public key:   ${chalk.dim(id.publicPath)}`);
+    console.log(`  audit log:    ${chalk.dim(id.dir + "/audit.jsonl")}`);
+    console.log(
+      chalk.dim(
+        `\n  Cross-machine federation lands in v4.0 cross-machine phase (target May 12).\n` +
+          `  Loopback connectivity ships first. Use \`engram mesh status\` to track readiness.\n`,
+      ),
+    );
+  });
+
+mesh
+  .command("status")
+  .description("Show mesh identity, peer health, recent audit entries")
+  .action(async () => {
+    const m = await import("./mesh/index.js");
+    let id;
+    try {
+      id = m.loadIdentity();
+    } catch {
+      console.log(
+        chalk.yellow(
+          "  mesh not initialized. Run `engram mesh init` to create an identity.",
+        ),
+      );
+      return;
+    }
+    const audit = m.readAudit();
+    console.log(chalk.bold("\nengram mesh status\n"));
+    console.log(`  fingerprint:  ${chalk.cyan(id.fingerprint)}`);
+    console.log(`  audit events: ${audit.length}`);
+    if (audit.length > 0) {
+      console.log(chalk.dim("  recent:"));
+      for (const e of audit.slice(-5)) {
+        console.log(
+          chalk.dim(`    ${e.ts}  ${e.action.padEnd(14)}  ${e.peer ?? "-"}`),
+        );
+      }
+    }
+    console.log("");
+  });
+
+mesh
+  .command("audit")
+  .description("Tail the mesh audit log")
+  .option("-n, --lines <n>", "Number of lines to show", "20")
+  .action(async (opts: { lines: string }) => {
+    const m = await import("./mesh/index.js");
+    const audit = m.readAudit();
+    const limit = Math.max(1, Math.min(1000, parseInt(opts.lines, 10) || 20));
+    const tail = audit.slice(-limit);
+    if (tail.length === 0) {
+      console.log(chalk.dim("  (no audit events yet — run `engram mesh init` first)"));
+      return;
+    }
+    for (const e of tail) {
+      console.log(`${e.ts}  ${e.action.padEnd(14)}  ${e.peer ?? "-"}  ${e.reason ?? ""}`);
+    }
+  });
+
 // ── cost lens (v3.3) ────────────────────────────────────────────────────────
 program
   .command("cost")
