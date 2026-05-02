@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>Install · engramx v3.0 "Spine" — the context spine for AI coding agents</title>
-<meta name="description" content="One command installs. One command wires it all up. Your AI coding agent stops re-reading the same files and starts remembering. 89.1% measured token savings on a real codebase. Local SQLite, zero cloud, zero LLM cost. Pluggable — add Serena, GitHub, Sentry as 10-line plugins.">
+<title>Install · engramx v3.4 "Universal Spine" — the context spine for every AI coding tool</title>
+<meta name="description" content="One install. Works in Claude Code, Cursor, Cline, Continue, Aider, Codex, Windsurf, Zed. Your AI coding agent stops re-reading the same files. 89.1% measured token reduction on a real codebase. Local SQLite, zero cloud, Apache 2.0. The only context tool with a reproducible benchmark across 8 IDEs.">
 <link rel="canonical" href="https://github.com/NickCirv/engram/blob/main/docs/install.html">
 
-<meta property="og:title" content="engramx v3.0 — the context spine. 89.1% measured savings, pluggable providers, mistakes that remember.">
-<meta property="og:description" content="npm install -g engramx → engram setup. 89.1% measured real-world token savings on code agents. Any MCP server becomes a provider in 10 lines. Open source, Apache 2.0.">
+<meta property="og:title" content="engramx v3.4 — the context spine for every AI coding tool. 89% measured token reduction. 8 IDEs. One install.">
+<meta property="og:description" content="npm install -g engramx → engram setup. Works in Claude Code, Cursor, Cline, Continue, Aider, Codex, Windsurf, Zed. 89% measured savings. Local SQLite, zero cloud. Apache 2.0.">
 <meta property="og:image" content="https://raw.githubusercontent.com/NickCirv/engram/main/assets/banner-v3.png">
 <meta name="twitter:card" content="summary_large_image">
 
@@ -847,7 +847,7 @@
       eng<span class="accent">r</span><span class="accent">a</span>m
     </a>
     <ul class="nav-links">
-      <li><a class="nav-link" href="#whats-new">v3.0</a></li>
+      <li><a class="nav-link" href="#whats-new">v3.4</a></li>
       <li><a class="nav-link" href="#install">Install</a></li>
       <li><a class="nav-link" href="#how">How it works</a></li>
       <li><a class="nav-link" href="#benefits">Benefits</a></li>
@@ -866,7 +866,7 @@
   <div class="container">
     <div class="hero-grid">
       <div>
-        <span class="hero-pill">● v3.0 "Spine" · shipped 2026-04-24</span>
+        <span class="hero-pill">● v3.4 "Universal Spine" · shipped 2026-05-02 · 8 IDEs · 910 tests</span>
 
         <h1 class="hero-headline reveal">
           your AI agent<br>
@@ -1578,18 +1578,23 @@
     <div class="ide-matrix">
       <div class="ide">
         <span class="ide-name">Claude Code</span>
-        <span class="ide-cmd"><span class="accent">engram</span> install-hook</span>
-        <span class="ide-status">Live · PreToolUse</span>
+        <span class="ide-cmd"><span class="accent">/plugin install engram</span> · <span class="accent">engram install-hook</span></span>
+        <span class="ide-status">v3.4 · Plugin + PreToolUse</span>
       </div>
       <div class="ide">
         <span class="ide-name">Cursor</span>
-        <span class="ide-cmd"><span class="accent">engram</span> gen-cursorrules</span>
-        <span class="ide-status">Live · MDC + rules</span>
+        <span class="ide-cmd"><span class="accent">engram</span> gen-mdc · OpenVSX extension</span>
+        <span class="ide-status">v3.4 · MDC + MCP + ext</span>
+      </div>
+      <div class="ide">
+        <span class="ide-name">Cline</span>
+        <span class="ide-cmd">register <span class="accent">engram-serve</span> in cline_mcp_settings.json</span>
+        <span class="ide-status">v3.4 · MCP server</span>
       </div>
       <div class="ide">
         <span class="ide-name">Continue.dev</span>
-        <span class="ide-cmd"><span class="accent">engram</span> gen-continue</span>
-        <span class="ide-status">Live · slash cmd</span>
+        <span class="ide-cmd">npm i <span class="accent">engramx-continue</span></span>
+        <span class="ide-status">v3.4 · @engram provider</span>
       </div>
       <div class="ide">
         <span class="ide-name">Aider</span>
@@ -1598,18 +1603,23 @@
       </div>
       <div class="ide">
         <span class="ide-name">Zed</span>
-        <span class="ide-cmd"><span class="accent">engram</span> gen-zed</span>
-        <span class="ide-status">Live · agent rules</span>
+        <span class="ide-cmd"><span class="accent">engram</span> context-server</span>
+        <span class="ide-status">Live · /engram slash cmd</span>
       </div>
       <div class="ide">
         <span class="ide-name">Windsurf</span>
-        <span class="ide-cmd"><span class="accent">engram</span> gen</span>
-        <span class="ide-status">v3.0 · AGENTS.md</span>
+        <span class="ide-cmd"><span class="accent">engram</span> gen-windsurfrules</span>
+        <span class="ide-status">v3.0 · AGENTS.md + MCP</span>
       </div>
       <div class="ide">
         <span class="ide-name">Codex CLI (OpenAI)</span>
         <span class="ide-cmd"><span class="accent">engram</span> gen</span>
         <span class="ide-status">v3.0 · AGENTS.md</span>
+      </div>
+      <div class="ide">
+        <span class="ide-name">VS Code (any agent)</span>
+        <span class="ide-cmd">code --install-extension <span class="accent">engram-vscode</span></span>
+        <span class="ide-status">v3.4 · OpenVSX</span>
       </div>
       <div class="ide">
         <span class="ide-name">Copilot Chat</span>

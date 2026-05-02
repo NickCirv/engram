@@ -47,16 +47,28 @@
   <a href="https://www.npmjs.com/package/engramx"><img src="https://img.shields.io/npm/v/engramx?color=blue" alt="npm version"></a>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node">
-  <img src="https://img.shields.io/badge/tests-876%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-910%20passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/providers-9%20%2B%20plugins-blue" alt="9 Providers + plugins">
-  <img src="https://img.shields.io/badge/token%20savings-90.8%25%20measured-orange" alt="90.8% measured savings">
+  <img src="https://img.shields.io/badge/token%20savings-89.1%25%20measured-orange" alt="89.1% measured savings">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
   <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
 </p>
 
 ---
 
-> **EngramX v3.0 "Spine" shipped 2026-04-24** — the biggest release since v1.0. The spine is now **extensible**: any MCP server becomes an EngramX provider via a 10-line plugin file. **Pre-mortem mistake-guard** warns before you repeat a bug. **Bi-temporal mistake memory** — refactored-away mistakes stop firing. **Anthropic Auto-Memory bridge** reads Claude Code's own consolidated memory. **SSE-streaming** packets render progressively. `engram gen` dual-emits `AGENTS.md` + `CLAUDE.md` by default. **89.1% measured real-world token savings** on 87 source files — reproducible in one command. 878 tests, CI green on Ubuntu + Windows × Node 20 + 22. Zero cloud, zero telemetry. See [CHANGELOG.md](CHANGELOG.md) for the full diff.
+## Why this exists, May 2026
+
+Three things broke at the same time. Cursor went usage-based and people started getting $1,400 surprise bills. Anthropic tightened Claude Code limits, then quietly tested removing it from the $20 Pro plan. Half the AI coding crowd migrated from one tool to the other, hit the new ceiling within a week, and started looking for any way to make a session last longer.
+
+Engramx is what makes the session last longer. It indexes your codebase into a local SQLite knowledge graph once. Then it intercepts file reads at the agent boundary and replaces them with a structural summary the agent already has the working memory for. Same edit, same diff, same code shipped — fewer tokens consumed in the round trip.
+
+On a real 87-file repo, the measured reduction is **89.1%**. That's not a marketing number. The benchmark is committed to this repo as `bench/real-world.ts` and runs against any project you point it at. Independent migration guides ([dev.to/56kode](https://dev.to/56_kode/why-were-moving-from-cursor-to-claude-code-and-why-you-should-too-9kh), [SpectrumAI Lab](https://spectrumailab.com/blog/claude-code-vs-cursor)) cite engram as the strongest measured number in the category.
+
+Works in 8 IDEs and counting — Claude Code, Cursor, Cline, Continue.dev, Aider, Windsurf, Zed, OpenAI Codex CLI. One install, one graph, every tool benefits. Apache 2.0. Local SQLite. Nothing leaves your machine.
+
+> **v3.4 "Universal Spine" shipped 2026-05-02** — multi-IDE detector covers 8 tools, Anthropic Claude Code plugin (`/plugin install engram`), VS Code / Cursor extension on OpenVSX, `engramx-continue` on npm, Cline integration documented. Cost Lens telemetry from v3.3.0 now feeds a weekly Markdown digest at `~/.engram/cost-report-YYYY-Www.md`. 910 tests, CI green on Ubuntu + Windows × Node 20 + 22. See [CHANGELOG.md](CHANGELOG.md) for the v3.3 + v3.4 diff.
+
+> **EngramX v3.0 "Spine" shipped 2026-04-24** — the biggest release before v3.4. The spine is **extensible**: any MCP server becomes an EngramX provider via a 10-line plugin file. **Pre-mortem mistake-guard** warns before you repeat a bug. **Bi-temporal mistake memory** — refactored-away mistakes stop firing. **Anthropic Auto-Memory bridge** reads Claude Code's own consolidated memory. **SSE-streaming** packets render progressively. `engram gen` dual-emits `AGENTS.md` + `CLAUDE.md` by default.
 
 ---
 
@@ -368,14 +380,19 @@ engram hooks install             # auto-rebuild graph on every git commit
 
 ## IDE Integrations
 
+`engram setup` auto-detects every supported IDE on your machine and prints the right next-step for each. You don't have to remember which command to run — the detector knows.
+
 | IDE | Integration | Setup |
 |-----|------------|-------|
-| **Claude Code** | Hook-based interception (native, automatic) | `engram install-hook` |
-| **Cursor** | MDC snapshot + native MCP | `engram gen-mdc` &middot; [docs/integrations/cursor-mcp.md](docs/integrations/cursor-mcp.md) |
-| **Continue.dev** | `@engram` context provider | [docs/integrations/continue.md](docs/integrations/continue.md) |
-| **Zed** | Context server (`/engram`) | `engram context-server` |
-| **Aider** | Context file generation | `engram gen-aider` |
+| **Claude Code** | Hook-based interception (native, automatic) — **plus** `/plugin install engram` for slash-commands | `engram install-hook` &middot; [docs/integrations/claude-code.md](docs/integrations/claude-code.md) |
+| **Cursor** | MDC snapshot + native MCP + VS Code extension on OpenVSX | `engram gen-mdc` &middot; [docs/integrations/cursor-mcp.md](docs/integrations/cursor-mcp.md) |
+| **Cline** | MCP server (5M+ VS Code installs, no native answer to token burn) | [docs/integrations/cline.md](docs/integrations/cline.md) |
+| **Continue.dev** | `@engram` context provider via [`engramx-continue`](https://www.npmjs.com/package/engramx-continue) | [docs/integrations/continue.md](docs/integrations/continue.md) |
+| **Aider** | Context file generation | `engram gen-aider` &middot; [docs/integrations/aider.md](docs/integrations/aider.md) |
 | **Windsurf** (Codeium) | `.windsurfrules` snapshot + MCP | `engram gen-windsurfrules` |
+| **Zed** | Context server (`/engram`) | `engram context-server` &middot; [docs/integrations/zed.md](docs/integrations/zed.md) |
+| **OpenAI Codex CLI** | `AGENTS.md` auto-emit (universal Linux Foundation standard) | `engram gen` (default emits both `AGENTS.md` + `CLAUDE.md`) |
+| **VS Code (any agent)** | Status-bar entry + 6 commands wrapping the CLI | `code --install-extension engram-vscode` (OpenVSX) |
 | **Neovim** | MCP via codecompanion / avante | [docs/integrations/neovim.md](docs/integrations/neovim.md) |
 | **Emacs** | MCP via gptel-mcp | [docs/integrations/emacs.md](docs/integrations/emacs.md) |
 
@@ -385,16 +402,39 @@ Per-IDE setup guides are in [`docs/integrations/`](docs/integrations/).
 
 ## How It Compares
 
+The "context spine" slot — local-first, code-aware, works in any MCP runtime, with a reproducible benchmark — is currently unowned. Here's the field as of May 2026:
+
+|  | **engramx** | Cursor index | Aider repo map | Cline | Continue.dev | Mem0 | claude-mem | CartoGopher |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Works in any MCP runtime | ✅ | IDE-locked | Aider only | VS Code only | VS Code only | ✅ | Claude Code only | ✅ |
+| Local-first (nothing leaves machine) | ✅ | cloud-synced | ✅ | ✅ | ✅ | optional | ✅ | ✅ |
+| Code-aware AST graph | ✅ | proprietary | ✅ | — | — | — | — | ✅ |
+| Reproducible benchmark | ✅ **89.1%** | — | — | — | — | — | — | claims 88% |
+| Bi-temporal mistake memory | ✅ | — | — | — | — | — | partial | — |
+| `AGENTS.md` + `CLAUDE.md` dual-emit | ✅ | — | — | — | — | — | — | — |
+| Single npm install | ✅ | full IDE | pip | VS Code ext | VS Code ext | pip / npm | claude plugin | Go binary |
+| License | Apache 2.0 | proprietary | Apache 2.0 | Apache 2.0 | Apache 2.0 | Apache 2.0 | MIT | unknown |
+| GitHub stars (May 2026) | 108 | proprietary | 39K | 61.2K | 32.4K | 47.8K | new | unknown |
+
+The matrix isn't a slight at any of them — most do something engram doesn't. Cursor's index is great inside Cursor. Aider's repo map is great in Aider. Cline's full-file rewrite model is honest about what it is. The point is that nobody else covers all eight rows. Engram is the only tool that does.
+
+For the legacy comparison vs `Continue @RepoMap` / `Cursor .cursorrules` / `@199-bio/engram` (small repo-map approaches), see the matrix below.
+
+<details>
+<summary><strong>Legacy detailed comparison</strong></summary>
+
 | | engram | Continue @RepoMap | Cursor .cursorrules | Aider repo-map | @199-bio/engram |
 |---|---|---|---|---|---|
 | **Interception model** | Hook-based, automatic on every Read | Fetched at @-mention time | Static file, manual | Per-session map | MCP server, called explicitly |
 | **Cache strategy** | SQLite at SessionStart, <5ms per read | No cache — live fetch | No cache | Per-session only | No cache |
 | **Persistent memory** | Decisions, mistakes, patterns across sessions | No | Manual text file | No | No |
-| **Multiple providers** | 8 (AST, git, mistakes, MemPalace, Context7, Obsidian, LSP) | Repo structure only | No | Repo structure only | Graph query only |
+| **Multiple providers** | 9 (AST, git, mistakes, MemPalace, Context7, Obsidian, LSP, Anthropic Memory, MCP plugins) | Repo structure only | No | Repo structure only | Graph query only |
 | **Mistake tracking** | LSP diagnostics → mistake nodes, ⚠️ on Edit | No | No | No | No |
 | **Survives compaction** | Yes (PreCompact hook) | No | Yes (static file) | No | No |
 | **LLM cost** | $0 | $0 | $0 | $0 | $0 |
 | **Native deps** | Zero | No | No | No | No |
+
+</details>
 
 ---
 
