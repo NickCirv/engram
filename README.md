@@ -44,11 +44,12 @@
 
 <p align="center">
   <a href="https://github.com/NickCirv/engram/actions"><img src="https://github.com/NickCirv/engram/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.npmjs.com/package/engramx"><img src="https://img.shields.io/npm/v/engramx?color=blue" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/engramx"><img src="https://img.shields.io/npm/v/engramx?color=blue&label=engramx" alt="npm engramx"></a>
+  <a href="https://www.npmjs.com/package/engramx-continue"><img src="https://img.shields.io/npm/v/engramx-continue?color=blue&label=engramx-continue" alt="npm engramx-continue"></a>
+  <a href="https://open-vsx.org/extension/nickcirv/engram-vscode"><img src="https://img.shields.io/open-vsx/v/nickcirv/engram-vscode?color=blue&label=OpenVSX" alt="OpenVSX engram-vscode"></a>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node">
-  <img src="https://img.shields.io/badge/tests-910%20passing-brightgreen" alt="Tests">
-  <img src="https://img.shields.io/badge/providers-9%20%2B%20plugins-blue" alt="9 Providers + plugins">
+  <img src="https://img.shields.io/badge/tests-1007%20passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/token%20savings-89.1%25%20measured-orange" alt="89.1% measured savings">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
   <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
@@ -66,7 +67,9 @@ On a real 87-file repo, the measured reduction is **89.1%**. That's not a market
 
 Works in 8 IDEs and counting — Claude Code, Cursor, Cline, Continue.dev, Aider, Windsurf, Zed, OpenAI Codex CLI. One install, one graph, every tool benefits. Apache 2.0. Local SQLite. Nothing leaves your machine.
 
-> **v3.4 "Universal Spine" shipped 2026-05-02** — multi-IDE detector covers 8 tools, Anthropic Claude Code plugin (`/plugin install engram`), VS Code / Cursor extension on OpenVSX, `engramx-continue` on npm, Cline integration documented. Cost Lens telemetry from v3.3.0 now feeds a weekly Markdown digest at `~/.engram/cost-report-YYYY-Www.md`. 910 tests, CI green on Ubuntu + Windows × Node 20 + 22. See [CHANGELOG.md](CHANGELOG.md) for the v3.3 + v3.4 diff.
+> **v4.0 "Mesh + Spine" in flight** (target ship 2026-05-25) — federation protocol that lets engram instances on different machines exchange mistakes and ADRs without sharing source code. ed25519 identity, JCS canonical signing, 14-category PII gate, mTLS cross-machine, behavioral trust scoring. Phase 1 foundation already merged (PR [#28](https://github.com/NickCirv/engram/pull/28)). Subscribe at [engram.substack.com](https://engram.substack.com) or watch [Discussions](https://github.com/NickCirv/engram/discussions) for the launch. Full spec: [`05-v4-mesh-spine-PRD.md`](https://github.com/NickCirv/engram).
+
+> **v3.4 "Universal Spine" shipped 2026-05-02** — multi-IDE detector covers 8 tools, Anthropic Claude Code plugin submitted to the official directory ([in review](https://claude.ai/settings/plugins)), VS Code / Cursor extension live as [`nickcirv.engram-vscode`](https://open-vsx.org/extension/nickcirv/engram-vscode) on OpenVSX, [`engramx-continue`](https://www.npmjs.com/package/engramx-continue) on npm, Cline integration documented. Cost Lens telemetry from v3.3.0 feeds a weekly Markdown digest at `~/.engram/cost-report-YYYY-Www.md`. 1007 tests, CI green on Ubuntu + Windows × Node 20 + 22. See [CHANGELOG.md](CHANGELOG.md) for the v3.3 + v3.4 diff.
 
 <details>
 <summary><strong>Earlier release notes (v3.0 "Spine", April 24)</strong></summary>
@@ -74,6 +77,40 @@ Works in 8 IDEs and counting — Claude Code, Cursor, Cline, Continue.dev, Aider
 EngramX v3.0 "Spine" shipped 2026-04-24 — the biggest release before v3.4. The spine is **extensible**: any MCP server becomes an EngramX provider via a 10-line plugin file. **Pre-mortem mistake-guard** warns before you repeat a bug. **Bi-temporal mistake memory** — refactored-away mistakes stop firing. **Anthropic Auto-Memory bridge** reads Claude Code's own consolidated memory. **SSE-streaming** packets render progressively. `engram gen` dual-emits `AGENTS.md` + `CLAUDE.md` by default.
 
 </details>
+
+---
+
+## Install in 30 seconds
+
+Three paths depending on where you want engram to live. All three install the **same engram**; you can stack them.
+
+### 1. CLI (recommended starting point — works in every supported IDE)
+
+```bash
+npm install -g engramx
+cd ~/your-project
+engram setup
+```
+
+`engram setup` auto-detects every supported IDE on your machine (Claude Code, Cursor, Cline, Continue, Aider, Windsurf, Zed, Codex CLI) and prints the next step for each. You don't have to remember which command to run for which tool.
+
+### 2. Cursor / VS Code extension (live on OpenVSX)
+
+```bash
+code --install-extension nickcirv.engram-vscode
+```
+
+Adds six commands to the Cursor / VS Code command palette plus a status-bar entry that opens the cost dashboard with one click. [Listing on OpenVSX](https://open-vsx.org/extension/nickcirv/engram-vscode).
+
+### 3. Continue.dev users
+
+```bash
+npm install engramx-continue
+```
+
+Adds engram as an `@engram` context provider. [Package on npm](https://www.npmjs.com/package/engramx-continue) · [Integration docs](docs/integrations/continue.md).
+
+> The Anthropic Claude Code plugin (`/plugin install engram` from the official directory) is in review as of 2026-05-02. When it lands, that's a fourth install path with zero CLI steps. Until then, path 1 covers Claude Code via hooks.
 
 ---
 
@@ -686,3 +723,11 @@ Run `engram init` on a real codebase and share what it got right and wrong. The 
 ## License
 
 [Apache 2.0](LICENSE)
+
+---
+
+<p align="center">
+  <a href="https://www.star-history.com/#NickCirv/engram&Date">
+    <img src="https://api.star-history.com/svg?repos=NickCirv/engram&type=Date" alt="engram star history" width="80%">
+  </a>
+</p>
