@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner-v3.png" alt="EngramX — the cached context spine for AI coding agents (v3.0 'Spine')" width="100%">
+  <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v3.4 'Universal Spine')" width="100%">
 </p>
 
 <!-- ============================================================
@@ -68,7 +68,12 @@ Works in 8 IDEs and counting — Claude Code, Cursor, Cline, Continue.dev, Aider
 
 > **v3.4 "Universal Spine" shipped 2026-05-02** — multi-IDE detector covers 8 tools, Anthropic Claude Code plugin (`/plugin install engram`), VS Code / Cursor extension on OpenVSX, `engramx-continue` on npm, Cline integration documented. Cost Lens telemetry from v3.3.0 now feeds a weekly Markdown digest at `~/.engram/cost-report-YYYY-Www.md`. 910 tests, CI green on Ubuntu + Windows × Node 20 + 22. See [CHANGELOG.md](CHANGELOG.md) for the v3.3 + v3.4 diff.
 
-> **EngramX v3.0 "Spine" shipped 2026-04-24** — the biggest release before v3.4. The spine is **extensible**: any MCP server becomes an EngramX provider via a 10-line plugin file. **Pre-mortem mistake-guard** warns before you repeat a bug. **Bi-temporal mistake memory** — refactored-away mistakes stop firing. **Anthropic Auto-Memory bridge** reads Claude Code's own consolidated memory. **SSE-streaming** packets render progressively. `engram gen` dual-emits `AGENTS.md` + `CLAUDE.md` by default.
+<details>
+<summary><strong>Earlier release notes (v3.0 "Spine", April 24)</strong></summary>
+
+EngramX v3.0 "Spine" shipped 2026-04-24 — the biggest release before v3.4. The spine is **extensible**: any MCP server becomes an EngramX provider via a 10-line plugin file. **Pre-mortem mistake-guard** warns before you repeat a bug. **Bi-temporal mistake memory** — refactored-away mistakes stop firing. **Anthropic Auto-Memory bridge** reads Claude Code's own consolidated memory. **SSE-streaming** packets render progressively. `engram gen` dual-emits `AGENTS.md` + `CLAUDE.md` by default.
+
+</details>
 
 ---
 
