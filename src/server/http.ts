@@ -346,7 +346,7 @@ async function handleLearn(
     return;
   }
 
-  let parsed: { content?: string; kind?: string; file?: string };
+  let parsed: { content?: string; kind?: string; file?: string; scope?: string };
   try {
     parsed = JSON.parse(body) as typeof parsed;
   } catch {
@@ -359,8 +359,11 @@ async function handleLearn(
     return;
   }
 
+  // memory scope: project | global | entity (default: project)
+  const scope = typeof parsed.scope === "string" && parsed.scope ? parsed.scope : "project";
+
   try {
-    await learn(projectRoot, parsed.content, parsed.file ?? "http-api");
+    await learn(projectRoot, parsed.content, parsed.file ?? "http-api", scope);
     json(res, 201, { ok: true });
   } catch (err) {
     json(res, 500, { error: "Learn failed", detail: String(err) });

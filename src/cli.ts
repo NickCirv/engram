@@ -548,8 +548,9 @@ program
   .description("Teach engram a decision, pattern, or lesson")
   .argument("<text>", "What to remember (e.g., 'We chose JWT over sessions for horizontal scaling')")
   .option("-p, --project <path>", "Project directory", ".")
-  .action(async (text: string, opts: { project: string }) => {
-    const result = await learn(opts.project, text);
+  .option("--scope <scope>", "Memory scope: project|global|entity", "project")
+  .action(async (text: string, opts: { project: string; scope: string }) => {
+    const result = await learn(opts.project, text, "manual", opts.scope);
     if (result.nodesAdded > 0) {
       console.log(chalk.green(`🧠 Learned ${result.nodesAdded} new insight(s).`));
     } else {

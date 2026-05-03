@@ -371,7 +371,8 @@ export async function warmAllProviders(
             store.warmCache(
               result.provider,
               [...result.entries],
-              result.provider === "context7" ? 4 * 3600 : 3600
+              result.provider === "context7" ? 4 * 3600 : 3600,
+              projectRoot
             );
             store.save();
           } finally {

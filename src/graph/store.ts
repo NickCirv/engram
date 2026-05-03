@@ -460,14 +460,17 @@ export class GraphStore {
    * Get all cached provider results for a file. Returns only non-stale
    * entries (cached_at + ttl > now).
    */
-  getCachedContext(filePath: string): CachedContext[] {
+  getCachedContext(filePath: string, projectRoot?: string): CachedContext[] {
     const now = Date.now();
     const results: CachedContext[] = [];
-    const stmt = this.db.prepare(
-      `SELECT * FROM provider_cache
-       WHERE file_path = ? AND (cached_at + ttl * 1000) > ?`
-    );
-    stmt.bind([filePath, now]);
+    const sql = projectRoot
+      ? `SELECT * FROM provider_cache
+       WHERE file_path = ? AND project_root = ? AND (cached_at + ttl * 1000) > ?`
+      : `SELECT * FROM provider_cache
+       WHERE file_path = ? AND (cached_at + ttl * 1000) > ?`;
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([filePath, projectRoot, now]);
+    else stmt.bind([filePath, now]);
     while (stmt.step()) {
       results.push(this.rowToCachedContext(stmt.getAsObject()));
     }
@@ -481,14 +484,18 @@ export class GraphStore {
    */
   getCachedContextForProvider(
     provider: string,
-    filePath: string
+    filePath: string,
+    projectRoot?: string
   ): CachedContext | null {
     const now = Date.now();
-    const stmt = this.db.prepare(
-      `SELECT * FROM provider_cache
-       WHERE provider = ? AND file_path = ? AND (cached_at + ttl * 1000) > ?`
-    );
-    stmt.bind([provider, filePath, now]);
+    const sql = projectRoot
+      ? `SELECT * FROM provider_cache
+       WHERE provider = ? AND file_path = ? AND project_root = ? AND (cached_at + ttl * 1000) > ?`
+      : `SELECT * FROM provider_cache
+       WHERE provider = ? AND file_path = ? AND (cached_at + ttl * 1000) > ?`;
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([provider, filePath, projectRoot, now]);
+    else stmt.bind([provider, filePath, now]);
     if (stmt.step()) {
       const row = stmt.getAsObject();
       stmt.free();
@@ -506,14 +513,24 @@ export class GraphStore {
     filePath: string,
     content: string,
     ttl: number,
-    queryUsed = ""
+    queryUsed = "",
+    projectRoot?: string
   ): void {
-    this.db.run(
-      `INSERT OR REPLACE INTO provider_cache
-       (provider, file_path, content, query_used, cached_at, ttl)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [provider, filePath, content, queryUsed, Date.now(), ttl]
-    );
+    if (projectRoot) {
+      this.db.run(
+        `INSERT OR REPLACE INTO provider_cache
+         (provider, file_path, content, query_used, cached_at, ttl, project_root)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [provider, filePath, content, queryUsed, Date.now(), ttl, projectRoot]
+      );
+    } else {
+      this.db.run(
+        `INSERT OR REPLACE INTO provider_cache
+         (provider, file_path, content, query_used, cached_at, ttl, project_root)
+         VALUES (?, ?, ?, ?, ?, ?, '')`,
+        [provider, filePath, content, queryUsed, Date.now(), ttl]
+      );
+    }
   }
 
   /**
@@ -524,18 +541,28 @@ export class GraphStore {
     provider: string,
     entries: ReadonlyArray<{ filePath: string; content: string }>,
     ttl: number,
-    queryUsed = ""
+    queryUsed = "",
+    projectRoot?: string
   ): void {
     if (entries.length === 0) return;
     this.db.run("BEGIN TRANSACTION");
     try {
       for (const entry of entries) {
-        this.db.run(
-          `INSERT OR REPLACE INTO provider_cache
-           (provider, file_path, content, query_used, cached_at, ttl)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [provider, entry.filePath, entry.content, queryUsed, Date.now(), ttl]
-        );
+        if (projectRoot) {
+          this.db.run(
+            `INSERT OR REPLACE INTO provider_cache
+             (provider, file_path, content, query_used, cached_at, ttl, project_root)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [provider, entry.filePath, entry.content, queryUsed, Date.now(), ttl, projectRoot]
+          );
+        } else {
+          this.db.run(
+            `INSERT OR REPLACE INTO provider_cache
+             (provider, file_path, content, query_used, cached_at, ttl, project_root)
+             VALUES (?, ?, ?, ?, ?, ?, '')`,
+            [provider, entry.filePath, entry.content, queryUsed, Date.now(), ttl]
+          );
+        }
       }
       this.db.run("COMMIT");
       this.save();
@@ -548,12 +575,19 @@ export class GraphStore {
   /**
    * Remove all stale cache entries. Called at SessionStart before warmup.
    */
-  pruneStaleCache(): number {
+  pruneStaleCache(projectRoot?: string): number {
     const now = Date.now();
-    this.db.run(
-      "DELETE FROM provider_cache WHERE (cached_at + ttl * 1000) <= ?",
-      [now]
-    );
+    if (projectRoot) {
+      this.db.run(
+        "DELETE FROM provider_cache WHERE project_root = ? AND (cached_at + ttl * 1000) <= ?",
+        [projectRoot, now]
+      );
+    } else {
+      this.db.run(
+        "DELETE FROM provider_cache WHERE (cached_at + ttl * 1000) <= ?",
+        [now]
+      );
+    }
     const result = this.db.exec("SELECT changes()");
     return (result[0]?.values[0]?.[0] as number) ?? 0;
   }
@@ -562,24 +596,32 @@ export class GraphStore {
    * Remove all cache entries for a provider. Used when a provider is
    * disabled or its configuration changes.
    */
-  clearProviderCache(provider: string): void {
-    this.db.run("DELETE FROM provider_cache WHERE provider = ?", [provider]);
+  clearProviderCache(provider: string, projectRoot?: string): void {
+    if (projectRoot) this.db.run("DELETE FROM provider_cache WHERE provider = ? AND project_root = ?", [provider, projectRoot]);
+    else this.db.run("DELETE FROM provider_cache WHERE provider = ?", [provider]);
   }
 
   /**
    * Get count of cached entries per provider.
    */
-  getCacheStats(): Array<{ provider: string; count: number; stale: number }> {
+  getCacheStats(projectRoot?: string): Array<{ provider: string; count: number; stale: number }> {
     const now = Date.now();
     const results: Array<{ provider: string; count: number; stale: number }> = [];
     const stmt = this.db.prepare(
-      `SELECT provider,
+      projectRoot
+        ? `SELECT provider,
               COUNT(*) as total,
               SUM(CASE WHEN (cached_at + ttl * 1000) <= ? THEN 1 ELSE 0 END) as stale
-       FROM provider_cache
-       GROUP BY provider`
+         FROM provider_cache WHERE project_root = ?
+         GROUP BY provider`
+        : `SELECT provider,
+              COUNT(*) as total,
+              SUM(CASE WHEN (cached_at + ttl * 1000) <= ? THEN 1 ELSE 0 END) as stale
+         FROM provider_cache
+         GROUP BY provider`
     );
-    stmt.bind([now]);
+    if (projectRoot) stmt.bind([now, projectRoot]);
+    else stmt.bind([now]);
     while (stmt.step()) {
       const row = stmt.getAsObject();
       results.push({
@@ -632,6 +674,12 @@ export class GraphStore {
   private rowToNode(row: Record<string, unknown>): GraphNode {
     const validUntilRaw = row.valid_until;
     const invalidatedByRaw = row.invalidated_by_commit;
+    const meta = JSON.parse((row.metadata as string) || "{}");
+    // Project scoping fields exposed in metadata for convenience.
+    (meta as Record<string, unknown>).projectRoot = (row.project_root as string) ?? "";
+    (meta as Record<string, unknown>).projectBranch = (row.project_branch as string) ?? null;
+    (meta as Record<string, unknown>).memoryScope = (row.memory_scope as string) ?? null;
+
     return {
       id: row.id as string,
       label: row.label as string,
@@ -642,7 +690,7 @@ export class GraphStore {
       confidenceScore: (row.confidence_score as number) ?? 1.0,
       lastVerified: (row.last_verified as number) ?? 0,
       queryCount: (row.query_count as number) ?? 0,
-      metadata: JSON.parse((row.metadata as string) || "{}"),
+      metadata: meta,
       validUntil:
         validUntilRaw === null || validUntilRaw === undefined
           ? undefined
@@ -655,6 +703,9 @@ export class GraphStore {
   }
 
   private rowToEdge(row: Record<string, unknown>): GraphEdge {
+    const meta = JSON.parse((row.metadata as string) || "{}");
+    (meta as Record<string, unknown>).projectRoot = (row.project_root as string) ?? "";
+
     return {
       source: row.source as string,
       target: row.target as string,
@@ -664,7 +715,7 @@ export class GraphStore {
       sourceFile: (row.source_file as string) ?? "",
       sourceLocation: (row.source_location as string) ?? null,
       lastVerified: (row.last_verified as number) ?? 0,
-      metadata: JSON.parse((row.metadata as string) || "{}"),
+      metadata: meta,
     };
   }
 }

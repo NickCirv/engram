@@ -293,6 +293,7 @@ const HTML_BODY = `
         <h2>Knowledge Graph Visualization</h2>
         <div class="subtext" style="margin-bottom: 12px;">Drag to pan &middot; Scroll to zoom &middot; Click nodes for details</div>
         <canvas id="graph-canvas"></canvas>
+        <div id="graph-legend" class="subtext" style="margin-top: 10px; display:flex; gap:12px; align-items:center;"></div>
         <div id="graph-info" class="subtext" style="margin-top: 10px;"></div>
       </div>
     </section>
@@ -545,6 +546,35 @@ async function loadFiles() {
 // ─── Tab: Graph ───────────────────────────────────────────────
 let graphLoaded = false;
 
+function renderLegendIcon(shape, color) {
+  const size = 16;
+  if (shape === "circle") {
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" xmlns="http://www.w3.org/2000/svg"><circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + (Math.floor(size/3)) + '" fill="' + esc(color) + '" /></svg>';
+  } else if (shape === "square") {
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="2" width="' + (size-4) + '" height="' + (size-4) + '" fill="' + esc(color) + '" rx="2"/></svg>';
+  } else if (shape === "diamond") {
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" xmlns="http://www.w3.org/2000/svg"><polygon points="' + (size/2) + ',2 ' + (size-2) + ',' + (size/2) + ' ' + (size/2) + ',' + (size-2) + ' 2,' + (size/2) + '" fill="' + esc(color) + '"/></svg>';
+  } else {
+    return renderLegendIcon("circle", color);
+  }
+}
+
+function renderMemoryLegend() {
+  const el = document.getElementById("graph-legend");
+  if (!el || typeof MEMORY_SCOPE_CONFIG === "undefined") return;
+  const keys = ["project", "global", "entity"];
+  el.innerHTML = keys
+    .map((k) => {
+      const cfg = MEMORY_SCOPE_CONFIG[k] || MEMORY_SCOPE_CONFIG.default;
+      const icon = renderLegendIcon(cfg.shape, cfg.color);
+      return '<div style="display:flex;align-items:center;gap:8px;">' +
+        '<div>' + icon + '</div>' +
+        '<div style="color: var(--text-dim); font-family: var(--mono); font-size:12px;">' + esc(cfg.label) + '</div>' +
+        '</div>';
+    })
+    .join('');
+}
+
 async function loadGraph() {
   if (graphLoaded) return;
   const [nodes, godNodes] = await Promise.all([
@@ -555,6 +585,8 @@ async function loadGraph() {
   graphLoaded = true;
   const canvas = document.getElementById("graph-canvas");
   if (canvas) renderGraph(canvas, nodes.nodes ?? [], godNodes ?? []);
+  // Render memory legend (colors/shapes)
+  renderMemoryLegend();
   setText("graph-info", (nodes.nodes?.length ?? 0) + " of " + (nodes.total ?? 0) + " nodes shown");
 }
 

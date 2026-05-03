@@ -519,13 +519,14 @@ export async function computeKeywordIDF(
 export async function learn(
   projectRoot: string,
   text: string,
-  sourceLabel = "manual"
+  sourceLabel = "manual",
+  memoryScope: string = "project"
 ): Promise<{ nodesAdded: number }> {
   const { nodes, edges } = learnFromSession(text, sourceLabel);
   if (nodes.length === 0 && edges.length === 0) return { nodesAdded: 0 };
   const store = await getStore(projectRoot);
   try {
-    store.bulkUpsert(nodes, edges, projectRoot, undefined, "project");
+    store.bulkUpsert(nodes, edges, projectRoot, undefined, memoryScope);
   } finally {
     store.close();
   }

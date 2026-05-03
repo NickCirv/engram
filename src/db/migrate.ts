@@ -15,7 +15,7 @@ export interface MigrationResult {
 }
 
 /** Current schema version — bump this when adding new migrations. */
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 export interface RollbackResult {
   readonly fromVersion: number;
@@ -183,6 +183,26 @@ CREATE INDEX IF NOT EXISTS idx_query_cache_file ON query_cache(file_path);`,
         ON nodes(kind, valid_until)
         WHERE kind = 'mistake' AND valid_until IS NOT NULL;
     `);
+  },
+
+  // v3.1.0: project scoping — add project_root/project_branch/memory_scope
+  // columns so a single global DB can host multiple projects' data and
+  // memory types (project/global/entity). Backfill is optional — new
+  // rows will populate these columns automatically.
+  9: (db: ExecDb) => {
+    addColumnIfMissing(db, "nodes", "project_root", "project_root TEXT NOT NULL DEFAULT ''");
+    addColumnIfMissing(db, "nodes", "project_branch", "project_branch TEXT");
+    addColumnIfMissing(db, "nodes", "memory_scope", "memory_scope TEXT");
+
+    addColumnIfMissing(db, "edges", "project_root", "project_root TEXT NOT NULL DEFAULT ''");
+
+    // Add project_root to provider_cache so caches can be scoped per project
+    addColumnIfMissing(db, "provider_cache", "project_root", "project_root TEXT NOT NULL DEFAULT ''");
+
+    // Index project_root on nodes/edges/provider_cache for efficient per-project queries
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_nodes_project_root ON nodes(project_root)"); } catch {}
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_edges_project_root ON edges(project_root)"); } catch {}
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_provider_cache_project_root ON provider_cache(project_root)"); } catch {}
   },
 };
 

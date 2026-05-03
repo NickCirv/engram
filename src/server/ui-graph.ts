@@ -28,6 +28,33 @@ const NODE_COLORS = {
   default: "#71717a",
 };
 
+// Memory scope mapping: color + shape + label. These represent the three
+// memory types we care about: project, global, and personal/entity.
+const MEMORY_SCOPE_CONFIG = {
+  project: { color: "#3b82f6", shape: "circle", label: "Project" },
+  global: { color: "#a855f7", shape: "diamond", label: "Global" },
+  entity: { color: "#f59e0b", shape: "square", label: "Personal" },
+  default: { color: "#71717a", shape: "circle", label: "Unknown" },
+};
+
+function pathShape(ctx, x, y, r, shape) {
+  ctx.beginPath();
+  if (shape === "circle") {
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+  } else if (shape === "square") {
+    ctx.rect(x - r, y - r, r * 2, r * 2);
+  } else if (shape === "diamond") {
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r, y);
+    ctx.lineTo(x, y + r);
+    ctx.lineTo(x - r, y);
+    ctx.closePath();
+  } else {
+    // fallback to circle
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+  }
+}
+
 /**
  * Main entry point. Given a canvas element and node/edge data from
  * /api/graph/nodes and /api/graph/god-nodes, starts the simulation.
@@ -50,6 +77,7 @@ function renderGraph(canvas, nodes, godNodes) {
     id: n.id,
     label: n.label || n.id,
     kind: n.kind || "default",
+    memoryScope: (n.metadata && n.metadata.memoryScope) || null,
     isGod: godIds.has(n.id),
     x: W / 2 + (Math.random() - 0.5) * 400,
     y: H / 2 + (Math.random() - 0.5) * 400,
@@ -119,10 +147,12 @@ function renderGraph(canvas, nodes, godNodes) {
     // Draw nodes
     for (const n of sim) {
       const radius = n.isGod ? 7 : 4;
-      const color = NODE_COLORS[n.kind] || NODE_COLORS.default;
+      const scopeCfg = MEMORY_SCOPE_CONFIG[n.memoryScope] || MEMORY_SCOPE_CONFIG.default;
+      const color = scopeCfg.color || NODE_COLORS[n.kind] || NODE_COLORS.default;
+      const shape = scopeCfg.shape || "circle";
 
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
+      // Draw shape path
+      pathShape(ctx, n.x, n.y, radius, shape);
       ctx.fillStyle = color;
       ctx.globalAlpha = n.id === selectedId ? 1.0 : (n.isGod ? 0.95 : 0.75);
       ctx.fill();
