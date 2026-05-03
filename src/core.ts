@@ -570,6 +570,7 @@ export async function computeKeywordIDF(
 }
 
 import { generateConclusionNodes } from "./miners/conclusions-miner.js";
+import { extractLinkCandidates } from "./miners/linking-helpers.js";
 
 export async function learn(
   projectRoot: string,
@@ -604,50 +605,65 @@ export async function learn(
       // only consider conclusion/pattern nodes we created (metadata marker)
       if (!c.metadata || (c.metadata as Record<string, unknown>).miner !== "conclusion") continue;
 
-      // 1) Keyword-based linking to existing nodes (similar_to)
-      const tokens = Array.from(new Set(
-        c.label
-          .toLowerCase()
-          .split(/[^a-z0-9]+/)
-          .filter((t) => t.length >= 4)
-      ));
-      if (tokens.length > 0) {
-        for (const tok of tokens) {
-          for (const n of allNodes) {
-            if (n.id === c.id) continue;
-            if (n.label.toLowerCase().includes(tok)) {
-              const key = `${c.id}|${n.id}|similar_to`;
-              if (seen.has(key)) continue;
-              seen.add(key);
-              edgesToAdd.push({
-                source: c.id,
-                target: n.id,
-                relation: "similar_to",
-                confidence: "INFERRED",
-                confidenceScore: 0.6,
-                sourceFile: sourceLabel,
-                sourceLocation: null,
-                lastVerified: now,
-                metadata: { auto: true },
-              });
-            }
+      // Gather candidates from both the node label and the full session text
+      const scanText = `${c.label}\n${text}`;
+      const { keywords, filePaths, commands } = extractLinkCandidates(scanText);
+
+      // Use IDF filtering to drop overly-common graph terms
+      let goodTokens: string[] = [];
+      try {
+        const idf = await computeKeywordIDF(projectRoot, keywords.slice(0, 80));
+        goodTokens = idf.filter((r) => r.idf > 0).slice(0, 12).map((r) => r.keyword.toLowerCase());
+      } catch {
+        goodTokens = keywords.slice(0, 12).map((k) => k.toLowerCase());
+      }
+
+      // 1) Keyword-based linking (similar_to)
+      for (const tok of goodTokens) {
+        for (const n of allNodes) {
+          if (n.id === c.id) continue;
+          if (n.label.toLowerCase().includes(tok)) {
+            const key = `${c.id}|${n.id}|similar_to`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            edgesToAdd.push({
+              source: c.id,
+              target: n.id,
+              relation: "similar_to",
+              confidence: "INFERRED",
+              confidenceScore: 0.6,
+              sourceFile: sourceLabel,
+              sourceLocation: null,
+              lastVerified: now,
+              metadata: { auto: true, matchedToken: tok },
+            });
+          } else if (n.metadata && JSON.stringify(n.metadata).toLowerCase().includes(tok)) {
+            const key = `${c.id}|${n.id}|similar_to`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            edgesToAdd.push({
+              source: c.id,
+              target: n.id,
+              relation: "similar_to",
+              confidence: "INFERRED",
+              confidenceScore: 0.55,
+              sourceFile: sourceLabel,
+              sourceLocation: null,
+              lastVerified: now,
+              metadata: { auto: true, matchedToken: tok, metaMatch: true },
+            });
           }
         }
       }
 
-      // 2) Heuristic file-path linking: if a fragment references a path like src/foo.ts
-      //    or contains tokens with '/' and an extension, link the conclusion -> file nodes.
-      try {
-        const fileMatches = Array.from(
-          String(c.label).matchAll(/([\w\-\.\/]+\.[a-z0-9]{1,6})/gi)
-        ).map((m) => m[1]);
-        for (const fm of fileMatches) {
-          // Normalize common './' prefixes
-          let candidate = fm.replace(/^\.\//, "");
-          // If candidate contains an absolute prefix, strip drive letters on macOS/Windows patterns
-          candidate = candidate.replace(/^\/[A-Z]:\//i, "");
-          try {
-            const fileNodes = store.getNodesByFile(candidate, 500, projectRoot);
+      // 2) File path linking (depends_on)
+      for (const fp of filePaths) {
+        try {
+          let candidate = fp.replace(/^\.\//, "");
+          candidate = candidate.replace(/^[A-Z]:\\/i, "");
+
+          const fileNodes = store.getNodesByFile(candidate, 500, projectRoot);
+          if (fileNodes.length > 0) {
             for (const fn of fileNodes) {
               const key = `${c.id}|${fn.id}|depends_on`;
               if (seen.has(key)) continue;
@@ -657,19 +673,65 @@ export async function learn(
                 target: fn.id,
                 relation: "depends_on",
                 confidence: "INFERRED",
+                confidenceScore: 0.85,
+                sourceFile: sourceLabel,
+                sourceLocation: null,
+                lastVerified: now,
+                metadata: { auto: true, detectedPath: fp },
+              });
+            }
+            continue;
+          }
+
+          // Fallback: match basename against node labels / sourceFile endings
+          const base = (candidate.split(/[\\/]/).pop() || candidate).toLowerCase();
+          for (const n of allNodes) {
+            if (!n.sourceFile && !n.label) continue;
+            const sf = (n.sourceFile || "").toLowerCase();
+            if (sf.endsWith(base) || (n.label || "").toLowerCase().includes(base)) {
+              const key = `${c.id}|${n.id}|depends_on`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              edgesToAdd.push({
+                source: c.id,
+                target: n.id,
+                relation: "depends_on",
+                confidence: "INFERRED",
                 confidenceScore: 0.75,
                 sourceFile: sourceLabel,
                 sourceLocation: null,
                 lastVerified: now,
-                metadata: { auto: true, detectedPath: fm },
+                metadata: { auto: true, detectedPath: fp, fallback: true },
               });
             }
-          } catch {
-            // ignore lookup failures
+          }
+        } catch {
+          // non-fatal
+        }
+      }
+
+      // 3) Command mentions (mentions)
+      for (const cmd of commands) {
+        const lower = cmd.toLowerCase();
+        for (const n of allNodes) {
+          if (n.id === c.id) continue;
+          if ((n.label || "").toLowerCase().includes(lower) || JSON.stringify(n.metadata || {}).toLowerCase().includes(lower)) {
+            const key = `${c.id}|${n.id}|mentions`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            edgesToAdd.push({
+              source: c.id,
+              target: n.id,
+              relation: "mentions",
+              confidence: "INFERRED",
+              confidenceScore: 0.55,
+              sourceFile: sourceLabel,
+              sourceLocation: null,
+              lastVerified: now,
+              metadata: { auto: true, matchedCommand: cmd },
+            });
           }
         }
-      } catch {
-        // non-fatal heuristic
       }
     }
 

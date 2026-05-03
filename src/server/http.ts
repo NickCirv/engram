@@ -23,7 +23,7 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { writeFileSync, unlinkSync, mkdirSync, existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, relative } from "node:path";
 import { query, stats, learn, getStore } from "../core.js";
 import { readHookLog } from "../intelligence/hook-log.js";
 import { summarizeHookLog } from "../intercept/stats.js";
@@ -39,6 +39,7 @@ import {
   safeEqual,
   type TokenInfo,
 } from "./auth.js";
+import { extractTextFromFile } from "../miners/pdf-miner.js";
 
 // Read version — try both paths (works from src/ in dev and dist/ when built).
 import { createRequire } from "node:module";
@@ -353,6 +354,37 @@ async function handleLearn(
   } catch {
     json(res, 400, { error: "Invalid JSON body" });
     return;
+  }
+
+  // If content is missing but a file path was provided, try to read/extract it
+  if ((!parsed.content || typeof parsed.content !== "string" || parsed.content.trim() === "") && parsed.file && typeof parsed.file === "string") {
+    try {
+      const candidate = parsed.file;
+      const rootAbs = resolve(projectRoot);
+      const abs = candidate.startsWith("/") ? resolve(candidate) : resolve(join(projectRoot, candidate));
+
+      // Ensure the resolved file is inside the project root to avoid accidental disclosure
+      if (!abs.startsWith(rootAbs)) {
+        json(res, 400, { error: "File must be inside project root" });
+        return;
+      }
+
+      if (!existsSync(abs)) {
+        json(res, 404, { error: "File not found", path: parsed.file });
+        return;
+      }
+
+      const extracted = await extractTextFromFile(abs);
+      if (!extracted) {
+        json(res, 500, { error: "Failed to extract text from file", path: parsed.file });
+        return;
+      }
+
+      parsed.content = extracted;
+    } catch (err) {
+      json(res, 500, { error: "Failed to read/parse file", detail: String(err) });
+      return;
+    }
   }
 
   if (!parsed.content || typeof parsed.content !== "string") {
