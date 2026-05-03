@@ -50,7 +50,7 @@ describe("formatter — truncateForHook", () => {
 
 describe("formatter — buildDenyResponse", () => {
   it("produces the verified PreToolUse deny+reason shape", () => {
-    const reason = "[engram] graph summary for src/cli.ts\n\nNODE foo [function]";
+    const reason = "[engramx] graph summary for src/cli.ts\n\nNODE foo [function]";
     const response = buildDenyResponse(reason);
     expect(response).toEqual({
       hookSpecificOutput: {

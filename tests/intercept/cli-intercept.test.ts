@@ -162,7 +162,7 @@ export function hashPassword(p: string) { return "h_" + p; }
     const parsed = JSON.parse(result.stdout);
     expect(parsed.hookSpecificOutput.hookEventName).toBe("SessionStart");
     expect(parsed.hookSpecificOutput.additionalContext).toContain(
-      "[engram] Project brief"
+      "[engramx] Project brief"
     );
   });
 
