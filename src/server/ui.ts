@@ -458,10 +458,25 @@ async function loadSessions() {
 
 // ─── Tab: Activity (live via SSE) ─────────────────────────────
 let sseSource = null;
+let ssePending = false;
+
+async function refreshGraph() {
+  const [nodes, godNodes] = await Promise.all([
+    api("/api/graph/nodes?limit=300"),
+    api("/api/graph/god-nodes"),
+  ]);
+  if (!nodes) return;
+  const canvas = document.getElementById("graph-canvas");
+  if (!canvas) return;
+  // Replace canvas element so we don't accumulate event listeners/animation loops
+  const fresh = canvas.cloneNode(true);
+  canvas.parentNode.replaceChild(fresh, canvas);
+  renderGraph(fresh, nodes.nodes ?? [], godNodes ?? []);
+  renderMemoryLegend();
+  setText("graph-info", (nodes.nodes?.length ?? 0) + " of " + (nodes.total ?? 0) + " nodes shown");
+}
 
 async function loadActivity() {
-  if (sseSource) return;
-
   const log = await api("/api/hook-log?limit=20");
   const streamEl = document.getElementById("activity-stream");
   if (streamEl) {
@@ -478,16 +493,52 @@ async function loadActivity() {
     toolsEl.innerHTML = renderToolBreakdown((summary && summary.byTool) || {});
   }
 
+  // Ensure SSE connection exists
+  initSSE();
+}
+
+function initSSE() {
+  if (sseSource) return;
   try {
     sseSource = new EventSource("/api/sse");
-    sseSource.addEventListener("message", async () => {
-      const fresh = await api("/api/hook-log?limit=20");
-      if (fresh && fresh.entries && streamEl) {
-        streamEl.innerHTML = fresh.entries.slice().reverse().map(renderActivityRow).join("");
-      }
+    sseSource.addEventListener("message", async (ev) => {
+      // throttle bursty updates
+      if (ssePending) return;
+      ssePending = true;
+      setTimeout(async () => {
+        ssePending = false;
+        // update overview (always)
+        loadOverview();
+        // update active tab(s)
+        if (document.querySelector('.tab-btn[data-tab="activity"].active')) {
+          const streamEl = document.getElementById("activity-stream");
+          const fresh = await api("/api/hook-log?limit=20");
+          if (fresh && fresh.entries && streamEl) {
+            streamEl.innerHTML = fresh.entries.slice().reverse().map(renderActivityRow).join("");
+          }
+          const summary = await api("/api/hook-log/summary");
+          const toolsEl = document.getElementById("activity-tools");
+          if (toolsEl) toolsEl.innerHTML = renderToolBreakdown((summary && summary.byTool) || {});
+        }
+        if (document.querySelector('.tab-btn[data-tab="graph"].active')) {
+          await refreshGraph();
+        }
+        if (document.querySelector('.tab-btn[data-tab="files"].active')) {
+          loadFiles();
+        }
+        if (document.querySelector('.tab-btn[data-tab="providers"].active')) {
+          loadProviders();
+        }
+        if (document.querySelector('.tab-btn[data-tab="sessions"].active')) {
+          loadSessions();
+        }
+      }, 300);
+    });
+    sseSource.addEventListener("error", (e) => {
+      console.warn("SSE error", e);
     });
   } catch (e) {
-    console.warn("SSE failed", e);
+    console.warn("SSE init failed", e);
   }
 }
 
@@ -630,6 +681,7 @@ async function loadProviders() {
 // ─── Initial load ─────────────────────────────────────────────
 loadOverview();
 setInterval(loadOverview, 5000);
+initSSE();
 `;
 
 /**

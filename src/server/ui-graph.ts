@@ -17,6 +17,9 @@
 
 export function buildGraphScript(): string {
   return `
+// ─── Global graph stop handle (ensures re-rendering doesn't leak loops) ───
+window.__engram_graph_stop = window.__engram_graph_stop || null;
+
 // ─── Node color by kind (match the graph schema) ───────────────
 const NODE_COLORS = {
   file: "#3b82f6",
@@ -60,6 +63,11 @@ function pathShape(ctx, x, y, r, shape) {
  * /api/graph/nodes and /api/graph/god-nodes, starts the simulation.
  */
 function renderGraph(canvas, nodes, godNodes) {
+  // Stop any previous running simulation to avoid animation/handler leaks
+  if (typeof window.__engram_graph_stop === 'function') {
+    try { window.__engram_graph_stop(); } catch {}
+    window.__engram_graph_stop = null;
+  }
   const ctx = canvas.getContext("2d");
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width * window.devicePixelRatio;
@@ -184,6 +192,10 @@ function renderGraph(canvas, nodes, godNodes) {
   // ─── Animation loop ─────────────────────────────────────────
   let frames = 0;
   let running = true;
+
+  // Expose a stop handle so subsequent renders can cleanly terminate
+  const stop = () => { running = false; };
+  window.__engram_graph_stop = stop;
 
   function tick() {
     if (!running) return;
