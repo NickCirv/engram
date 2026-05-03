@@ -135,7 +135,7 @@ export { svc };
 
     // The reason must contain the engram summary header.
     const reason = wrapped.hookSpecificOutput.permissionDecisionReason;
-    expect(reason).toContain("[engram] Structural summary for src/auth.ts");
+    expect(reason).toContain("[engramx] Structural summary for src/auth.ts");
     expect(reason).toContain("NODE");
     expect(reason).toContain("offset/limit"); // escape hatch footer
   });

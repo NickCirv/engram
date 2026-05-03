@@ -123,7 +123,7 @@ export function hashPassword(p: string) { return "h_" + p; }
     expect(parsed.hookSpecificOutput.permissionDecision).toBe("deny");
     expect(
       parsed.hookSpecificOutput.permissionDecisionReason
-    ).toContain("[engram] Structural summary");
+    ).toContain("[engramx] Structural summary");
   });
 
   it("produces no stdout (passthrough) for a file not in the graph", () => {

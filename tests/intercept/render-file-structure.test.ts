@@ -94,7 +94,7 @@ export { svc };
     );
     try {
       const result = renderFileStructure(store, "src/auth.ts");
-      expect(result.text.startsWith("[engram] Structural summary for src/auth.ts")).toBe(true);
+      expect(result.text.startsWith("[engramx] Structural summary for src/auth.ts")).toBe(true);
     } finally {
       store.close();
     }

@@ -142,7 +142,7 @@ export function closeConnection() {}
     };
     expect(wrapped.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
     expect(wrapped.hookSpecificOutput.additionalContext).toContain(
-      "[engram] Pre-query context"
+      "[engramx] Pre-query context"
     );
   });
 

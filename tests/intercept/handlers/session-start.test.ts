@@ -82,7 +82,7 @@ export function transaction(fn: () => void) { fn(); }
     };
     expect(wrapped.hookSpecificOutput.hookEventName).toBe("SessionStart");
     const text = wrapped.hookSpecificOutput.additionalContext;
-    expect(text).toContain("[engram] Project brief");
+    expect(text).toContain("[engramx] Project brief");
     expect(text).toContain("nodes");
     expect(text).toContain("edges");
   });
