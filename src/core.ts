@@ -603,35 +603,73 @@ export async function learn(
     for (const c of conclusionResult.nodes) {
       // only consider conclusion/pattern nodes we created (metadata marker)
       if (!c.metadata || (c.metadata as Record<string, unknown>).miner !== "conclusion") continue;
-      // tokenise label into keywords
+
+      // 1) Keyword-based linking to existing nodes (similar_to)
       const tokens = Array.from(new Set(
         c.label
           .toLowerCase()
           .split(/[^a-z0-9]+/)
           .filter((t) => t.length >= 4)
       ));
-      if (tokens.length === 0) continue;
-
-      for (const tok of tokens) {
-        for (const n of allNodes) {
-          if (n.id === c.id) continue;
-          if (n.label.toLowerCase().includes(tok)) {
-            const key = `${c.id}|${n.id}|similar_to`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            edgesToAdd.push({
-              source: c.id,
-              target: n.id,
-              relation: "similar_to",
-              confidence: "INFERRED",
-              confidenceScore: 0.6,
-              sourceFile: sourceLabel,
-              sourceLocation: null,
-              lastVerified: now,
-              metadata: { auto: true },
-            });
+      if (tokens.length > 0) {
+        for (const tok of tokens) {
+          for (const n of allNodes) {
+            if (n.id === c.id) continue;
+            if (n.label.toLowerCase().includes(tok)) {
+              const key = `${c.id}|${n.id}|similar_to`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              edgesToAdd.push({
+                source: c.id,
+                target: n.id,
+                relation: "similar_to",
+                confidence: "INFERRED",
+                confidenceScore: 0.6,
+                sourceFile: sourceLabel,
+                sourceLocation: null,
+                lastVerified: now,
+                metadata: { auto: true },
+              });
+            }
           }
         }
+      }
+
+      // 2) Heuristic file-path linking: if a fragment references a path like src/foo.ts
+      //    or contains tokens with '/' and an extension, link the conclusion -> file nodes.
+      try {
+        const fileMatches = Array.from(
+          String(c.label).matchAll(/([\w\-\.\/]+\.[a-z0-9]{1,6})/gi)
+        ).map((m) => m[1]);
+        for (const fm of fileMatches) {
+          // Normalize common './' prefixes
+          let candidate = fm.replace(/^\.\//, "");
+          // If candidate contains an absolute prefix, strip drive letters on macOS/Windows patterns
+          candidate = candidate.replace(/^\/[A-Z]:\//i, "");
+          try {
+            const fileNodes = store.getNodesByFile(candidate, 500, projectRoot);
+            for (const fn of fileNodes) {
+              const key = `${c.id}|${fn.id}|depends_on`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              edgesToAdd.push({
+                source: c.id,
+                target: fn.id,
+                relation: "depends_on",
+                confidence: "INFERRED",
+                confidenceScore: 0.75,
+                sourceFile: sourceLabel,
+                sourceLocation: null,
+                lastVerified: now,
+                metadata: { auto: true, detectedPath: fm },
+              });
+            }
+          } catch {
+            // ignore lookup failures
+          }
+        }
+      } catch {
+        // non-fatal heuristic
       }
     }
 
