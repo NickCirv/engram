@@ -19,13 +19,60 @@ const DB_FILE = "graph.db";
 const LOCK_FILE = "init.lock";
 const DEFAULT_SKILLS_DIR = join(homedir(), ".claude", "skills");
 
-export function getDbPath(projectRoot: string): string {
-  return join(projectRoot, ENGRAM_DIR, DB_FILE);
+// Global DB config: single database for all projects
+const GLOBAL_DB_DIR = process.env.ENGRAM_GLOBAL_DB_DIR || join(homedir(), ".engramx");
+const GLOBAL_DB_FILE = process.env.ENGRAM_GLOBAL_DB_FILE || "memory.db";
+
+export function getGlobalDbPath(): string {
+  return process.env.ENGRAM_GLOBAL_DB_PATH || join(GLOBAL_DB_DIR, GLOBAL_DB_FILE);
+}
+
+export function getDbPath(_projectRoot: string): string {
+  // Backwards-compatible alias: always use the single global DB.
+  return getGlobalDbPath();
 }
 
 export async function getStore(projectRoot: string): Promise<GraphStore> {
+  // GraphStore is now a global DB; callers should pass projectRoot to
+  // project-aware methods when needed.
   return GraphStore.open(getDbPath(projectRoot));
 }
+
+/**
+ * Helper to encode a project-specific stat key stored in the global stats table.
+ * Use a stable base64-encoding of the projectRoot so keys are filesystem-safe.
+ */
+export function projectStatKey(projectRoot: string, key: string): string {
+  const id = Buffer.from(projectRoot).toString("base64");
+  return `project:${id}:${key}`;
+}
+
+/**
+ * Read the current git branch for a project. Lightweight (no shell) — reads
+ * .git/HEAD and returns branch name or 'detached' or null.
+ */
+export function readGitBranch(projectRoot: string): string | null {
+  try {
+    let current = resolve(projectRoot);
+    for (let depth = 0; depth < 10; depth++) {
+      const headPath = join(current, ".git", "HEAD");
+      if (existsSync(headPath)) {
+        const content = readFileSync(headPath, "utf-8").trim();
+        const refMatch = content.match(/^ref:\s+refs\/heads\/(.+)$/);
+        if (refMatch) return refMatch[1];
+        if (/^[0-9a-f]{7,40}$/i.test(content)) return "detached";
+        return null;
+      }
+      const parent = dirname(current);
+      if (parent === current) return null;
+      current = parent;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 
 export interface InitResult {
   nodes: number;
@@ -85,7 +132,7 @@ export async function init(
     if (options.incremental) {
       const store = await getStore(root);
       try {
-        const mtimeJson = store.getStat("file_mtimes");
+        const mtimeJson = store.getStat(projectStatKey(root, "file_mtimes"));
         if (mtimeJson) {
           previousMtimes = new Map(JSON.parse(mtimeJson));
         }
@@ -138,18 +185,20 @@ export async function init(
         const clearedFiles = new Set<string>();
         for (const node of allNodes) {
           if (node.sourceFile && !clearedFiles.has(node.sourceFile)) {
-            store.removeNodesForFile(node.sourceFile);
+            store.removeNodesForFile(node.sourceFile, root);
             clearedFiles.add(node.sourceFile);
           }
         }
       } else {
         store.clearAll();
       }
-      store.bulkUpsert(allNodes, allEdges);
-      store.setStat("last_mined", String(Date.now()));
-      store.setStat("project_root", root);
-      // Persist mtimes for next incremental run
-      store.setStat("file_mtimes", JSON.stringify([...mtimes.entries()]));
+      const branch = readGitBranch(root);
+      // Bulk upsert with project scoping so the global DB can host multiple projects.
+      store.bulkUpsert(allNodes, allEdges, root, branch ?? undefined, "project");
+      store.setStat(projectStatKey(root, "last_mined"), String(Date.now()));
+      store.setStat(projectStatKey(root, "project_root"), root);
+      // Persist mtimes for next incremental run (project-scoped)
+      store.setStat(projectStatKey(root, "file_mtimes"), JSON.stringify([...mtimes.entries()]));
     } finally {
       store.close();
     }
@@ -180,7 +229,7 @@ export async function query(
 ): Promise<{ text: string; estimatedTokens: number; nodesFound: number }> {
   const store = await getStore(projectRoot);
   try {
-    const result = queryGraph(store, question, options);
+    const result = queryGraph(store, question, { ...options, projectRoot: root });
     return { text: result.text, estimatedTokens: result.estimatedTokens, nodesFound: result.nodes.length };
   } finally {
     store.close();
@@ -194,7 +243,7 @@ export async function path(
 ): Promise<{ text: string; hops: number }> {
   const store = await getStore(projectRoot);
   try {
-    const result = shortestPath(store, source, target);
+    const result = shortestPath(store, source, target, undefined, projectRoot);
     return { text: result.text, hops: result.edges.length };
   } finally {
     store.close();
@@ -207,7 +256,7 @@ export async function godNodes(
 ): Promise<Array<{ label: string; kind: string; degree: number; sourceFile: string }>> {
   const store = await getStore(projectRoot);
   try {
-    return store.getGodNodes(topN).map((g) => ({
+    return store.getGodNodes(topN, projectRoot).map((g) => ({
       label: g.node.label, kind: g.node.kind, degree: g.degree, sourceFile: g.node.sourceFile,
     }));
   } finally {
@@ -218,7 +267,7 @@ export async function godNodes(
 export async function stats(projectRoot: string): Promise<GraphStats> {
   const store = await getStore(projectRoot);
   try {
-    return store.getStats();
+    return store.getStats(projectRoot);
   } finally {
     store.close();
   }
@@ -351,7 +400,7 @@ export async function getFileContext(
 
     const store = await getStore(root);
     try {
-      const summary = renderFileStructure(store, relPath);
+      const summary = renderFileStructure(store, relPath, undefined, root);
       if (summary.codeNodeCount === 0) {
         // No code declarations → not worth a summary even if there's a
         // file metadata node. Treat as passthrough.
@@ -430,7 +479,7 @@ export async function computeKeywordIDF(
 
     const store = await getStore(root);
     try {
-      const allNodes = store.getAllNodes();
+      const allNodes = store.getAllNodes(projectRoot);
       const total = allNodes.length;
       if (total === 0) return [];
 
@@ -476,7 +525,7 @@ export async function learn(
   if (nodes.length === 0 && edges.length === 0) return { nodesAdded: 0 };
   const store = await getStore(projectRoot);
   try {
-    store.bulkUpsert(nodes, edges);
+    store.bulkUpsert(nodes, edges, projectRoot, undefined, "project");
   } finally {
     store.close();
   }
@@ -511,7 +560,7 @@ export async function mistakes(
 ): Promise<MistakeEntry[]> {
   const store = await getStore(projectRoot);
   try {
-    let items = store.getAllNodes().filter((n) => n.kind === "mistake");
+    let items = store.getAllNodes(projectRoot).filter((n) => n.kind === "mistake");
 
     if (options.sourceFile !== undefined) {
       const target = options.sourceFile;

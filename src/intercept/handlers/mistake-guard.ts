@@ -107,10 +107,10 @@ export async function findMatchingMistakesAsync(
         // the miner could have stored either shape depending on how the
         // miner was invoked. Dedupe by node id.
         const candidates = [
-          ...store.getNodesByFile(normalized),
+          ...store.getNodesByFile(normalized, 500, projectRoot),
           ...(normalized === target.filePath
             ? []
-            : store.getNodesByFile(target.filePath)),
+            : store.getNodesByFile(target.filePath, 500, projectRoot)),
         ];
         const seenIds = new Set<string>();
         for (const m of candidates) {
@@ -129,7 +129,7 @@ export async function findMatchingMistakesAsync(
         // filtered to mistake-kind nodes. Bounded by project size; this
         // only runs when ENGRAM_MISTAKE_GUARD is explicitly enabled.
         const allMistakes = store
-          .getAllNodes()
+          .getAllNodes(projectRoot)
           .filter((n) => n.kind === "mistake")
           .filter((n) => n.validUntil === undefined || n.validUntil > now);
 

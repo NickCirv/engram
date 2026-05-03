@@ -104,10 +104,14 @@ export class GraphStore {
     writeFileSync(this.dbPath, Buffer.from(data));
   }
 
-  upsertNode(node: GraphNode): void {
+  upsertNode(node: GraphNode, defaults?: { projectRoot?: string; projectBranch?: string; memoryScope?: string }): void {
+    const projectRoot = (node as any).projectRoot ?? defaults?.projectRoot ?? "";
+    const projectBranch = (node as any).projectBranch ?? defaults?.projectBranch ?? null;
+    const memoryScope = (node as any).memoryScope ?? defaults?.memoryScope ?? null;
+
     this.db.run(
-      `INSERT OR REPLACE INTO nodes (id, label, kind, source_file, source_location, confidence, confidence_score, last_verified, query_count, metadata, valid_until, invalidated_by_commit)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO nodes (id, label, kind, source_file, source_location, confidence, confidence_score, last_verified, query_count, metadata, valid_until, invalidated_by_commit, project_root, project_branch, memory_scope)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         node.id,
         node.label,
@@ -121,14 +125,18 @@ export class GraphStore {
         JSON.stringify(node.metadata),
         node.validUntil ?? null,
         node.invalidatedByCommit ?? null,
+        projectRoot,
+        projectBranch,
+        memoryScope,
       ]
     );
   }
 
-  upsertEdge(edge: GraphEdge): void {
+  upsertEdge(edge: GraphEdge, defaults?: { projectRoot?: string }): void {
+    const projectRoot = (edge as any).projectRoot ?? defaults?.projectRoot ?? "";
     this.db.run(
-      `INSERT OR REPLACE INTO edges (source, target, relation, confidence, confidence_score, source_file, source_location, last_verified, metadata)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO edges (source, target, relation, confidence, confidence_score, source_file, source_location, last_verified, metadata, project_root)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         edge.source,
         edge.target,
@@ -139,20 +147,27 @@ export class GraphStore {
         edge.sourceLocation,
         edge.lastVerified,
         JSON.stringify(edge.metadata),
+        projectRoot,
       ]
     );
   }
 
   /**
    * Remove all nodes and edges associated with a specific source file.
+   * If projectRoot is provided, only clears nodes/edges for that project.
    * Used by the file watcher for incremental re-indexing — old nodes for
    * a changed file are cleared before re-extracting.
    */
-  deleteBySourceFile(sourceFile: string): void {
+  deleteBySourceFile(sourceFile: string, projectRoot?: string): void {
     this.db.run("BEGIN TRANSACTION");
     try {
-      this.db.run("DELETE FROM edges WHERE source_file = ?", [sourceFile]);
-      this.db.run("DELETE FROM nodes WHERE source_file = ?", [sourceFile]);
+      if (projectRoot) {
+        this.db.run("DELETE FROM edges WHERE source_file = ? AND project_root = ?", [sourceFile, projectRoot]);
+        this.db.run("DELETE FROM nodes WHERE source_file = ? AND project_root = ?", [sourceFile, projectRoot]);
+      } else {
+        this.db.run("DELETE FROM edges WHERE source_file = ?", [sourceFile]);
+        this.db.run("DELETE FROM nodes WHERE source_file = ?", [sourceFile]);
+      }
       this.db.run("COMMIT");
     } catch (e) {
       this.db.run("ROLLBACK");
@@ -160,11 +175,13 @@ export class GraphStore {
     }
   }
 
-  countBySourceFile(sourceFile: string): number {
-    const stmt = this.db.prepare(
-      "SELECT COUNT(*) AS n FROM nodes WHERE source_file = ?"
-    );
-    stmt.bind([sourceFile]);
+  countBySourceFile(sourceFile: string, projectRoot?: string): number {
+    const sql = projectRoot
+      ? "SELECT COUNT(*) AS n FROM nodes WHERE source_file = ? AND project_root = ?"
+      : "SELECT COUNT(*) AS n FROM nodes WHERE source_file = ?";
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([sourceFile, projectRoot]);
+    else stmt.bind([sourceFile]);
     let count = 0;
     if (stmt.step()) {
       const row = stmt.getAsObject() as { n: number };
@@ -174,10 +191,10 @@ export class GraphStore {
     return count;
   }
 
-  bulkUpsert(nodes: GraphNode[], edges: GraphEdge[]): void {
+  bulkUpsert(nodes: GraphNode[], edges: GraphEdge[], projectRoot?: string, projectBranch?: string, memoryScope?: string): void {
     this.db.run("BEGIN TRANSACTION");
-    for (const node of nodes) this.upsertNode(node);
-    for (const edge of edges) this.upsertEdge(edge);
+    for (const node of nodes) this.upsertNode(node, { projectRoot, projectBranch, memoryScope });
+    for (const edge of edges) this.upsertEdge(edge, { projectRoot });
     this.db.run("COMMIT");
     this.save();
   }
@@ -194,14 +211,16 @@ export class GraphStore {
     return null;
   }
 
-  searchNodes(query: string, limit = 20): GraphNode[] {
+  searchNodes(query: string, limit = 20, projectRoot?: string): GraphNode[] {
     const escaped = query.replace(/%/g, "\\%").replace(/_/g, "\\_");
     const pattern = `%${escaped}%`;
     const results: GraphNode[] = [];
-    const stmt = this.db.prepare(
-      "SELECT * FROM nodes WHERE label LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\' ORDER BY query_count DESC LIMIT ?"
-    );
-    stmt.bind([pattern, pattern, limit]);
+    const sql = projectRoot
+      ? "SELECT * FROM nodes WHERE (label LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\') AND project_root = ? ORDER BY query_count DESC LIMIT ?"
+      : "SELECT * FROM nodes WHERE label LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\' ORDER BY query_count DESC LIMIT ?";
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([pattern, pattern, projectRoot, limit]);
+    else stmt.bind([pattern, pattern, limit]);
     while (stmt.step()) {
       results.push(this.rowToNode(stmt.getAsObject()));
     }
@@ -211,14 +230,23 @@ export class GraphStore {
 
   getNeighbors(
     nodeId: string,
-    relationFilter?: EdgeRelation
+    relationFilter?: EdgeRelation,
+    projectRoot?: string
   ): Array<{ node: GraphNode; edge: GraphEdge }> {
     const sql = relationFilter
-      ? "SELECT * FROM edges WHERE (source = ? OR target = ?) AND relation = ?"
-      : "SELECT * FROM edges WHERE source = ? OR target = ?";
+      ? projectRoot
+        ? "SELECT * FROM edges WHERE (source = ? OR target = ?) AND relation = ? AND project_root = ?"
+        : "SELECT * FROM edges WHERE (source = ? OR target = ?) AND relation = ?"
+      : projectRoot
+        ? "SELECT * FROM edges WHERE (source = ? OR target = ?) AND project_root = ?"
+        : "SELECT * FROM edges WHERE source = ? OR target = ?";
     const params = relationFilter
-      ? [nodeId, nodeId, relationFilter]
-      : [nodeId, nodeId];
+      ? projectRoot
+        ? [nodeId, nodeId, relationFilter, projectRoot]
+        : [nodeId, nodeId, relationFilter]
+      : projectRoot
+        ? [nodeId, nodeId, projectRoot]
+        : [nodeId, nodeId];
 
     const stmt = this.db.prepare(sql);
     stmt.bind(params);
@@ -233,23 +261,31 @@ export class GraphStore {
     return results;
   }
 
-  getGodNodes(topN = 10): Array<{ node: GraphNode; degree: number }> {
+  getGodNodes(topN = 10, projectRoot?: string): Array<{ node: GraphNode; degree: number }> {
     const results: Array<{ node: GraphNode; degree: number }> = [];
     // Exclude structural plumbing (file/import/module) AND concept nodes.
     // The `concept` kind is used by the skills-miner for both skills and
     // keyword nodes — a keyword like "landing page" may have hundreds of
     // triggered_by edges but isn't a "core abstraction" of the codebase.
     // Users want real code entities + decisions/patterns/mistakes here.
-    const stmt = this.db.prepare(
-      `SELECT n.*, COUNT(*) as degree
-       FROM nodes n
-       JOIN edges e ON e.source = n.id OR e.target = n.id
-       WHERE n.kind NOT IN ('file', 'import', 'module', 'concept')
-       GROUP BY n.id
-       ORDER BY degree DESC
-       LIMIT ?`
-    );
-    stmt.bind([topN]);
+    const sql = projectRoot
+      ? `SELECT n.*, COUNT(*) as degree
+         FROM nodes n
+         JOIN edges e ON e.source = n.id OR e.target = n.id
+         WHERE n.kind NOT IN ('file', 'import', 'module', 'concept') AND n.project_root = ?
+         GROUP BY n.id
+         ORDER BY degree DESC
+         LIMIT ?`
+      : `SELECT n.*, COUNT(*) as degree
+         FROM nodes n
+         JOIN edges e ON e.source = n.id OR e.target = n.id
+         WHERE n.kind NOT IN ('file', 'import', 'module', 'concept')
+         GROUP BY n.id
+         ORDER BY degree DESC
+         LIMIT ?`;
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([projectRoot, topN]);
+    else stmt.bind([topN]);
     while (stmt.step()) {
       const row = stmt.getAsObject();
       results.push({
@@ -261,12 +297,14 @@ export class GraphStore {
     return results;
   }
 
-  getNodesByFile(sourceFile: string, limit = 500): GraphNode[] {
+  getNodesByFile(sourceFile: string, limit = 500, projectRoot?: string): GraphNode[] {
     const results: GraphNode[] = [];
-    const stmt = this.db.prepare(
-      "SELECT * FROM nodes WHERE source_file = ? LIMIT ?"
-    );
-    stmt.bind([sourceFile, limit]);
+    const sql = projectRoot
+      ? "SELECT * FROM nodes WHERE source_file = ? AND project_root = ? LIMIT ?"
+      : "SELECT * FROM nodes WHERE source_file = ? LIMIT ?";
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([sourceFile, projectRoot, limit]);
+    else stmt.bind([sourceFile, limit]);
     while (stmt.step()) {
       results.push(this.rowToNode(stmt.getAsObject()));
     }
@@ -274,7 +312,7 @@ export class GraphStore {
     return results;
   }
 
-  getEdgesForNodes(nodeIds: string[]): GraphEdge[] {
+  getEdgesForNodes(nodeIds: string[], projectRoot?: string): GraphEdge[] {
     if (nodeIds.length === 0) return [];
     // Chunk to stay under SQLite's SQLITE_LIMIT_VARIABLE_NUMBER (999).
     // Each chunk binds chunk.length * 2 params (source IN + target IN).
@@ -284,9 +322,11 @@ export class GraphStore {
     for (let i = 0; i < nodeIds.length; i += CHUNK) {
       const chunk = nodeIds.slice(i, i + CHUNK);
       const placeholders = chunk.map(() => "?").join(",");
-      const sql = `SELECT * FROM edges WHERE source IN (${placeholders}) OR target IN (${placeholders})`;
+      let sql = `SELECT * FROM edges WHERE source IN (${placeholders}) OR target IN (${placeholders})`;
+      if (projectRoot) sql = `SELECT * FROM edges WHERE (source IN (${placeholders}) OR target IN (${placeholders})) AND project_root = ?`;
       const stmt = this.db.prepare(sql);
-      stmt.bind([...chunk, ...chunk]);
+      if (projectRoot) stmt.bind([...chunk, ...chunk, projectRoot]);
+      else stmt.bind([...chunk, ...chunk]);
       while (stmt.step()) {
         const edge = this.rowToEdge(stmt.getAsObject());
         const key = `${edge.source}|${edge.target}|${edge.relation}`;
@@ -300,9 +340,11 @@ export class GraphStore {
     return results;
   }
 
-  getAllNodes(): GraphNode[] {
+  getAllNodes(projectRoot?: string): GraphNode[] {
     const results: GraphNode[] = [];
-    const stmt = this.db.prepare("SELECT * FROM nodes");
+    const sql = projectRoot ? "SELECT * FROM nodes WHERE project_root = ?" : "SELECT * FROM nodes";
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([projectRoot]);
     while (stmt.step()) {
       results.push(this.rowToNode(stmt.getAsObject()));
     }
@@ -327,13 +369,22 @@ export class GraphStore {
     );
   }
 
-  getStats(): GraphStats {
-    const nodeCount = (this.db.exec("SELECT COUNT(*) FROM nodes")[0]?.values[0]?.[0] as number) ?? 0;
-    const edgeCount = (this.db.exec("SELECT COUNT(*) FROM edges")[0]?.values[0]?.[0] as number) ?? 0;
+  getStats(projectRoot?: string): GraphStats {
+    // Helper to encode project stat keys
+    const encodeProjectKey = (p: string, k: string) => `project:${Buffer.from(p).toString("base64")}:${k}`;
 
-    const confRows = this.db.exec(
-      "SELECT confidence, COUNT(*) as c FROM edges GROUP BY confidence"
-    );
+    const nodeCount = projectRoot
+      ? (this.db.exec("SELECT COUNT(*) FROM nodes WHERE project_root = ?", [projectRoot])[0]?.values[0]?.[0] as number) ?? 0
+      : (this.db.exec("SELECT COUNT(*) FROM nodes")[0]?.values[0]?.[0] as number) ?? 0;
+    const edgeCount = projectRoot
+      ? (this.db.exec("SELECT COUNT(*) FROM edges WHERE project_root = ?", [projectRoot])[0]?.values[0]?.[0] as number) ?? 0
+      : (this.db.exec("SELECT COUNT(*) FROM edges")[0]?.values[0]?.[0] as number) ?? 0;
+
+    const confSql = projectRoot
+      ? "SELECT confidence, COUNT(*) as c FROM edges WHERE project_root = ? GROUP BY confidence"
+      : "SELECT confidence, COUNT(*) as c FROM edges GROUP BY confidence";
+    const confRows = projectRoot ? this.db.exec(confSql, [projectRoot]) : this.db.exec(confSql);
+
     const total = edgeCount || 1;
     const confMap: Record<string, number> = {};
     if (confRows[0]) {
@@ -342,12 +393,12 @@ export class GraphStore {
       }
     }
 
-    const savedRow = this.db.exec(
-      "SELECT value FROM stats WHERE key = 'tokens_saved'"
-    );
-    const lastMinedRow = this.db.exec(
-      "SELECT value FROM stats WHERE key = 'last_mined'"
-    );
+    // Stats table: for project-scoped values we use namespaced keys
+    const savedKey = projectRoot ? encodeProjectKey(projectRoot, "tokens_saved") : "tokens_saved";
+    const lastMinedKey = projectRoot ? encodeProjectKey(projectRoot, "last_mined") : "last_mined";
+
+    const savedRow = this.db.exec("SELECT value FROM stats WHERE key = ?", [savedKey]);
+    const lastMinedRow = this.db.exec("SELECT value FROM stats WHERE key = ?", [lastMinedKey]);
 
     return {
       nodes: nodeCount,

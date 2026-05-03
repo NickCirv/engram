@@ -50,7 +50,8 @@ interface TraversalResult {
 
 function scoreNodes(
   store: GraphStore,
-  terms: string[]
+  terms: string[],
+  projectRoot?: string
 ): Array<{ score: number; node: GraphNode }> {
   // Use SQL-level filtering via searchNodes instead of materializing
   // the entire graph into JS. Each term seeds from the index; we then
@@ -58,7 +59,7 @@ function scoreNodes(
   const seen = new Set<string>();
   const seedNodes: GraphNode[] = [];
   for (const t of terms) {
-    for (const node of store.searchNodes(t, 200)) {
+    for (const node of store.searchNodes(t, 200, projectRoot)) {
       if (!seen.has(node.id)) {
         seen.add(node.id);
         seedNodes.push(node);
@@ -108,15 +109,15 @@ function scoreNodes(
 export function queryGraph(
   store: GraphStore,
   question: string,
-  options: { mode?: "bfs" | "dfs"; depth?: number; tokenBudget?: number } = {}
+  options: { mode?: "bfs" | "dfs"; depth?: number; tokenBudget?: number; projectRoot?: string } = {}
 ): TraversalResult {
-  const { mode = "bfs", depth = 3, tokenBudget = 2000 } = options;
+  const { mode = "bfs", depth = 3, tokenBudget = 2000, projectRoot } = options;
   const terms = question
     .toLowerCase()
     .split(/\s+/)
     .filter((t) => t.length > 2);
 
-  const scored = scoreNodes(store, terms);
+  const scored = scoreNodes(store, terms, projectRoot);
   const startNodes = scored.slice(0, 3).map((s) => s.node);
 
   if (startNodes.length === 0) {
@@ -150,7 +151,7 @@ export function queryGraph(
     for (let d = 0; d < depth; d++) {
       const nextFrontier = new Set<string>();
       for (const nid of frontier) {
-        const neighbors = store.getNeighbors(nid);
+        const neighbors = store.getNeighbors(nid, undefined, projectRoot);
         for (const { node, edge } of neighbors) {
           if (shouldSkipEdgeFrom(nid, edge)) continue;
           if (!visited.has(node.id)) {
@@ -169,7 +170,7 @@ export function queryGraph(
     while (stack.length > 0) {
       const { id, d } = stack.pop()!;
       if (d > depth) continue;
-      const neighbors = store.getNeighbors(id);
+      const neighbors = store.getNeighbors(id, undefined, projectRoot);
       for (const { node, edge } of neighbors) {
         if (shouldSkipEdgeFrom(id, edge)) continue;
         if (!visited.has(node.id)) {
@@ -199,13 +200,14 @@ export function shortestPath(
   store: GraphStore,
   sourceTerm: string,
   targetTerm: string,
-  maxHops = 8
+  maxHops = 8,
+  projectRoot?: string
 ): TraversalResult {
   const sourceTerms = sourceTerm.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
   const targetTerms = targetTerm.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
 
-  const sourceScored = scoreNodes(store, sourceTerms);
-  const targetScored = scoreNodes(store, targetTerms);
+  const sourceScored = scoreNodes(store, sourceTerms, projectRoot);
+  const targetScored = scoreNodes(store, targetTerms, projectRoot);
 
   if (sourceScored.length === 0 || targetScored.length === 0) {
     return {
@@ -235,7 +237,7 @@ export function shortestPath(
         const node = store.getNode(path[i]);
         if (node) pathNodes.push(node);
         if (i < path.length - 1) {
-          const neighbors = store.getNeighbors(path[i]);
+          const neighbors = store.getNeighbors(path[i], undefined, projectRoot);
           const edge = neighbors.find((n) => n.node.id === path[i + 1])?.edge;
           if (edge) pathEdges.push(edge);
         }
@@ -251,7 +253,7 @@ export function shortestPath(
 
     if (path.length > maxHops) continue;
 
-    const neighbors = store.getNeighbors(current);
+    const neighbors = store.getNeighbors(current, undefined, projectRoot);
     for (const { node } of neighbors) {
       if (!seen.has(node.id)) {
         seen.add(node.id);
@@ -440,12 +442,13 @@ export interface FileStructureResult {
 export function renderFileStructure(
   store: GraphStore,
   relativeFilePath: string,
-  tokenBudget = 600
+  tokenBudget = 600,
+  projectRoot?: string
 ): FileStructureResult {
   // Use targeted SQL queries instead of full table scans. On 50k-node
   // projects, getAllNodes()/getAllEdges() materialize the entire graph
   // into JS arrays and time out silently.
-  const allFileNodes = store.getNodesByFile(relativeFilePath);
+  const allFileNodes = store.getNodesByFile(relativeFilePath, 500, projectRoot);
   const fileNodes = allFileNodes.filter((n) => !isHiddenKeyword(n));
 
   if (fileNodes.length === 0) {
@@ -471,7 +474,7 @@ export function renderFileStructure(
 
   // Fetch only edges that touch this file's nodes (indexed query).
   const fileNodeIds = new Set(fileNodes.map((n) => n.id));
-  const fileEdges = store.getEdgesForNodes([...fileNodeIds]);
+  const fileEdges = store.getEdgesForNodes([...fileNodeIds], projectRoot);
 
   // Degree map: how many edges touch each node in this file. Used to sort
   // nodes within each kind group so the most-connected (= most important)

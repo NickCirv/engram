@@ -23,7 +23,7 @@ export const mistakesProvider: ContextProvider = {
       try {
         const now = Date.now();
         const allMistakes = store
-          .getNodesByFile(filePath)
+          .getNodesByFile(filePath, 500, context.projectRoot)
           .filter((n) => n.kind === "mistake")
           // v3.0 bi-temporal: hide mistakes whose source code has been
           // refactored away (`validUntil` set by the git miner when it
