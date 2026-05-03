@@ -1,10 +1,10 @@
 /**
- * engram:ast provider — real AST-based symbol extraction via web-tree-sitter.
+ * engramx:ast provider — real AST-based symbol extraction via web-tree-sitter.
  *
  * Confidence 1.0 (exact, not estimated). Tier 1. 200ms timeout.
  *
  * Falls back gracefully to null on any error so the resolver can continue
- * with the regex-based engram:structure provider.
+ * with the regex-based engramx:structure provider.
  */
 import { readFileSync } from "node:fs";
 import type { Node } from "web-tree-sitter";
@@ -161,7 +161,7 @@ function formatSymbols(symbols: Symbol[], tokenBudget: number): string {
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export const astProvider: ContextProvider = {
-  name: "engram:ast",
+  name: "engramx:ast",
   label: "AST STRUCTURE",
   tier: 1,
   tokenBudget: 300,
@@ -185,7 +185,7 @@ export const astProvider: ContextProvider = {
       if (symbols.length === 0) return null;
 
       return {
-        provider: "engram:ast",
+        provider: "engramx:ast",
         content: formatSymbols(symbols, this.tokenBudget),
         confidence: 1.0,
         cached: false,

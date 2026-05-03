@@ -8,7 +8,7 @@
  *   - `2`           → strict:     tool is denied with the warning as reason
  *
  * Only fires for PreToolUse events on Edit / Write / Bash. Read events
- * already surface mistakes via the engram:mistakes context provider —
+ * already surface mistakes via the engramx:mistakes context provider —
  * duplicating the warning at tool-call time would be noise.
  *
  * Matching algorithm:

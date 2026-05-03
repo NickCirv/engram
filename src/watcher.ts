@@ -114,10 +114,10 @@ export function formatReindexLine(
   displayPath: string
 ): string | null {
   if (result.action === "indexed") {
-    return `engram: reindexed ${displayPath} (${formatThousands(result.count)} nodes)`;
+    return `engramx: reindexed ${displayPath} (${formatThousands(result.count)} nodes)`;
   }
   if (result.action === "pruned") {
-    return `engram: pruned ${displayPath} (${formatThousands(result.count)} nodes)`;
+    return `engramx: pruned ${displayPath} (${formatThousands(result.count)} nodes)`;
   }
   return null;
 }
@@ -186,7 +186,7 @@ export function watchProject(
 
   if (!existsSync(getDbPath(root))) {
     throw new Error(
-      `engram: no graph found at ${root}. Run 'engram init' first.`
+      `engramx: no graph found at ${root}. Run 'engram init' first.`
     );
   }
 

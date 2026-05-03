@@ -134,8 +134,8 @@ export async function handleRead(
     // Skip the structure provider — we already have the summary. Only
     // resolve the enrichment providers.
     const enrichmentProviders = [
-      "engram:mistakes",
-      "engram:git",
+      "engramx:mistakes",
+      "engramx:git",
       "mempalace",
       "context7",
       "obsidian",

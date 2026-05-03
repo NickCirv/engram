@@ -108,7 +108,7 @@ function formatBrief(args: {
       ? describeAgo(Date.now() - args.stats.lastMined)
       : "unknown";
   const branchStr = args.branch ? ` (branch: ${args.branch})` : "";
-  lines.push(`[engram] Project brief for ${args.projectName}${branchStr}`);
+  lines.push(`[engramx] Project brief for ${args.projectName}${branchStr}`);
   lines.push(
     `Graph: ${args.stats.nodes} nodes, ${args.stats.edges} edges, ${args.stats.extractedPct}% extracted. Last mined: ${minedAgo}.`
   );

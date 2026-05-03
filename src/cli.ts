@@ -279,7 +279,7 @@ program
       const root = pathResolve(opts.project);
       if (!existsSync(join(root, ".engram", "graph.db"))) {
         console.error(
-          `engram: no graph found at ${root}. Run 'engram init' first.`
+          `engramx: no graph found at ${root}. Run 'engram init' first.`
         );
         process.exit(1);
       }
@@ -291,7 +291,7 @@ program
         process.exitCode = 0;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`engram: ${msg}`);
+        console.error(`engramx: ${msg}`);
         if (opts.verbose && err instanceof Error && err.stack) {
           console.error(err.stack);
         }

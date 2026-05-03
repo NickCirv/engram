@@ -217,7 +217,7 @@ async function handleQuery(
  *
  *   id: 0
  *   event: provider
- *   data: {"provider":"engram:ast","content":"…","confidence":1.0,"cached":false}
+ *   data: {"provider":"engramx:ast","content":"…","confidence":1.0,"cached":false}
  *
  *   id: 1
  *   event: provider

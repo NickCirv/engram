@@ -65,7 +65,7 @@ async function getMcpProviders(): Promise<readonly ContextProvider[]> {
         // One-line stderr warning per bad entry — don't crash, don't
         // noop-swallow. Users need to know their config didn't take.
         process.stderr.write(
-          `[engram] mcp-providers.json entry ${f.index}: ${f.reason}\n`
+          `[engramx] mcp-providers.json entry ${f.index}: ${f.reason}\n`
         );
       }
     }
@@ -171,11 +171,11 @@ export async function resolveRichPacket(
 
   if (results.length === 0) return null;
 
-  // When engram:ast succeeds (confidence 1.0), drop the lower-confidence
-  // engram:structure result to avoid duplicate structural content.
-  const hasAst = results.some((r) => r.provider === "engram:ast");
+  // When engramx:ast succeeds (confidence 1.0), drop the lower-confidence
+  // engramx:structure result to avoid duplicate structural content.
+  const hasAst = results.some((r) => r.provider === "engramx:ast");
   const deduped = hasAst
-    ? results.filter((r) => r.provider !== "engram:structure")
+    ? results.filter((r) => r.provider !== "engramx:structure")
     : results;
 
   // v3.0 — per-provider budget backstop. Providers are supposed to
@@ -185,7 +185,7 @@ export async function resolveRichPacket(
   const budgetedResults = enforcePerProviderBudget(deduped, allProviders);
 
   // v3.0 — mistakes-boost reranking. Results that mention a label from
-  // the engram:mistakes provider get their confidence boosted (capped
+  // the engramx:mistakes provider get their confidence boosted (capped
   // at 1.0) so they sort up within their priority tier. This surfaces
   // structural context that touches known-broken areas ahead of other
   // structural context of equal priority.
@@ -232,10 +232,10 @@ export async function resolveRichPacket(
     .map((r) => r.provider);
 
   // When called as enrichment (structure excluded), use a lighter header
-  const isEnrichment = enabledProviders && !enabledProviders.includes("engram:structure");
+  const isEnrichment = enabledProviders && !enabledProviders.includes("engramx:structure");
   const header = isEnrichment
-    ? `[engram] Additional context (${providerNames.length} providers, ~${totalTokens} tokens)`
-    : `[engram] Rich context for ${filePath} (${providerNames.length} providers, ~${totalTokens} tokens)`;
+    ? `[engramx] Additional context (${providerNames.length} providers, ~${totalTokens} tokens)`
+    : `[engramx] Rich context for ${filePath} (${providerNames.length} providers, ~${totalTokens} tokens)`;
   const text = `${header}\n\n${sections.join("\n\n")}`;
 
   return {
@@ -429,7 +429,7 @@ export function enforcePerProviderBudget(
 }
 
 /**
- * Extract mistake labels from an engram:mistakes provider result. The
+ * Extract mistake labels from an engramx:mistakes provider result. The
  * provider formats mistakes as `  ! <label> (flagged <age>)` — one per
  * line. Returns the labels only, trimmed, lowercased for case-insensitive
  * matching.
@@ -447,7 +447,7 @@ function extractMistakeLabels(mistakesContent: string): string[] {
 
 /**
  * Boost the confidence of results whose content mentions a known-mistake
- * label from the engram:mistakes provider. Boost = 1.5x, capped at 1.0.
+ * label from the engramx:mistakes provider. Boost = 1.5x, capped at 1.0.
  * The mistakes result itself is NOT boosted (it's already at confidence
  * 0.95 — boosting would flatten the distinction between the signal and
  * the signal-holders).
@@ -458,14 +458,14 @@ function extractMistakeLabels(mistakesContent: string): string[] {
 export function boostByMistakes(
   results: readonly ProviderResult[]
 ): ProviderResult[] {
-  const mistakesResult = results.find((r) => r.provider === "engram:mistakes");
+  const mistakesResult = results.find((r) => r.provider === "engramx:mistakes");
   if (!mistakesResult) return [...results];
 
   const labels = extractMistakeLabels(mistakesResult.content);
   if (labels.length === 0) return [...results];
 
   return results.map((r) => {
-    if (r.provider === "engram:mistakes") return r;
+    if (r.provider === "engramx:mistakes") return r;
     const lower = r.content.toLowerCase();
     const matched = labels.some((label) => lower.includes(label));
     if (!matched) return r;

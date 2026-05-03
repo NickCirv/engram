@@ -95,7 +95,7 @@ export function analyzeTuning(projectRoot: string): TuneProposal {
   // ── Rule 2: Disable never-contributing providers ──────────────────
   // Only flag a provider if it appeared 0 times AND we have enough data
   if (deniedReads.length >= ALWAYS_ON_MIN_EVENTS) {
-    const knownProviders = ["engram:structure", "engram:mistakes", "engram:git", "mempalace", "context7", "obsidian"];
+    const knownProviders = ["engramx:structure", "engramx:mistakes", "engramx:git", "mempalace", "context7", "obsidian"];
     for (const pName of knownProviders) {
       const hits = providerHits.get(pName) ?? 0;
       const override = config.providers[pName];

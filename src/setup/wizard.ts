@@ -201,7 +201,7 @@ async function offerIdeAdapters(
     Windsurf: "engram gen-windsurfrules",
     Aider: "engram gen-aider",
     "Codex CLI": "engram gen --target agents",
-    Cline: "Add to cline_mcp_settings.json: { engram: { command: 'engram-serve', args: ['" + root + "'] } }",
+    Cline: "Add to cline_mcp_settings.json: { engramx: { command: 'engram-serve', args: ['" + root + "'] } }",
     "Continue.dev": "Add to ~/.continue/config.json: { contextProviders: [{ name: 'engramx-continue' }] }",
     Zed: "Register engram-serve as a Zed context server (see Docs/integrations/zed.md)",
   };

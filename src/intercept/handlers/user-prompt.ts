@@ -230,7 +230,7 @@ export async function handleUserPromptSubmit(
 
   // Format the injection. Include a short header so Claude knows this
   // is engram-provided context and not part of the user's message.
-  const header = `[engram] Pre-query context for this message (matched ${result.nodesFound} graph nodes):`;
+  const header = `[engramx] Pre-query context for this message (matched ${result.nodesFound} graph nodes):`;
   const text = `${header}\n\n${result.text}`;
 
   return buildSessionContextResponse("UserPromptSubmit", text);

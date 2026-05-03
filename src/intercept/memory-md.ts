@@ -38,8 +38,8 @@ import {
 import { join } from "node:path";
 
 /** The marker block engram owns in MEMORY.md. */
-const ENGRAM_MARKER_START = "<!-- engram:structural-facts:start -->";
-const ENGRAM_MARKER_END = "<!-- engram:structural-facts:end -->";
+const ENGRAM_MARKER_START = "<!-- engramx:structural-facts:start -->";
+const ENGRAM_MARKER_END = "<!-- engramx:structural-facts:end -->";
 
 /** Sanity cap on MEMORY.md file size. */
 const MAX_MEMORY_FILE_BYTES = 1_000_000;

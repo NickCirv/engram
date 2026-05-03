@@ -14,6 +14,11 @@ import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+// Node 20+ provides a global `fetch`, but TypeScript's lib config
+// may not include DOM types in all environments. Declare the symbol
+// loosely here so this helper compiles under the repo's strict tsconfig.
+declare const fetch: any;
+
 const DEFAULT_PORT = 7337;
 const TOKEN_MIN_LEN = 32;
 

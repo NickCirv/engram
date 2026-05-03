@@ -72,7 +72,7 @@ export async function init(
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "EEXIST") {
       throw new Error(
-        `engram: another init is running on ${root} (lock: ${lockPath}). ` +
+        `engramx: another init is running on ${root} (lock: ${lockPath}). ` +
           `If no other process is active, delete the lock file manually.`
       );
     }

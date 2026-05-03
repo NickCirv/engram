@@ -29,15 +29,15 @@ export async function startHttpServer(
   // HttpOnly cookie set on GET /ui.
   if (tokenInfo.source === "env") {
     process.stderr.write(
-      "engram: auth token from ENGRAM_API_TOKEN env var\n"
+      "engramx: auth token from ENGRAM_API_TOKEN env var\n"
     );
   } else if (tokenInfo.source === "file") {
     process.stderr.write(
-      `engram: auth token at ${tokenInfo.path}\n`
+      `engramx: auth token at ${tokenInfo.path}\n`
     );
   } else {
     process.stderr.write(
-      `engram: auth token generated at ${tokenInfo.path} (0600)\n` +
+      `engramx: auth token generated at ${tokenInfo.path} (0600)\n` +
       `        curl -H "Authorization: Bearer $(cat ${tokenInfo.path})" ${url}/stats\n`
     );
   }

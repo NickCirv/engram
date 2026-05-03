@@ -38,7 +38,7 @@ async function getConnection(): Promise<LspConnection | null> {
 }
 
 export const lspProvider: ContextProvider = {
-  name: "engram:lsp",
+  name: "engramx:lsp",
   label: "LSP CONTEXT",
   tier: 1,
   tokenBudget: 100,
@@ -68,7 +68,7 @@ export const lspProvider: ContextProvider = {
           : content;
 
       return {
-        provider: "engram:lsp",
+        provider: "engramx:lsp",
         content: truncated,
         confidence: 0.95,
         cached: false,

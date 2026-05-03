@@ -1,5 +1,5 @@
 /**
- * engram:mistakes provider — surfaces known issues and past failures
+ * engramx:mistakes provider — surfaces known issues and past failures
  * from the mistake memory system.
  *
  * Tier 1: internal, always available, no cache needed (<10ms).
@@ -8,7 +8,7 @@ import { getStore } from "../core.js";
 import type { ContextProvider, NodeContext, ProviderResult } from "./types.js";
 
 export const mistakesProvider: ContextProvider = {
-  name: "engram:mistakes",
+  name: "engramx:mistakes",
   label: "KNOWN ISSUES",
   tier: 1,
   tokenBudget: 50,
@@ -39,7 +39,7 @@ export const mistakesProvider: ContextProvider = {
           .join("\n");
 
         return {
-          provider: "engram:mistakes",
+          provider: "engramx:mistakes",
           content: lines,
           confidence: 0.95,
           cached: false,

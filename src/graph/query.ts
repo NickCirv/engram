@@ -520,7 +520,7 @@ export function renderFileStructure(
   ];
 
   const lines: string[] = [];
-  lines.push(`[engram] Structural summary for ${relativeFilePath}`);
+  lines.push(`[engramx] Structural summary for ${relativeFilePath}`);
   lines.push(
     `Nodes: ${fileNodes.length} | avg extraction confidence: ${avgConfidence.toFixed(2)}`
   );

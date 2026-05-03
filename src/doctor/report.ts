@@ -115,7 +115,7 @@ function componentToCheck(c: ComponentHealth): DoctorCheck {
     lsp:
       "LSP is best-effort — install a language server (typescript-language-server, pyright, rust-analyzer).",
     ast:
-      "Tree-sitter grammars missing. Reinstall engram: `engram update` or `npm install -g engramx@latest`.",
+      "Tree-sitter grammars missing. Reinstall engramx: `engram update` or `npm install -g engramx@latest`.",
   };
   return {
     name: c.name,

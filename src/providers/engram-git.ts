@@ -1,5 +1,5 @@
 /**
- * engram:git provider — surfaces recent changes, churn rate, and last
+ * engramx:git provider — surfaces recent changes, churn rate, and last
  * author for a file from git history.
  *
  * Tier 1: internal, available when in a git repo (<100ms).
@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import type { ContextProvider, NodeContext, ProviderResult } from "./types.js";
 
 export const gitProvider: ContextProvider = {
-  name: "engram:git",
+  name: "engramx:git",
   label: "CHANGES",
   tier: 1,
   tokenBudget: 50,
@@ -58,7 +58,7 @@ export const gitProvider: ContextProvider = {
       ];
 
       return {
-        provider: "engram:git",
+        provider: "engramx:git",
         content: parts.join("\n"),
         confidence: 0.9,
         cached: false,
