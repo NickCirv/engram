@@ -788,6 +788,46 @@ export function createHttpServer(
             "X-Content-Type-Options": "nosniff",
           });
           res.end(buildDashboardHtml());
+        } else if (req.method === "POST" && path === "/hook") {
+          // Hook dispatch endpoint: accept a Hook payload (SessionStart,
+          // UserPromptSubmit, PreToolUse, etc.) and run the same dispatcher
+          // used by the `engram intercept` entry point. This lets external
+          // clients (pi, CLIs, tests) invoke engram's hook handlers over
+          // the local HTTP server securely.
+          let bodyStr: string;
+          try {
+            bodyStr = await readBody(req);
+          } catch {
+            json(res, 400, { error: "Failed to read request body" });
+            return;
+          }
+
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(bodyStr);
+          } catch {
+            json(res, 400, { error: "Invalid JSON body" });
+            return;
+          }
+
+          try {
+            const { dispatchHook } = await import("../intercept/dispatch.js");
+            const result = await dispatchHook(parsed);
+            if (result === null) {
+              // PASSTHROUGH — indicate with 204 No Content so callers know
+              // engram opted out.
+              res.writeHead(204, { ...corsHeaders(req) });
+              res.end();
+              return;
+            }
+
+            // Return the handler's result as JSON.
+            json(res, 200, result);
+            return;
+          } catch (err) {
+            json(res, 500, { error: "Hook dispatch failed", detail: String(err) });
+            return;
+          }
         } else {
           json(res, 404, { error: "Not found" });
         }
