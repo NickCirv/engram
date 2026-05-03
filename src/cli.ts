@@ -1663,8 +1663,6 @@ program
         store.close();
       }
     }
-  )
-    }
   );
 
 program
