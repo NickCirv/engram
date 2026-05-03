@@ -29,6 +29,7 @@ import { findProjectRoot, isValidCwd } from "../context.js";
 import { isHookDisabled, PASSTHROUGH, type HandlerResult } from "../safety.js";
 import { buildSessionContextResponse } from "../formatter.js";
 import { warmAllProviders } from "../../providers/resolver.js";
+import { onSessionStart } from "../auto-memory.js";
 
 export interface SessionStartHookPayload {
   readonly hook_event_name: "SessionStart" | string;
@@ -309,6 +310,14 @@ export async function handleSessionStart(
       // Silent failure. If warmup fails, Read handlers will do live
       // resolution with per-provider timeouts and graceful degradation.
     });
+
+    // Aggressive auto: learn the session brief into memory across scopes.
+    // Fire-and-forget — must never block session start.
+    try {
+      void onSessionStart(projectRoot, fullText).catch(() => {});
+    } catch {
+      /* swallow */
+    }
 
     return buildSessionContextResponse("SessionStart", fullText);
   } catch {

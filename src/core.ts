@@ -268,6 +268,21 @@ export async function query(
       // non-fatal
     }
 
+    // Aggressive auto: ingest the query result into memory in the background
+    try {
+      void import("./intercept/auto-memory.js").then((m) => {
+        try {
+          // Use a shortened question as a relPath hint for dedupe keys
+          const hint = `query:${question.slice(0, 200)}`;
+          return m.performAutoLearnForContent(projectRoot, result.text, hint, `auto:query`);
+        } catch {
+          return undefined as unknown as Promise<void>;
+        }
+      }).catch(() => undefined as unknown as Promise<void>);
+    } catch {
+      /* swallow */
+    }
+
     return { text: result.text, estimatedTokens: result.estimatedTokens, nodesFound: result.nodes.length };
   } finally {
     store.close();
