@@ -27,7 +27,7 @@ import { join } from "node:path";
 import { query, stats, learn, getStore } from "../core.js";
 import { readHookLog } from "../intelligence/hook-log.js";
 import { summarizeHookLog } from "../intercept/stats.js";
-import { getCumulativeStats } from "../intelligence/token-tracker.js";
+import { getCumulativeStats, recordSession } from "../intelligence/token-tracker.js";
 import { getContextCache, ContextCache } from "../intelligence/cache.js";
 import { getComponentStatus } from "../intercept/component-status.js";
 import { buildDashboardHtml } from "./ui.js";
@@ -42,6 +42,7 @@ import {
 
 // Read version — try both paths (works from src/ in dev and dist/ when built).
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 const require = createRequire(import.meta.url);
 const PKG_VERSION = (() => {
   for (const p of ["../package.json", "../../package.json"]) {
@@ -363,8 +364,21 @@ async function handleLearn(
   const scope = typeof parsed.scope === "string" && parsed.scope ? parsed.scope : "project";
 
   try {
-    await learn(projectRoot, parsed.content, parsed.file ?? "http-api", scope);
-    json(res, 201, { ok: true });
+    const result = await learn(projectRoot, parsed.content, parsed.file ?? "http-api", scope);
+    // Treat manual learn calls as a session event for dashboard metrics.
+    try {
+      const store = await getStore(projectRoot);
+      try {
+        // Record a session with zero token counts (we don't have query tokens here).
+        recordSession(store, 0, 0, projectRoot);
+      } finally {
+        store.close();
+      }
+    } catch {
+      // Non-fatal: metrics are best-effort
+    }
+
+    json(res, 201, { ok: true, nodesAdded: result.nodesAdded });
   } catch (err) {
     json(res, 500, { error: "Learn failed", detail: String(err) });
   }
@@ -413,7 +427,7 @@ async function handleTokens(
   try {
     const store = await getStore(projectRoot);
     try {
-      const tokenStats = getCumulativeStats(store);
+      const tokenStats = getCumulativeStats(store, projectRoot);
       json(res, 200, tokenStats);
     } finally {
       store.close();
@@ -836,6 +850,81 @@ export function createHttpServer(
         }
       } catch (err) {
         json(res, 500, { error: "Internal server error", detail: String(err) });
+      }
+    });
+
+    // Upgrade handler — accept WebSocket connections for streaming ingest
+    // Path: /learn-ws
+    server.on("upgrade", (req, socket, head) => {
+      try {
+        const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+        if (url.pathname !== "/learn-ws") {
+          socket.destroy();
+          return;
+        }
+
+        // Basic host + origin checks (same as HTTP handlers)
+        if (!isHostValid(req.headers.host, port)) {
+          socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+        const origin = req.headers.origin as string | undefined;
+        if (origin && !isOriginAllowed(origin, port)) {
+          socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
+        // Auth: accept Authorization: Bearer <token> or cookie engram_token
+        let ok = false;
+        const authHeader = (req.headers.authorization ?? "") as string;
+        if (typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
+          const presented = authHeader.slice(7).trim();
+          if (safeEqual(presented, currentToken())) ok = true;
+        }
+        if (!ok) {
+          const cookies = parseCookies(req.headers.cookie);
+          if (cookies.engram_token && safeEqual(cookies.engram_token, currentToken())) ok = true;
+        }
+        if (!ok) {
+          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
+        const key = req.headers["sec-websocket-key"];
+        if (!key || typeof key !== "string") {
+          socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
+        // Compute accept key per RFC6455
+        const accept = createHash("sha1")
+          .update(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+          .digest("base64");
+
+        const headers = [
+          "HTTP/1.1 101 Switching Protocols",
+          "Upgrade: websocket",
+          "Connection: Upgrade",
+          `Sec-WebSocket-Accept: ${accept}`,
+        ];
+        socket.write(headers.join("\r\n") + "\r\n\r\n");
+        socket.setNoDelay(true);
+
+        // Hand off to the WebSocket frame handler module (dynamic import so
+        // we don't add a hard dependency at module init). The handler runs
+        // the learned ingestion in background and notifies the socket with
+        // per-chunk results.
+        import("./learn-ws.js")
+          .then((m) => m.handleWebSocket(socket, projectRoot))
+          .catch(() => {
+            try { socket.destroy(); } catch { /* ignore */ }
+          });
+      } catch (e) {
+        try { socket.destroy(); } catch { /* ignore */ }
       }
     });
 

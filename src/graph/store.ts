@@ -99,9 +99,77 @@ export class GraphStore {
     runMigrations(this.db, this.dbPath);
   }
 
+  // Non-blocking save: export the DB synchronously (cheap) then
+  // write the bytes to disk asynchronously so file I/O doesn't block
+  // the main event loop. Coalesce rapid successive saves into a single
+  // final write to avoid thrashing the filesystem.
+  private _savePending = false as boolean;
+  private _saveQueuedBuffer: Buffer | null = null;
+
   save(): void {
-    const data = this.db.export();
-    writeFileSync(this.dbPath, Buffer.from(data));
+    let data: Uint8Array;
+    try {
+      data = this.db.export();
+    } catch (e) {
+      // If export fails for any reason, fall back to a best-effort
+      // synchronous write attempt (rare). Swallow errors to avoid
+      // crashing callers.
+      try {
+        writeFileSync(this.dbPath, Buffer.from([]));
+      } catch {
+        /* swallow */
+      }
+      return;
+    }
+
+    const buffer = Buffer.from(data);
+    const tmpPath = this.dbPath + ".tmp";
+
+    // If a save is already in progress, stash the latest buffer and
+    // return. The in-progress write will detect _saveQueuedBuffer and
+    // write it afterwards. This coalesces rapid updates.
+    if (this._savePending) {
+      this._saveQueuedBuffer = buffer;
+      return;
+    }
+
+    this._savePending = true;
+    const writeOnce = async (): Promise<void> => {
+      try {
+        // Async write temp -> rename for atomicity
+        await import("node:fs/promises").then((fs) => fs.writeFile(tmpPath, buffer));
+        await import("node:fs/promises").then((fs) => fs.rename(tmpPath, this.dbPath));
+
+        // If another save was queued while we were writing, write it now
+        if (this._saveQueuedBuffer) {
+          const nextBuf = this._saveQueuedBuffer;
+          this._saveQueuedBuffer = null;
+          try {
+            await import("node:fs/promises").then((fs) => fs.writeFile(tmpPath, nextBuf!));
+            await import("node:fs/promises").then((fs) => fs.rename(tmpPath, this.dbPath));
+          } catch (e) {
+            // Best-effort fallback to synchronous write
+            try {
+              writeFileSync(this.dbPath, nextBuf!);
+            } catch {
+              /* swallow */
+            }
+          }
+        }
+      } catch (e) {
+        // Best-effort fallback: synchronous write
+        try {
+          writeFileSync(this.dbPath, buffer);
+        } catch {
+          /* swallow */
+        }
+      } finally {
+        this._savePending = false;
+      }
+    };
+
+    // Fire-and-forget
+    void writeOnce();
   }
 
   upsertNode(node: GraphNode, defaults?: { projectRoot?: string; projectBranch?: string; memoryScope?: string }): void {

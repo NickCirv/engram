@@ -13,6 +13,7 @@ import { mineGitHistory } from "./miners/git-miner.js";
 import { mineSessionHistory, learnFromSession } from "./miners/session-miner.js";
 import { mineSkills } from "./miners/skills-miner.js";
 import type { GraphStats } from "./graph/schema.js";
+import { recordSession } from "./intelligence/token-tracker.js";
 
 const ENGRAM_DIR = ".engram";
 const DB_FILE = "graph.db";
@@ -227,9 +228,46 @@ export async function query(
   question: string,
   options: { mode?: "bfs" | "dfs"; depth?: number; tokenBudget?: number } = {}
 ): Promise<{ text: string; estimatedTokens: number; nodesFound: number }> {
+  const root = resolve(projectRoot);
   const store = await getStore(projectRoot);
   try {
     const result = queryGraph(store, question, { ...options, projectRoot: root });
+
+    // Instrument: record session metrics using full-corpus baseline.
+    // Baseline heuristic: naiveTokens = ceil(totalCharsAcrossProject / 4)
+    try {
+      // Collect unique source files for this project and sum their lengths.
+      const allNodes = store.getAllNodes(root);
+      const seenFiles = new Set<string>();
+      for (const n of allNodes) {
+        if (n.sourceFile) seenFiles.add(n.sourceFile);
+      }
+
+      let totalChars = 0;
+      for (const f of seenFiles) {
+        try {
+          const fullPath = join(root, f);
+          if (existsSync(fullPath)) {
+            totalChars += readFileSync(fullPath, "utf-8").length;
+          }
+        } catch {
+          // ignore read errors
+        }
+      }
+
+      const naiveTokens = Math.max(1, Math.ceil(totalChars / 4));
+      const graphTokens = Math.max(1, Math.round(result.estimatedTokens || 0));
+
+      // Best-effort: record session stats into the store under project scope
+      try {
+        recordSession(store, naiveTokens, graphTokens, root);
+      } catch {
+        // non-fatal
+      }
+    } catch {
+      // non-fatal
+    }
+
     return { text: result.text, estimatedTokens: result.estimatedTokens, nodesFound: result.nodes.length };
   } finally {
     store.close();

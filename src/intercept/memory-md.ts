@@ -155,17 +155,18 @@ export function upsertEngramSection(
  * Never throws. Returns true on successful write, false on any kind
  * of failure (file too large, write error, etc.).
  */
-export function writeEngramSectionToMemoryMd(
-  projectRoot: string,
-  engramSection: string
-): boolean {
-  if (!projectRoot || typeof projectRoot !== "string") return false;
+export function writeEngramSectionToPath(memoryPath: string, engramSection: string): boolean {
+  // Allow global opt-out of automatic MEMORY.md writes. Set
+  // ENGRAM_DISABLE_AUTO_MEMORY_MD=1 in environments where writes must be
+  // suppressed. This keeps the code present for manual operations or for
+  // later re-enabling without removing the implementation.
+  if (process.env.ENGRAM_DISABLE_AUTO_MEMORY_MD === "1") return false;
+
+  if (!memoryPath || typeof memoryPath !== "string") return false;
   if (engramSection.length > MAX_ENGRAM_SECTION_BYTES) {
     // Refuse to write a section that would blow through the budget
     return false;
   }
-
-  const memoryPath = join(projectRoot, "MEMORY.md");
 
   try {
     // Read existing content if any
@@ -189,6 +190,13 @@ export function writeEngramSectionToMemoryMd(
   } catch {
     return false;
   }
+}
+
+export function writeEngramSectionToMemoryMd(projectRoot: string, engramSection: string): boolean {
+  if (process.env.ENGRAM_DISABLE_AUTO_MEMORY_MD === "1") return false;
+  if (!projectRoot || typeof projectRoot !== "string") return false;
+  const memoryPath = join(projectRoot, "MEMORY.md");
+  return writeEngramSectionToPath(memoryPath, engramSection);
 }
 
 export { ENGRAM_MARKER_START, ENGRAM_MARKER_END, MAX_ENGRAM_SECTION_BYTES };
