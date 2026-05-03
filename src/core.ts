@@ -569,21 +569,81 @@ export async function computeKeywordIDF(
   }
 }
 
+import { generateConclusionNodes } from "./miners/conclusions-miner.js";
+
 export async function learn(
   projectRoot: string,
   text: string,
   sourceLabel = "manual",
   memoryScope: string = "project"
 ): Promise<{ nodesAdded: number }> {
-  const { nodes, edges } = learnFromSession(text, sourceLabel);
-  if (nodes.length === 0 && edges.length === 0) return { nodesAdded: 0 };
+  // Primary session mining (decisions/mistakes/patterns)
+  const sessionResult = learnFromSession(text, sourceLabel);
+  const conclusionResult = generateConclusionNodes(text, sourceLabel);
+
+  const combinedNodes = [...sessionResult.nodes, ...conclusionResult.nodes];
+  const combinedEdges = [...sessionResult.edges, ...conclusionResult.edges];
+
+  if (combinedNodes.length === 0 && combinedEdges.length === 0) return { nodesAdded: 0 };
+
   const store = await getStore(projectRoot);
   try {
-    store.bulkUpsert(nodes, edges, projectRoot, undefined, memoryScope);
+    // Bulk upsert nodes + edges (project-scoped)
+    store.bulkUpsert(combinedNodes, combinedEdges, projectRoot, undefined, memoryScope);
+
+    // Post-insert: create linking edges from conclusion nodes to existing
+    // graph nodes by simple keyword overlap. This helps surface relations
+    // between learned conclusions/fragments and code entities/files.
+    const now = Date.now();
+    const allNodes = store.getAllNodes(projectRoot);
+
+    const edgesToAdd = [] as typeof combinedEdges;
+    const seen = new Set<string>();
+
+    for (const c of conclusionResult.nodes) {
+      // only consider conclusion/pattern nodes we created (metadata marker)
+      if (!c.metadata || (c.metadata as Record<string, unknown>).miner !== "conclusion") continue;
+      // tokenise label into keywords
+      const tokens = Array.from(new Set(
+        c.label
+          .toLowerCase()
+          .split(/[^a-z0-9]+/)
+          .filter((t) => t.length >= 4)
+      ));
+      if (tokens.length === 0) continue;
+
+      for (const tok of tokens) {
+        for (const n of allNodes) {
+          if (n.id === c.id) continue;
+          if (n.label.toLowerCase().includes(tok)) {
+            const key = `${c.id}|${n.id}|similar_to`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            edgesToAdd.push({
+              source: c.id,
+              target: n.id,
+              relation: "similar_to",
+              confidence: "INFERRED",
+              confidenceScore: 0.6,
+              sourceFile: sourceLabel,
+              sourceLocation: null,
+              lastVerified: now,
+              metadata: { auto: true },
+            });
+          }
+        }
+      }
+    }
+
+    if (edgesToAdd.length > 0) {
+      // Upsert linking edges (no new nodes)
+      store.bulkUpsert([], edgesToAdd, projectRoot, undefined, memoryScope);
+    }
   } finally {
     store.close();
   }
-  return { nodesAdded: nodes.length };
+
+  return { nodesAdded: combinedNodes.length };
 }
 
 export interface MistakeEntry {
