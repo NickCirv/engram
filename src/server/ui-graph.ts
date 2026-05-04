@@ -80,17 +80,140 @@ function renderGraph(canvas, nodes, godNodes, edges) {
   // God node IDs (for emphasis). godNodes shape: [{node, degree}]
   const godIds = new Set((godNodes || []).map((g) => g.node?.id).filter(Boolean));
 
-  // Build simulation nodes with random starting positions near center
-  const sim = (nodes || []).slice(0, 300).map((n) => ({
-    id: n.id,
-    label: n.label || n.id,
-    kind: n.kind || "default",
-    memoryScope: (n.metadata && n.metadata.memoryScope) || null,
-    isGod: godIds.has(n.id),
-    x: W / 2 + (Math.random() - 0.5) * 400,
-    y: H / 2 + (Math.random() - 0.5) * 400,
-    vx: 0, vy: 0,
-  }));
+  // Build simulation nodes with random starting positions near center.
+  // Default memoryScope to 'project' when missing so code files show as
+  // project-scope nodes by default.
+  // Limit the number of simulated nodes to keep the layout responsive
+  // on typical browsers. We'll seed initial positions based on edge
+  // degrees so connected nodes start clustered (avoids grid artifacts).
+  const MAX_SIM_NODES = 600;
+
+  // Build a map of nodes (include placeholders for any edge endpoints
+  // that the server didn't return). This ensures springs can be wired
+  // even when the node list is paginated or truncated.
+  const baseNodes = Array.isArray(nodes) ? nodes.slice() : [];
+  const nodeMapAll = new Map();
+  for (const n of baseNodes) nodeMapAll.set(n.id, n);
+
+  // Compute degree map from provided edges so we can bias placement
+  const degreeMap = new Map();
+  if (Array.isArray(edges)) {
+    for (const ed of edges) {
+      degreeMap.set(ed.source, (degreeMap.get(ed.source) || 0) + 1);
+      degreeMap.set(ed.target, (degreeMap.get(ed.target) || 0) + 1);
+      if (!nodeMapAll.has(ed.source)) {
+        nodeMapAll.set(ed.source, { id: ed.source, label: ed.source, kind: 'default', metadata: {} });
+      }
+      if (!nodeMapAll.has(ed.target)) {
+        nodeMapAll.set(ed.target, { id: ed.target, label: ed.target, kind: 'default', metadata: {} });
+      }
+    }
+  }
+
+  // Compute average degree (fallback to 1)
+  let totalDeg = 0;
+  for (const v of degreeMap.values()) totalDeg += v;
+  const avgDeg = degreeMap.size > 0 ? totalDeg / degreeMap.size : 1;
+  const radiusOuter = Math.min(W, H) * 0.45;
+  const radiusInner = Math.min(W, H) * 0.08;
+
+  // Prioritize nodes with higher degree so we include connected endpoints
+  // in the simulated subset when the graph is large.
+  const combined = Array.from(nodeMapAll.values());
+  combined.sort((a, b) => (degreeMap.get(b.id) || 0) - (degreeMap.get(a.id) || 0));
+  const candidateNodes = combined.slice(0, MAX_SIM_NODES);
+
+  // Cluster by project when multiple projectRoots are present (useful
+  // for the 'global' memory-scope view where nodes come from many projects).
+  const projectBuckets = new Map();
+  for (const n of candidateNodes) {
+    try {
+      const root = (n.metadata && (n.metadata.projectRoot || n.metadata.project_root)) || "__no_project__";
+      const arr = projectBuckets.get(root) || [];
+      arr.push(n);
+      projectBuckets.set(root, arr);
+    } catch {
+      const arr = projectBuckets.get("__no_project__") || [];
+      arr.push(n);
+      projectBuckets.set("__no_project__", arr);
+    }
+  }
+
+  let sim = [];
+  if (projectBuckets.size > 1) {
+    // Place each project's cluster around a ring and distribute nodes
+    // in that project's local neighborhood. Use the project's god node
+    // as the cluster center when available.
+    const roots = Array.from(projectBuckets.keys());
+    const clusterRingRadius = Math.min(W, H) * 0.35;
+
+    // Map god node id by projectRoot so we can center clusters on them
+    const godByProject = new Map();
+    (godNodes || []).forEach((g) => {
+      try {
+        const pr = (g.node && (g.node.metadata && (g.node.metadata.projectRoot || g.node.metadata.project_root))) || "__no_project__";
+        if (g.node && g.node.id) godByProject.set(pr, g.node.id);
+      } catch {}
+    });
+
+    for (let i = 0; i < roots.length; i++) {
+      const root = roots[i];
+      const nodesInCluster = projectBuckets.get(root) || [];
+      const clusterAngle = (i / roots.length) * Math.PI * 2;
+      const cx = W / 2 + Math.cos(clusterAngle) * clusterRingRadius;
+      const cy = H / 2 + Math.sin(clusterAngle) * clusterRingRadius;
+      // Sort by degree so hubs are placed closer to center
+      nodesInCluster.sort((a, b) => (degreeMap.get(b.id) || 0) - (degreeMap.get(a.id) || 0));
+      const godIdForProject = godByProject.get(root);
+      for (let j = 0; j < nodesInCluster.length; j++) {
+        const n = nodesInCluster[j];
+        const deg = degreeMap.get(n.id) || 0;
+        const weight = Math.min(1, deg / Math.max(1, avgDeg));
+        let x, y;
+        if (godIdForProject && n.id === godIdForProject) {
+          // Place god node at cluster center
+          x = cx;
+          y = cy;
+        } else {
+          const localR = Math.max(10, (1 - weight) * 120 * (0.4 + Math.random() * 0.8));
+          const ang = Math.random() * Math.PI * 2;
+          x = cx + Math.cos(ang) * localR + (Math.random() - 0.5) * 8;
+          y = cy + Math.sin(ang) * localR + (Math.random() - 0.5) * 8;
+        }
+        sim.push({
+          id: n.id,
+          label: n.label || n.id,
+          kind: n.kind || "default",
+          memoryScope: (n.metadata && (n.metadata.memoryScope || n.metadata.memory_scope)) || "project",
+          isGod: godIds.has(n.id),
+          x: Math.max(20, Math.min(W - 20, x)),
+          y: Math.max(20, Math.min(H - 20, y)),
+          vx: 0, vy: 0,
+        });
+      }
+    }
+  } else {
+    sim = candidateNodes.map((n, idx) => {
+      const deg = degreeMap.get(n.id) || 0;
+      // pick an angle and radius biased by degree
+      const angle = (idx / Math.max(1, candidateNodes.length)) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+      const weight = Math.min(1, deg / Math.max(1, avgDeg));
+      // nodes with higher degree sit closer to center
+      const r = radiusInner + (1 - weight) * (radiusOuter - radiusInner) * (0.25 + Math.random() * 0.75);
+      const x = W / 2 + Math.cos(angle) * r + (Math.random() - 0.5) * 20;
+      const y = H / 2 + Math.sin(angle) * r + (Math.random() - 0.5) * 20;
+      return {
+        id: n.id,
+        label: n.label || n.id,
+        kind: n.kind || "default",
+        memoryScope: (n.metadata && (n.metadata.memoryScope || n.metadata.memory_scope)) || "project",
+        isGod: godIds.has(n.id),
+        x: Math.max(20, Math.min(W - 20, x)),
+        y: Math.max(20, Math.min(H - 20, y)),
+        vx: 0, vy: 0,
+      };
+    });
+  }
 
   if (sim.length === 0) {
     ctx.fillStyle = "#71717a";
@@ -116,28 +239,79 @@ function renderGraph(canvas, nodes, godNodes, edges) {
   let draggingView = false, dragStartX = 0, dragStartY = 0;
   let selectedId = null;
 
-  // ─── Physics step ────────────────────────────────────────────
-  const REPULSION = 1200;
-  const SPRING_K = 0.06;
-  const SPRING_LENGTH = 80;
-  const DAMPING = 0.85;
+  // ─── Physics step (tuned to settle faster and avoid long oscillations) ───
+  // REPULSION scales down for large graphs (so springs can pull clusters together)
+  const REPULSION = Math.max(75, Math.floor(900 * Math.min(1, 300 / Math.max(1, sim.length))));
+  // Stronger spring constant to favor edge clustering over global repulsion
+  const SPRING_K = 0.22;
+  // Spring length tuned by viewport size (keeps connected nodes reasonably close)
+  const SPRING_LENGTH = Math.max(40, Math.min(100, Math.floor(Math.sqrt(W * H) / 8)));
+  const DAMPING = 0.90;
   const CENTER_GRAVITY = 0.003;
+  const MAX_SPEED = 12;
 
   function step() {
-    // Pairwise repulsion (O(n^2) but fine up to ~500 nodes)
-    for (let i = 0; i < sim.length; i++) {
-      const a = sim[i];
-      for (let j = i + 1; j < sim.length; j++) {
-        const b = sim[j];
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const dist2 = dx * dx + dy * dy + 1;
-        const force = REPULSION / dist2;
-        const dist = Math.sqrt(dist2);
-        const fx = (dx / dist) * force;
-        const fy = (dy / dist) * force;
-        a.vx -= fx; a.vy -= fy;
-        b.vx += fx; b.vy += fy;
+    // Large graphs: approximate pairwise repulsion using spatial hashing
+    // (grid buckets). This reduces O(n^2) to near-linear by only checking
+    // nearby cells. For small graphs we keep exact pairwise repulsion.
+    let maxSpeed = 0;
+    const N = sim.length;
+    if (N > 400) {
+      const cellSize = SPRING_LENGTH * 1.5;
+      const buckets = new Map();
+      const nodeIndex = new Map();
+      for (let i = 0; i < N; i++) {
+        const n = sim[i];
+        nodeIndex.set(n.id, i);
+        const cx = Math.floor(n.x / cellSize);
+        const cy = Math.floor(n.y / cellSize);
+        const key = cx + ',' + cy;
+        const arr = buckets.get(key) || [];
+        arr.push(n);
+        buckets.set(key, arr);
+      }
+
+      for (let i = 0; i < N; i++) {
+        const a = sim[i];
+        const acx = Math.floor(a.x / cellSize);
+        const acy = Math.floor(a.y / cellSize);
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const key = (acx + dx) + ',' + (acy + dy);
+            const arr = buckets.get(key);
+            if (!arr) continue;
+            for (const b of arr) {
+              const j = nodeIndex.get(b.id);
+              if (j <= i) continue; // symmetric update only once
+              const dx_ = b.x - a.x;
+              const dy_ = b.y - a.y;
+              const dist2 = dx_ * dx_ + dy_ * dy_ + 0.01;
+              const force = REPULSION / dist2;
+              const dist = Math.sqrt(dist2);
+              const fx = (dx_ / dist) * force;
+              const fy = (dy_ / dist) * force;
+              a.vx -= fx; a.vy -= fy;
+              b.vx += fx; b.vy += fy;
+            }
+          }
+        }
+      }
+    } else {
+      // Exact pairwise repulsion
+      for (let i = 0; i < sim.length; i++) {
+        const a = sim[i];
+        for (let j = i + 1; j < sim.length; j++) {
+          const b = sim[j];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist2 = dx * dx + dy * dy + 0.01;
+          const force = REPULSION / dist2;
+          const dist = Math.sqrt(dist2);
+          const fx = (dx / dist) * force;
+          const fy = (dy / dist) * force;
+          a.vx -= fx; a.vy -= fy;
+          b.vx += fx; b.vy += fy;
+        }
       }
     }
 
@@ -156,19 +330,51 @@ function renderGraph(canvas, nodes, godNodes, edges) {
       b.vx -= fx; b.vy -= fy;
     }
 
-    // Gravity toward viewport center — keeps disconnected components visible
+    // Gravity toward viewport center — keeps components visible
     for (const n of sim) {
       n.vx += (W / 2 - n.x) * CENTER_GRAVITY;
       n.vy += (H / 2 - n.y) * CENTER_GRAVITY;
     }
 
-    // Apply velocity with damping
+    // Apply damping, clamp velocities, and update positions
     for (const n of sim) {
       n.vx *= DAMPING;
       n.vy *= DAMPING;
+
+      // Clamp speeds to avoid large oscillations
+      if (n.vx > MAX_SPEED) n.vx = MAX_SPEED;
+      if (n.vx < -MAX_SPEED) n.vx = -MAX_SPEED;
+      if (n.vy > MAX_SPEED) n.vy = MAX_SPEED;
+      if (n.vy < -MAX_SPEED) n.vy = -MAX_SPEED;
+
       n.x += n.vx;
       n.y += n.vy;
+
+      // Keep nodes roughly within viewport bounds to avoid runaway
+      const pad = 50;
+      n.x = Math.max(-pad, Math.min(W + pad, n.x));
+      n.y = Math.max(-pad, Math.min(H + pad, n.y));
+
+      const speed = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
+      if (speed > maxSpeed) maxSpeed = speed;
     }
+
+    return maxSpeed;
+  }
+
+  // Pre-relaxation: run a short synchronous settle pass to reduce visible bouncing.
+  // Stop early when velocities have settled to a low threshold. Cap iterations
+  // to avoid excessive blocking on huge graphs. For very dense graphs we use
+  // more iterations to let springs pull clusters together.
+  try {
+    const base = Math.floor(80000 / Math.max(1, sim.length));
+    const maxIters = Math.min(2000, Math.max(120, base));
+    for (let i = 0; i < maxIters; i++) {
+      const maxSpeed = step();
+      if (maxSpeed < 0.02 && i > 20) break;
+    }
+  } catch (e) {
+    // If the browser is very constrained, skip pre-relax and continue
   }
 
   // ─── Render ─────────────────────────────────────────────────
@@ -198,8 +404,9 @@ function renderGraph(canvas, nodes, godNodes, edges) {
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
       ctx.strokeStyle = style.color;
-      ctx.lineWidth = style.width / zoom;
-      ctx.globalAlpha = 0.9;
+      // Ensure edge stroke is visible even when zoomed out
+      ctx.lineWidth = Math.max(0.8, style.width) / Math.max(zoom, 0.5);
+      ctx.globalAlpha = 0.95;
       ctx.stroke();
       if (ctx.setLineDash) ctx.setLineDash([]);
     }

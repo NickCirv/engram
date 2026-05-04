@@ -53,6 +53,9 @@ import {
   type CwdChangedHookPayload,
 } from "./handlers/cwd-changed.js";
 import { findProjectRoot, isValidCwd } from "./context.js";
+import { resolve as resolvePath } from "node:path";
+import { getStore } from "../core.js";
+import { recordSession } from "../intelligence/token-tracker.js";
 import { logHookEvent } from "../intelligence/hook-log.js";
 import { composeCostFields } from "../cost/instrument.js";
 
@@ -208,18 +211,47 @@ async function dispatchPreToolUse(
       const projectRoot = findProjectRoot(cwd);
       if (projectRoot) {
         const decision = extractPreToolDecision(result);
-        const filePath =
-          typeof handlerPayload.tool_input?.file_path === "string"
-            ? handlerPayload.tool_input.file_path
-            : undefined;
-        const cost = composeCostFields(tool, filePath, result);
+        const rawFilePath = typeof handlerPayload.tool_input?.file_path === "string"
+          ? handlerPayload.tool_input.file_path
+          : undefined;
+        // Resolve a candidate absolute path for cost estimation. Many hook
+        // payloads provide project-relative paths; statSync requires an
+        // absolute path so we resolve relative to the hook's cwd.
+        const absForCost = (rawFilePath && typeof rawFilePath === "string")
+          ? (rawFilePath.startsWith("/") ? rawFilePath : resolvePath(cwd, rawFilePath))
+          : undefined;
+        const cost = composeCostFields(tool, absForCost, result);
         logHookEvent(projectRoot, {
           event: "PreToolUse",
           tool,
-          path: filePath,
+          path: rawFilePath,
           decision,
           ...cost,
         });
+
+        // Record session-level token stats (best-effort, async). We use
+        // wouldHaveRead as the naive baseline and injected as the graph
+        // tokens consumed. Fire-and-forget so we don't block hook handling.
+        try {
+          (async () => {
+            try {
+              const naive = Number((cost && (cost as any).wouldHaveRead) || 0);
+              const graph = Number((cost && (cost as any).injected) || 0);
+              if (naive > 0 || graph > 0) {
+                const s = await getStore(projectRoot);
+                try {
+                  recordSession(s, naive, graph, projectRoot);
+                } finally {
+                  s.close();
+                }
+              }
+            } catch {
+              /* swallow */
+            }
+          })();
+        } catch {
+          /* swallow */
+        }
       }
     }
   } catch {

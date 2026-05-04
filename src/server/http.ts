@@ -23,7 +23,7 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { writeFileSync, unlinkSync, mkdirSync, existsSync, statSync } from "node:fs";
-import { join, resolve, relative } from "node:path";
+import { join, resolve, relative, basename } from "node:path";
 import { query, stats, learn, init, getStore, projectStatKey } from "../core.js";
 import { readHookLog, logHookEvent } from "../intelligence/hook-log.js";
 import { summarizeHookLog } from "../intercept/stats.js";
@@ -131,6 +131,64 @@ function json(
     ...extraHeaders,
   });
   res.end(JSON.stringify(data));
+}
+
+// Helper: decode a base64 project id back into an absolute project root path.
+function decodeProjectId(projectId: string | null): string | null {
+  if (!projectId) return null;
+  try {
+    return Buffer.from(projectId, "base64").toString("utf-8");
+  } catch {
+    return null;
+  }
+}
+
+// Helper: enumerate known projects recorded in the stats table.
+// Returns array sorted by lastModified desc (newest first). Each entry has
+// { id, root, name, lastModified } where id is base64(root).
+async function listKnownProjects(store: any): Promise<Array<{ id: string; root: string; name: string; lastModified: number }>> {
+  try {
+    const stmt = store.prepare("SELECT value FROM stats WHERE key LIKE ?");
+    stmt.bind(["%:project_root"]);
+    const roots: string[] = [];
+    while (stmt.step()) {
+      try {
+        const row = stmt.getAsObject();
+        const v = row.value as string;
+        if (v) roots.push(v);
+      } catch {
+        // ignore malformed
+      }
+    }
+    stmt.free();
+
+    const uniq = Array.from(new Set(roots));
+    const projects = uniq.map((root) => {
+      let mtime = 0;
+      try {
+        mtime = statSync(root).mtimeMs;
+      } catch {
+        try {
+          const lm = store.getStat(projectStatKey(root, "last_mined"));
+          if (lm) mtime = Number(lm) || 0;
+        } catch {
+          mtime = 0;
+        }
+      }
+      const name = basename(root) || root;
+      return {
+        id: Buffer.from(root).toString("base64"),
+        root,
+        name: name.length > 40 ? name.slice(0, 40) : name,
+        lastModified: mtime || 0,
+      };
+    });
+
+    projects.sort((a, b) => b.lastModified - a.lastModified);
+    return projects;
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -318,13 +376,32 @@ async function handleContextStream(
 }
 
 async function handleStats(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   projectRoot: string
 ): Promise<void> {
   try {
-    const result = await stats(projectRoot);
-    json(res, 200, result);
+    const url = parseUrl(req);
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
+
+    // Open the global store (getStore ignores the arg for DB path) and
+    // call store.getStats with an optional projectRoot to scope results.
+    const store = await getStore(projectRoot);
+    try {
+      let target: string | undefined = projectRoot;
+      if (projectId) {
+        const decoded = decodeProjectId(projectId);
+        if (decoded) target = decoded;
+      } else if (scope === "accumulative") {
+        // undefined = no project filter (aggregate across all projects)
+        target = undefined;
+      }
+      const result = store.getStats(target as any);
+      json(res, 200, result);
+    } finally {
+      store.close();
+    }
   } catch (err) {
     json(res, 500, { error: "Stats failed", detail: String(err) });
   }
@@ -433,6 +510,29 @@ async function handleLearn(
 // Dashboard API handlers
 // ---------------------------------------------------------------------------
 
+async function handleScopes(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): Promise<void> {
+  try {
+    const store = await getStore(projectRoot);
+    try {
+      const projects = await listKnownProjects(store);
+      const scopes = [
+        { id: "accumulative", label: "ACCUMMULATIVE MEMORIES" },
+        { id: "global", label: "GLOBAL MEMORIES" },
+        { id: "personal", label: "PERSONAL MEMORIES" },
+      ];
+      json(res, 200, { scopes, projects });
+    } finally {
+      store.close();
+    }
+  } catch (err) {
+    json(res, 500, { error: "Scopes failed", detail: String(err) });
+  }
+}
+
 async function handleHookLog(
   req: IncomingMessage,
   res: ServerResponse,
@@ -442,33 +542,113 @@ async function handleHookLog(
     const url = parseUrl(req);
     const limit = parseInt(url.searchParams.get("limit") ?? "100", 10);
     const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
-    let entries = readHookLog(projectRoot);
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
 
-    // If no hook-log exists, fall back to session log entries (best-effort)
-    if ((!entries || entries.length === 0)) {
-      try {
-        const store = await getStore(projectRoot);
+    let entries: any[] = [];
+
+    if (projectId) {
+      const decoded = decodeProjectId(projectId) || projectRoot;
+      entries = readHookLog(decoded);
+
+      // Fallback to session_log for that project if no file exists
+      if ((!entries || entries.length === 0)) {
         try {
-          const raw = store.getStat(projectStatKey(projectRoot, "session_log"));
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              entries = parsed.map((s: any) => ({
-                event: "Session",
-                tool: "learn",
-                path: null,
-                tokensSaved: s.saved ?? 0,
-                naiveTokens: s.naiveTokens ?? 0,
-                graphTokens: s.graphTokens ?? 0,
-                ts: new Date(s.ts).toISOString(),
-              }));
+          const store = await getStore(projectRoot);
+          try {
+            const raw = store.getStat(projectStatKey(decoded, "session_log"));
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                entries = parsed.map((s: any) => ({
+                  event: "Session",
+                  tool: "learn",
+                  path: null,
+                  tokensSaved: s.saved ?? 0,
+                  naiveTokens: s.naiveTokens ?? 0,
+                  graphTokens: s.graphTokens ?? 0,
+                  ts: new Date(s.ts).toISOString(),
+                }));
+              }
             }
+          } finally {
+            store.close();
           }
-        } finally {
-          store.close();
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
+      }
+    } else if (scope === "accumulative") {
+      // Aggregate hook logs across all known projects
+      const store = await getStore(projectRoot);
+      try {
+        const projects = await listKnownProjects(store);
+        let combined: any[] = [];
+        for (const p of projects) {
+          try {
+            const e = readHookLog(p.root);
+            if (e && e.length > 0) {
+              combined = combined.concat(e);
+            } else {
+              const raw = store.getStat(projectStatKey(p.root, "session_log"));
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                  combined = combined.concat(parsed.map((s: any) => ({
+                    event: "Session",
+                    tool: "learn",
+                    path: null,
+                    tokensSaved: s.saved ?? 0,
+                    naiveTokens: s.naiveTokens ?? 0,
+                    graphTokens: s.graphTokens ?? 0,
+                    ts: new Date(s.ts).toISOString(),
+                  })));
+                }
+              }
+            }
+          } catch {
+            // ignore per-project failures
+          }
+        }
+        // Sort by timestamp desc
+        combined.sort((a, b) => {
+          const ta = a.ts ? new Date(a.ts).getTime() : 0;
+          const tb = b.ts ? new Date(b.ts).getTime() : 0;
+          return tb - ta;
+        });
+        entries = combined;
+      } finally {
+        store.close();
+      }
+    } else {
+      entries = readHookLog(projectRoot);
+
+      // If no hook-log exists, fall back to session log entries (best-effort)
+      if ((!entries || entries.length === 0)) {
+        try {
+          const store = await getStore(projectRoot);
+          try {
+            const raw = store.getStat(projectStatKey(projectRoot, "session_log"));
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                entries = parsed.map((s: any) => ({
+                  event: "Session",
+                  tool: "learn",
+                  path: null,
+                  tokensSaved: s.saved ?? 0,
+                  naiveTokens: s.naiveTokens ?? 0,
+                  graphTokens: s.graphTokens ?? 0,
+                  ts: new Date(s.ts).toISOString(),
+                }));
+              }
+            }
+          } finally {
+            store.close();
+          }
+        } catch {
+          // ignore
+        }
       }
     }
 
@@ -480,12 +660,51 @@ async function handleHookLog(
 }
 
 function handleHookLogSummary(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   projectRoot: string
 ): void {
   try {
-    const entries = readHookLog(projectRoot);
+    const url = parseUrl(req);
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
+
+    let entries: any[] = [];
+
+    if (projectId) {
+      const decoded = decodeProjectId(projectId) || projectRoot;
+      entries = readHookLog(decoded);
+    } else if (scope === "accumulative") {
+      // aggregate across projects
+      (async () => {
+        const store = await getStore(projectRoot);
+        try {
+          const projects = await listKnownProjects(store);
+          let combined: any[] = [];
+          for (const p of projects) {
+            try {
+              const e = readHookLog(p.root);
+              if (e && e.length > 0) combined = combined.concat(e);
+            } catch {}
+          }
+          combined.sort((a, b) => {
+            const ta = a.ts ? new Date(a.ts).getTime() : 0;
+            const tb = b.ts ? new Date(b.ts).getTime() : 0;
+            return tb - ta;
+          });
+          const summary = summarizeHookLog(combined);
+          json(res, 200, summary);
+        } catch (err) {
+          json(res, 500, { error: "Summary failed", detail: String(err) });
+        } finally {
+          try { store.close(); } catch {}
+        }
+      })();
+      return;
+    } else {
+      entries = readHookLog(projectRoot);
+    }
+
     const summary = summarizeHookLog(entries);
     json(res, 200, summary);
   } catch (err) {
@@ -494,25 +713,85 @@ function handleHookLogSummary(
 }
 
 async function handleTokens(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   projectRoot: string
 ): Promise<void> {
   try {
+    const url = parseUrl(req);
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
+
     const store = await getStore(projectRoot);
     try {
+      if (projectId) {
+        const decoded = decodeProjectId(projectId) || projectRoot;
+        const tokenStats = getCumulativeStats(store, decoded);
+        let sessions: any[] = [];
+        try {
+          const raw = store.getStat(projectStatKey(decoded, "session_log"));
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) sessions = parsed.slice(-200);
+          }
+        } catch {}
+        json(res, 200, { ...tokenStats, sessions });
+        return;
+      }
+
+      if (scope === "accumulative") {
+        // Sum per-project stats across all known projects
+        const projects = await listKnownProjects(store);
+        let totalSessions = 0;
+        let totalNaiveTokens = 0;
+        let totalGraphTokens = 0;
+        let totalSaved = 0;
+        let sessionsArr: any[] = [];
+        for (const p of projects) {
+          try {
+            const s = getCumulativeStats(store, p.root);
+            totalSessions += s.totalSessions;
+            totalNaiveTokens += s.totalNaiveTokens;
+            totalGraphTokens += s.totalGraphTokens;
+            totalSaved += s.totalSaved;
+            const raw = store.getStat(projectStatKey(p.root, "session_log"));
+            if (raw) {
+              try {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) sessionsArr = sessionsArr.concat(parsed);
+              } catch {}
+            }
+          } catch {
+            // per-project failures are best-effort
+          }
+        }
+        // Sort sessions by ts desc and keep last 200
+        sessionsArr.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        const sessions = sessionsArr.slice(0, 200);
+        const avgReduction = totalNaiveTokens > 0 ? Math.round((totalSaved / totalNaiveTokens) * 1000) / 10 : 0;
+        const estimatedCostSaved = Math.round((totalSaved / 1_000_000) * 3 * 100) / 100;
+        json(res, 200, {
+          totalSessions,
+          totalNaiveTokens,
+          totalGraphTokens,
+          totalSaved,
+          avgReduction,
+          estimatedCostSaved,
+          sessions,
+        });
+        return;
+      }
+
+      // Default: per-server projectRoot
       const tokenStats = getCumulativeStats(store, projectRoot);
-      // Include recent session time-series for the dashboard (best-effort).
       let sessions: any[] = [];
       try {
         const raw = store.getStat(projectStatKey(projectRoot, "session_log"));
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) sessions = parsed.slice(-200); // limit to recent 200
+          if (Array.isArray(parsed)) sessions = parsed.slice(-200);
         }
-      } catch {
-        // ignore parse errors
-      }
+      } catch {}
       json(res, 200, { ...tokenStats, sessions });
     } finally {
       store.close();
@@ -530,24 +809,41 @@ async function handleFilesHeatmap(
   try {
     const url = parseUrl(req);
     const limit = parseInt(url.searchParams.get("limit") ?? "20", 10);
-    const entries = readHookLog(projectRoot);
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
 
-    // Aggregate by file path
-    const fileMap = new Map<string, { count: number; tokensSaved: number }>();
-    for (const entry of entries) {
-      if (!entry.path) continue;
-      const existing = fileMap.get(entry.path) ?? { count: 0, tokensSaved: 0 };
-      fileMap.set(entry.path, {
-        count: existing.count + 1,
-        tokensSaved: existing.tokensSaved + (entry.tokensSaved ?? 0),
-      });
-    }
+    let fileMap = new Map<string, { count: number; tokensSaved: number }>();
 
-    // If we have no hook-log entries, fall back to graph-derived "hot files"
-    if (fileMap.size === 0) {
+    if (projectId) {
+      const decoded = decodeProjectId(projectId) || projectRoot;
+      const entries = readHookLog(decoded);
+      for (const entry of entries) {
+        if (!entry.path) continue;
+        const existing = fileMap.get(entry.path) ?? { count: 0, tokensSaved: 0 };
+        fileMap.set(entry.path, {
+          count: existing.count + 1,
+          tokensSaved: existing.tokensSaved + (entry.tokensSaved ?? 0),
+        });
+      }
+
+      if (fileMap.size === 0) {
+        const store = await getStore(projectRoot);
+        try {
+          const allNodes = store.getAllNodes(decoded);
+          for (const n of allNodes) {
+            if (!n.sourceFile) continue;
+            const existing = fileMap.get(n.sourceFile) ?? { count: 0, tokensSaved: 0 };
+            fileMap.set(n.sourceFile, { count: existing.count + 1, tokensSaved: existing.tokensSaved });
+          }
+        } finally {
+          store.close();
+        }
+      }
+    } else if (scope === "accumulative") {
       const store = await getStore(projectRoot);
       try {
-        const allNodes = store.getAllNodes(projectRoot);
+        // Aggregate across all nodes in DB
+        const allNodes = store.getAllNodes();
         for (const n of allNodes) {
           if (!n.sourceFile) continue;
           const existing = fileMap.get(n.sourceFile) ?? { count: 0, tokensSaved: 0 };
@@ -555,6 +851,51 @@ async function handleFilesHeatmap(
         }
       } finally {
         store.close();
+      }
+    } else if (scope === "global" || scope === "personal") {
+      // Filter files by nodes' memory scope across all projects
+      const desired = scope === "global" ? "global" : "entity";
+      const store = await getStore(projectRoot);
+      try {
+        const allNodes = store.getAllNodes();
+        for (const n of allNodes) {
+          try {
+            const meta = n.metadata || {};
+            const ms = (meta.memoryScope || meta.memory_scope) || "project";
+            if (ms !== desired) continue;
+            if (!n.sourceFile) continue;
+            const existing = fileMap.get(n.sourceFile) ?? { count: 0, tokensSaved: 0 };
+            fileMap.set(n.sourceFile, { count: existing.count + 1, tokensSaved: existing.tokensSaved });
+          } catch {
+            // ignore node-level parse errors
+          }
+        }
+      } finally {
+        store.close();
+      }
+    } else {
+      const entries = readHookLog(projectRoot);
+      for (const entry of entries) {
+        if (!entry.path) continue;
+        const existing = fileMap.get(entry.path) ?? { count: 0, tokensSaved: 0 };
+        fileMap.set(entry.path, {
+          count: existing.count + 1,
+          tokensSaved: existing.tokensSaved + (entry.tokensSaved ?? 0),
+        });
+      }
+
+      if (fileMap.size === 0) {
+        const store = await getStore(projectRoot);
+        try {
+          const allNodes = store.getAllNodes(projectRoot);
+          for (const n of allNodes) {
+            if (!n.sourceFile) continue;
+            const existing = fileMap.get(n.sourceFile) ?? { count: 0, tokensSaved: 0 };
+            fileMap.set(n.sourceFile, { count: existing.count + 1, tokensSaved: existing.tokensSaved });
+          }
+        } finally {
+          store.close();
+        }
       }
     }
 
@@ -629,9 +970,37 @@ async function handleGraphNodes(
     const url = parseUrl(req);
     const limit = parseInt(url.searchParams.get("limit") ?? "100", 10);
     const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
+
     const store = await getStore(projectRoot);
     try {
-      const allNodes = store.getAllNodes(projectRoot);
+      // Special-case memory-scope filters across all projects
+      if (scope === "global" || scope === "personal") {
+        const desired = scope === "global" ? "global" : "entity";
+        const all = store.getAllNodes();
+        const filtered = all.filter((n) => {
+          try {
+            const meta = n.metadata || {};
+            const ms = (meta.memoryScope || meta.memory_scope) || "project";
+            return ms === desired;
+          } catch {
+            return false;
+          }
+        });
+        const paginated = filtered.slice(offset, offset + limit);
+        json(res, 200, { nodes: paginated, total: filtered.length });
+        return;
+      }
+
+      let target: string | undefined = projectRoot;
+      if (projectId) {
+        const decoded = decodeProjectId(projectId);
+        if (decoded) target = decoded;
+      } else if (scope === "accumulative") {
+        target = undefined; // all nodes
+      }
+      const allNodes = store.getAllNodes(target as any);
       const paginated = allNodes.slice(offset, offset + limit);
       json(res, 200, { nodes: paginated, total: allNodes.length });
     } finally {
@@ -654,11 +1023,20 @@ async function handleGraphEdges(
       json(res, 400, { error: "Missing 'ids' query parameter (comma-separated)" });
       return;
     }
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
     // decodeURIComponent isn't needed for comma-separated ids generated by join
     const ids = idsParam.split(",").filter((s) => s.trim().length > 0);
     const store = await getStore(projectRoot);
     try {
-      const edges = store.getEdgesForNodes(ids, projectRoot);
+      let target: string | undefined = projectRoot;
+      if (projectId) {
+        const decoded = decodeProjectId(projectId);
+        if (decoded) target = decoded;
+      } else if (scope === "accumulative") {
+        target = undefined;
+      }
+      const edges = store.getEdgesForNodes(ids, target as any);
       json(res, 200, { edges });
     } finally {
       store.close();
@@ -669,14 +1047,41 @@ async function handleGraphEdges(
 }
 
 async function handleGraphGodNodes(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   projectRoot: string
 ): Promise<void> {
   try {
+    const url = parseUrl(req);
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
     const store = await getStore(projectRoot);
     try {
-      const godNodes = store.getGodNodes(10);
+      // If memory-scope filter requested, compute across all projects
+      if (scope === "global" || scope === "personal") {
+        const desired = scope === "global" ? "global" : "entity";
+        const allGods = store.getGodNodes(200); // larger pool to choose from
+        const filtered = allGods.filter((g: any) => {
+          try {
+            const meta = g.node.metadata || {};
+            const ms = (meta.memoryScope || meta.memory_scope) || "project";
+            return ms === desired;
+          } catch {
+            return false;
+          }
+        });
+        json(res, 200, filtered.slice(0, 10));
+        return;
+      }
+
+      let target: string | undefined = projectRoot;
+      if (projectId) {
+        const decoded = decodeProjectId(projectId);
+        if (decoded) target = decoded;
+      } else if (scope === "accumulative") {
+        target = undefined;
+      }
+      const godNodes = store.getGodNodes(10, target as any);
       json(res, 200, godNodes);
     } finally {
       store.close();
@@ -709,35 +1114,40 @@ function handleSSE(
   res.write("data: {\"type\":\"connected\"}\n\n");
   sseClients.add(res);
 
-  // Start watching hook log if not already
+  // Start watching hook log if not already. Always install a periodic
+  // watcher — the log file may be created later and we still want to
+  // detect new events. Initialize lastSize to current file size or 0.
   if (!hookLogWatcher) {
     const logPath = join(projectRoot, ".engram", "hook-log.jsonl");
-    if (existsSync(logPath)) {
-      let lastSize = statSync(logPath).size;
+    let lastSize = 0;
+    try {
+      if (existsSync(logPath)) lastSize = statSync(logPath).size;
+    } catch {
+      lastSize = 0;
+    }
 
-      const checkFile = (): void => {
-        try {
-          const currentSize = statSync(logPath).size;
-          if (currentSize > lastSize) {
-            lastSize = currentSize;
-            // Broadcast to all SSE clients
-            const msg = JSON.stringify({ type: "hook-event", timestamp: Date.now() });
-            for (const client of sseClients) {
-              try {
-                client.write(`data: ${msg}\n\n`);
-              } catch {
-                sseClients.delete(client);
-              }
+    const checkFile = (): void => {
+      try {
+        const currentSize = existsSync(logPath) ? statSync(logPath).size : 0;
+        if (currentSize > lastSize) {
+          lastSize = currentSize;
+          // Broadcast to all SSE clients
+          const msg = JSON.stringify({ type: "hook-event", timestamp: Date.now() });
+          for (const client of sseClients) {
+            try {
+              client.write(`data: ${msg}\n\n`);
+            } catch {
+              sseClients.delete(client);
             }
           }
-        } catch {
-          // Log file gone or unreadable
         }
-      };
+      } catch {
+        // Log file gone or unreadable
+      }
+    };
 
-      const interval = setInterval(checkFile, 1000);
-      hookLogWatcher = () => clearInterval(interval);
-    }
+    const interval = setInterval(checkFile, 1000);
+    hookLogWatcher = () => clearInterval(interval);
   }
 
   // Cleanup on disconnect
@@ -902,6 +1312,8 @@ export function createHttpServer(
           await handleHookLog(req, res, projectRoot);
         } else if (req.method === "GET" && path === "/api/hook-log/summary") {
           handleHookLogSummary(req, res, projectRoot);
+        } else if (req.method === "GET" && path === "/api/scopes") {
+          await handleScopes(req, res, projectRoot);
         } else if (req.method === "GET" && path === "/api/tokens") {
           await handleTokens(req, res, projectRoot);
         } else if (req.method === "GET" && path === "/api/files/heatmap") {

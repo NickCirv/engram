@@ -1,4 +1,4 @@
-/**
+/*
  * engram Web Dashboard — served at GET /ui by the HTTP server.
  *
  * Zero external dependencies. HTML, CSS, and JS are template literals
@@ -51,6 +51,7 @@ body {
 }
 
 header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -70,6 +71,27 @@ header .brand {
 
 header .brand .diamond { color: var(--accent); font-size: 18px; }
 header .brand .version { color: var(--text-dim); font-size: 12px; font-weight: 400; }
+
+/* Centered scope/project selector */
+header .center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+header .center select {
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  min-width: 320px;
+  max-width: 520px;
+}
 
 header .status {
   display: flex; align-items: center; gap: 16px;
@@ -259,6 +281,11 @@ const HTML_BODY = `
       <span>engram</span>
       <span class="version" id="version">loading...</span>
     </div>
+    <div class="center">
+      <select id="scope-select" aria-label="Memory scope">
+        <option>Loading…</option>
+      </select>
+    </div>
     <div class="status">
       <span><span class="dot"></span>connected</span>
       <span id="uptime">&mdash;</span>
@@ -318,7 +345,7 @@ const HTML_BODY = `
         <h2>Knowledge Graph Visualization</h2>
         <div class="subtext" style="margin-bottom: 12px;">Drag to pan &middot; Scroll to zoom &middot; Click nodes for details</div>
         <canvas id="graph-canvas"></canvas>
-        <div id="graph-legend" class="subtext" style="margin-top: 10px; display:flex; gap:12px; align-items:center;"></div>
+        <div id="graph-legend" class="subtext" style="margin-top: 12px; display:flex; justify-content:center; gap:16px; align-items:center; flex-wrap:wrap; padding:6px 8px;"></div>
         <div id="graph-info" class="subtext" style="margin-top: 10px;"></div>
       </div>
     </section>
@@ -382,6 +409,24 @@ async function api(path) {
   } catch { return null; }
 }
 
+async function scopedApi(path) {
+  try {
+    const sel = document.getElementById('scope-select');
+    let query = '';
+    if (sel && sel.value) {
+      const val = sel.value;
+      if (val.startsWith('proj:')) {
+        const pid = val.slice(5);
+        query = (path.includes('?') ? '&' : '?') + 'projectId=' + encodeURIComponent(pid);
+      } else if (val.startsWith('scope:')) {
+        const scopeId = val.slice(6);
+        query = (path.includes('?') ? '&' : '?') + 'scope=' + encodeURIComponent(scopeId);
+      }
+    }
+    return await api(path + query);
+  } catch { return null; }
+}
+
 function formatNumber(n) {
   if (n === null || n === undefined) return "—";
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -422,13 +467,66 @@ __COMPONENTS__
 // ─── Graph canvas module ──────────────────────────────────────
 __GRAPH__
 
+// ─── Scopes / Projects selector ───────────────────────────────
+async function loadScopes() {
+  const data = await api('/api/scopes');
+  const sel = document.getElementById('scope-select');
+  if (!sel) return;
+  sel.innerHTML = '';
+  try {
+    if (data && data.scopes && Array.isArray(data.scopes)) {
+      for (const s of data.scopes) {
+        const opt = document.createElement('option');
+        opt.value = 'scope:' + s.id;
+        opt.textContent = s.label;
+        sel.appendChild(opt);
+      }
+    }
+    if (data && data.projects && Array.isArray(data.projects)) {
+      // Insert a disabled divider option for visual separation (selects can't render true separators reliably)
+      if (data.projects.length > 0) {
+        const divider = document.createElement('option');
+        divider.textContent = '--- Projects ---';
+        divider.disabled = true;
+        sel.appendChild(divider);
+      }
+      for (const p of data.projects) {
+        const opt = document.createElement('option');
+        opt.value = 'proj:' + p.id;
+        const name = (p.name || p.root || '').toString();
+        opt.textContent = name.length > 40 ? name.slice(0, 40) : name;
+        sel.appendChild(opt);
+      }
+    }
+  } catch (e) {
+    // best-effort — leave the select as-is
+  }
+
+  // Default: if there's at least one project, select the first project
+  if (sel.options.length > 0) {
+    // If the first option is a scope entry, that's fine; otherwise choose the first project entry
+    sel.selectedIndex = 0;
+  }
+
+  sel.addEventListener('change', () => {
+    // refresh active tab(s)
+    loadOverview();
+    if (document.querySelector('.tab-btn[data-tab="graph"].active')) loadGraph();
+    if (document.querySelector('.tab-btn[data-tab="sessions"].active')) loadSessions();
+    if (document.querySelector('.tab-btn[data-tab="files"].active')) loadFiles();
+    if (document.querySelector('.tab-btn[data-tab="providers"].active')) loadProviders();
+    if (document.querySelector('.tab-btn[data-tab="activity"].active')) loadActivity();
+    showToast('View updated', 1200);
+  });
+}
+
 // ─── Tab: Overview ────────────────────────────────────────────
 async function loadOverview() {
   const [tokens, summary, cache, graphStats, health] = await Promise.all([
-    api("/api/tokens"),
-    api("/api/hook-log/summary"),
-    api("/api/cache/stats"),
-    api("/stats"),
+    scopedApi("/api/tokens"),
+    scopedApi("/api/hook-log/summary"),
+    scopedApi("/api/cache/stats"),
+    scopedApi("/stats"),
     api("/health"),
   ]);
 
@@ -515,7 +613,7 @@ function renderTokenTimeSeries(sessions) {
 
 // ─── Tab: Sessions ────────────────────────────────────────────
 async function loadSessions() {
-  const tokens = await api("/api/tokens");
+  const tokens = await scopedApi("/api/tokens");
   if (!tokens) return;
 
   const sparkline = document.getElementById("sessions-sparkline");
@@ -546,8 +644,8 @@ let ssePending = false;
 
 async function refreshGraph() {
   const [nodes, godNodes] = await Promise.all([
-    api("/api/graph/nodes?limit=300"),
-    api("/api/graph/god-nodes"),
+    scopedApi("/api/graph/nodes?limit=300"),
+    scopedApi("/api/graph/god-nodes"),
   ]);
   if (!nodes) return;
   const canvas = document.getElementById("graph-canvas");
@@ -556,22 +654,47 @@ async function refreshGraph() {
   const fresh = canvas.cloneNode(true);
   canvas.parentNode.replaceChild(fresh, canvas);
   const nodeList = nodes.nodes ?? [];
-  // Fetch edges for the current node set (best-effort)
+  // Fetch edges for the current node set in manageable chunks (best-effort).
+  // Some browsers/servers limit URL length, so request edges in chunks of up
+  // to 400 ids and concatenate results.
   let edges = [];
   try {
-    const ids = nodeList.slice(0, 400).map((n) => n.id).join(",");
-    const eResp = await api("/api/graph/edges?ids=" + encodeURIComponent(ids));
-    edges = (eResp && eResp.edges) || [];
-  } catch {
+    const CHUNK = 400;
+    for (let i = 0; i < nodeList.length; i += CHUNK) {
+      const chunk = nodeList.slice(i, i + CHUNK).map((n) => n.id).join(",");
+      const eResp = await scopedApi("/api/graph/edges?ids=" + encodeURIComponent(chunk));
+      if (eResp && Array.isArray(eResp.edges)) edges = edges.concat(eResp.edges);
+    }
+  } catch (e) {
     edges = [];
   }
+
+  // Augment nodeList with placeholder nodes for any edge endpoints that
+  // weren't included in the initial node fetch. This ensures edges can be
+  // rendered even when the server's nodes list is paginated/truncated.
+  try {
+    const nodeById = new Map(nodeList.map((n) => [n.id, n]));
+    const missingIds = new Set();
+    for (const ed of edges) {
+      if (!nodeById.has(ed.source)) missingIds.add(ed.source);
+      if (!nodeById.has(ed.target)) missingIds.add(ed.target);
+    }
+    for (const mid of missingIds) {
+      // create a lightweight placeholder
+      const p = { id: mid, label: mid, kind: 'default', metadata: { }, sourceFile: '', sourceLocation: null };
+      nodeList.push(p);
+    }
+  } catch (e) {
+    // ignore augmentation failures — fall back to drawing whatever we have
+  }
+
   renderGraph(fresh, nodeList, godNodes ?? [], edges);
-  renderMemoryLegend();
-  setText("graph-info", (nodeList.length ?? 0) + " of " + (nodes.total ?? 0) + " nodes shown");
+  renderMemoryLegend(nodeList);
+  setText("graph-info", (nodeList.length ?? 0) + " nodes, " + (edges.length ?? 0) + " edges — " + (nodes.total ?? 0) + " total");
 }
 
 async function loadActivity() {
-  const log = await api("/api/hook-log?limit=20");
+  const log = await scopedApi("/api/hook-log?limit=20");
   const streamEl = document.getElementById("activity-stream");
   if (streamEl) {
     if (log && log.entries && log.entries.length > 0) {
@@ -581,7 +704,7 @@ async function loadActivity() {
     }
   }
 
-  const summary = await api("/api/hook-log/summary");
+  const summary = await scopedApi("/api/hook-log/summary");
   const toolsEl = document.getElementById("activity-tools");
   if (toolsEl) {
     toolsEl.innerHTML = renderToolBreakdown((summary && summary.byTool) || {});
@@ -606,11 +729,11 @@ function initSSE() {
         // update active tab(s)
         if (document.querySelector('.tab-btn[data-tab="activity"].active')) {
           const streamEl = document.getElementById("activity-stream");
-          const fresh = await api("/api/hook-log?limit=20");
+          const fresh = await scopedApi("/api/hook-log?limit=20");
           if (fresh && fresh.entries && streamEl) {
             streamEl.innerHTML = fresh.entries.slice().reverse().map(renderActivityRow).join("");
           }
-          const summary = await api("/api/hook-log/summary");
+          const summary = await scopedApi("/api/hook-log/summary");
           const toolsEl = document.getElementById("activity-tools");
           if (toolsEl) toolsEl.innerHTML = renderToolBreakdown((summary && summary.byTool) || {});
         }
@@ -666,7 +789,7 @@ function renderToolBreakdown(byTool) {
 
 // ─── Tab: Files ───────────────────────────────────────────────
 async function loadFiles() {
-  const heatmap = await api("/api/files/heatmap?limit=30");
+  const heatmap = await scopedApi("/api/files/heatmap?limit=30");
   const tableEl = document.getElementById("files-table");
   if (!tableEl) return;
 
@@ -704,17 +827,35 @@ function renderLegendIcon(shape, color) {
   }
 }
 
-function renderMemoryLegend() {
+function renderMemoryLegend(nodes) {
   const el = document.getElementById("graph-legend");
   if (!el || typeof MEMORY_SCOPE_CONFIG === "undefined") return;
   const keys = ["project", "global", "entity"];
+
+  // Compute counts from provided nodes if available; otherwise show dashes
+  const counts = { project: 0, global: 0, entity: 0 };
+  if (Array.isArray(nodes)) {
+    for (const n of nodes) {
+      try {
+        const meta = n.metadata || {};
+        const ms = (meta.memoryScope || meta.memory_scope) || "project";
+        if (ms === "global") counts.global++;
+        else if (ms === "entity") counts.entity++;
+        else counts.project++;
+      } catch {
+        counts.project++;
+      }
+    }
+  }
+
   el.innerHTML = keys
     .map((k) => {
       const cfg = MEMORY_SCOPE_CONFIG[k] || MEMORY_SCOPE_CONFIG.default;
       const icon = renderLegendIcon(cfg.shape, cfg.color);
-      return '<div style="display:flex;align-items:center;gap:8px;">' +
+      const label = esc(cfg.label) + ' (' + (counts[k] != null ? counts[k] : '—') + ')';
+      return '<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;">' +
         '<div>' + icon + '</div>' +
-        '<div style="color: var(--text-dim); font-family: var(--mono); font-size:12px;">' + esc(cfg.label) + '</div>' +
+        '<div style="color: var(--text-dim); font-family: var(--mono); font-size:12px;">' + label + '</div>' +
         '</div>';
     })
     .join('');
@@ -723,8 +864,8 @@ function renderMemoryLegend() {
 async function loadGraph() {
   if (graphLoaded) return;
   const [nodes, godNodes] = await Promise.all([
-    api("/api/graph/nodes?limit=300"),
-    api("/api/graph/god-nodes"),
+    scopedApi("/api/graph/nodes?limit=300"),
+    scopedApi("/api/graph/god-nodes"),
   ]);
   if (!nodes) return;
   graphLoaded = true;
@@ -733,24 +874,43 @@ async function loadGraph() {
     const nodeList = nodes.nodes ?? [];
     let edges = [];
     try {
-      const ids = nodeList.slice(0, 400).map((n) => n.id).join(",");
-      const eResp = await api("/api/graph/edges?ids=" + encodeURIComponent(ids));
-      edges = (eResp && eResp.edges) || [];
+      const CHUNK = 400;
+      for (let i = 0; i < nodeList.length; i += CHUNK) {
+        const ids = nodeList.slice(i, i + CHUNK).map((n) => n.id).join(",");
+        const eResp = await scopedApi("/api/graph/edges?ids=" + encodeURIComponent(ids));
+        if (eResp && Array.isArray(eResp.edges)) edges = edges.concat(eResp.edges);
+      }
     } catch {
       edges = [];
     }
+
+    try {
+      const nodeById = new Map(nodeList.map((n) => [n.id, n]));
+      const missingIds = new Set();
+      for (const ed of edges) {
+        if (!nodeById.has(ed.source)) missingIds.add(ed.source);
+        if (!nodeById.has(ed.target)) missingIds.add(ed.target);
+      }
+      for (const mid of missingIds) {
+        const p = { id: mid, label: mid, kind: 'default', metadata: { }, sourceFile: '', sourceLocation: null };
+        nodeList.push(p);
+      }
+    } catch {
+      // ignore
+    }
+
     renderGraph(canvas, nodeList, godNodes ?? [], edges);
+    setText("graph-info", (nodeList.length ?? 0) + " nodes, " + (edges.length ?? 0) + " edges — " + (nodes.total ?? 0) + " total");
   }
   // Render memory legend (colors/shapes)
-  renderMemoryLegend();
-  setText("graph-info", (nodes.nodes?.length ?? 0) + " of " + (nodes.total ?? 0) + " nodes shown");
+  renderMemoryLegend(nodes.nodes || []);
 }
 
 // ─── Tab: Providers ───────────────────────────────────────────
 async function loadProviders() {
   const [health, cache] = await Promise.all([
     api("/api/providers/health"),
-    api("/api/cache/stats"),
+    scopedApi("/api/cache/stats"),
   ]);
 
   let html = "";
@@ -784,9 +944,12 @@ async function loadProviders() {
 }
 
 // ─── Initial load ─────────────────────────────────────────────
-loadOverview();
-setInterval(loadOverview, 5000);
-initSSE();
+// Load scopes first, then bootstrap dashboard data so all requests carry the selected scope/project
+loadScopes().then(() => {
+  loadOverview();
+  setInterval(loadOverview, 5000);
+  initSSE();
+});
 
 // Attach refresh button handler
 const rbtn = document.getElementById('tokens-refresh');
