@@ -25,7 +25,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { writeFileSync, unlinkSync, mkdirSync, existsSync, statSync } from "node:fs";
 import { join, resolve, relative } from "node:path";
 import { query, stats, learn, init, getStore, projectStatKey } from "../core.js";
-import { readHookLog } from "../intelligence/hook-log.js";
+import { readHookLog, logHookEvent } from "../intelligence/hook-log.js";
 import { summarizeHookLog } from "../intercept/stats.js";
 import { getCumulativeStats, recordSession } from "../intelligence/token-tracker.js";
 import { getContextCache, ContextCache } from "../intelligence/cache.js";
@@ -408,6 +408,19 @@ async function handleLearn(
       }
     } catch {
       // Non-fatal: metrics are best-effort
+    }
+
+    try {
+      // Log a lightweight hook-like event so the dashboard's Activity tab
+      // shows manual learn actions. Do NOT include the learned content.
+      logHookEvent(projectRoot, {
+        event: "Learn",
+        tool: "HTTP",
+        path: parsed.file ?? "http-api",
+        tokensSaved: 0,
+      });
+    } catch {
+      // best effort
     }
 
     json(res, 201, { ok: true, nodesAdded: result.nodesAdded });
