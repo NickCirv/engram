@@ -200,6 +200,122 @@ export class GraphStore {
     );
   }
 
+  /**
+   * Merge-aware single node upsert. If a node supplies a canonical_id (or
+   * if a canonical id can be derived from the node.id prefix `c_`), the
+   * method will try to find an existing node with that canonical_id (scoped
+   * to project_root) and merge metadata/fields rather than blindly
+   * replacing the row.
+   *
+   * Returns the final node id written to the DB (existing or newly-created).
+   */
+  mergeUpsertNode(node: GraphNode, defaults?: { projectRoot?: string; projectBranch?: string; memoryScope?: string }): string {
+    const projectRoot = defaults?.projectRoot ?? "";
+    const projectBranch = defaults?.projectBranch ?? null;
+    const memoryScope = defaults?.memoryScope ?? null;
+
+    const canonical = (node as any).canonicalId ?? node.id?.startsWith("c_") ? (node as any).canonicalId ?? node.id : null;
+
+    if (!canonical) {
+      // No canonical id — fall back to simple upsert using provided id.
+      this.upsertNode(node, { projectRoot, projectBranch, memoryScope });
+      return node.id;
+    }
+
+    // Try to find existing node by canonical_id (project-scoped)
+    const sql = projectRoot
+      ? "SELECT * FROM nodes WHERE canonical_id = ? AND project_root = ? LIMIT 1"
+      : "SELECT * FROM nodes WHERE canonical_id = ? LIMIT 1";
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([canonical, projectRoot]);
+    else stmt.bind([canonical]);
+
+    if (stmt.step()) {
+      const row = stmt.getAsObject();
+      stmt.free();
+      const existing = this.rowToNode(row);
+
+      // Merge metadata (shallow merge; arrays concatenated dedup)
+      const existingMeta = existing.metadata ?? {};
+      const incomingMeta = node.metadata ?? {};
+      const mergedMeta: Record<string, unknown> = { ...existingMeta };
+      for (const k of Object.keys(incomingMeta)) {
+        const v = (incomingMeta as Record<string, unknown>)[k];
+        const ev = (existingMeta as Record<string, unknown>)[k];
+        if (Array.isArray(ev) && Array.isArray(v)) {
+          mergedMeta[k] = Array.from(new Set([...ev, ...v]));
+        } else if (ev === undefined || ev === null) {
+          mergedMeta[k] = v;
+        } else {
+          // prefer existing value for opaque fields
+          mergedMeta[k] = ev;
+        }
+      }
+
+      const mergedLabel = (existing.label && existing.label.length >= (node.label || "").length) ? existing.label : (node.label || existing.label);
+      const mergedKind = existing.kind || node.kind;
+      const mergedSourceFile = existing.sourceFile || node.sourceFile || "";
+      const mergedSourceLocation = existing.sourceLocation || node.sourceLocation || null;
+      const mergedConfidence = existing.confidence || node.confidence;
+      const mergedConfidenceScore = Math.max(existing.confidenceScore || 0, node.confidenceScore || 0);
+      const mergedLastVerified = Math.max(existing.lastVerified || 0, node.lastVerified || 0);
+      const mergedQueryCount = Math.max(existing.queryCount || 0, node.queryCount || 0);
+
+      const updateSql = `UPDATE nodes SET label = ?, kind = ?, source_file = ?, source_location = ?, confidence = ?, confidence_score = ?, last_verified = ?, query_count = ?, metadata = ?, valid_until = ?, invalidated_by_commit = ?, project_root = ?, project_branch = ?, memory_scope = ?, canonical_id = ? WHERE id = ?`;
+
+      let metadataStr = "{}";
+      try { metadataStr = JSON.stringify(mergedMeta); } catch { metadataStr = "{}"; }
+
+      this.db.run(updateSql, [
+        mergedLabel,
+        mergedKind,
+        mergedSourceFile,
+        mergedSourceLocation,
+        mergedConfidence,
+        mergedConfidenceScore,
+        mergedLastVerified,
+        mergedQueryCount,
+        metadataStr,
+        node.validUntil ?? null,
+        node.invalidatedByCommit ?? null,
+        projectRoot,
+        projectBranch,
+        memoryScope,
+        canonical,
+        existing.id,
+      ]);
+
+      return existing.id;
+    }
+
+    // No existing — insert a new node using the canonical id as the primary id
+    const idToUse = canonical;
+    this.db.run(
+      `INSERT OR REPLACE INTO nodes (id, label, kind, source_file, source_location, confidence, confidence_score, last_verified, query_count, metadata, valid_until, invalidated_by_commit, project_root, project_branch, memory_scope, canonical_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        idToUse,
+        node.label,
+        node.kind,
+        node.sourceFile,
+        node.sourceLocation,
+        node.confidence,
+        node.confidenceScore,
+        node.lastVerified,
+        node.queryCount,
+        JSON.stringify(node.metadata),
+        node.validUntil ?? null,
+        node.invalidatedByCommit ?? null,
+        projectRoot,
+        projectBranch,
+        memoryScope,
+        canonical,
+      ]
+    );
+
+    return idToUse;
+  }
+
   upsertEdge(edge: GraphEdge, defaults?: { projectRoot?: string }): void {
     const projectRoot = (edge as any).projectRoot ?? defaults?.projectRoot ?? "";
     this.db.run(
@@ -259,10 +375,35 @@ export class GraphStore {
     return count;
   }
 
+  /**
+   * Merge-aware bulk upsert. Nodes that provide a canonical_id will be
+   * merged into any existing node with the same canonical_id (project-scoped).
+   * Returns after inserting/updating nodes and edges; edges referencing
+   * replaced node ids are remapped to the merged node id.
+   */
   bulkUpsert(nodes: GraphNode[], edges: GraphEdge[], projectRoot?: string, projectBranch?: string, memoryScope?: string): void {
     this.db.run("BEGIN TRANSACTION");
-    for (const node of nodes) this.upsertNode(node, { projectRoot, projectBranch, memoryScope });
-    for (const edge of edges) this.upsertEdge(edge, { projectRoot });
+    const idMap = new Map<string, string>();
+
+    for (const node of nodes) {
+      try {
+        const finalId = this.mergeUpsertNode(node, { projectRoot, projectBranch, memoryScope });
+        if (finalId && finalId !== node.id) idMap.set(node.id, finalId);
+      } catch (e) {
+        // Best-effort: swallow per-node errors to avoid failing the whole bulk
+      }
+    }
+
+    for (const edge of edges) {
+      // Remap source/target ids if nodes were canonicalized/merged
+      const s = idMap.get(edge.source) ?? edge.source;
+      const t = idMap.get(edge.target) ?? edge.target;
+      const edgeCopy = { ...edge, source: s, target: t };
+      try {
+        this.upsertEdge(edgeCopy, { projectRoot });
+      } catch {}
+    }
+
     this.db.run("COMMIT");
     this.save();
   }

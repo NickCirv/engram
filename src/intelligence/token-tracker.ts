@@ -51,6 +51,22 @@ export function recordSession(
   store.setStat(graphKey, String(prev.totalGraphTokens + graphTokens));
   store.setStat(savedKey, String(prev.totalSaved + saved));
 
+  // Append to a session log for time-series visualization. Keep the
+  // last 1000 entries to avoid unbounded growth.
+  try {
+    const logKey = root ? projectStatKey(root, "session_log") : "session_log";
+    const existing = store.getStat(logKey);
+    let arr: any[] = [];
+    if (existing) {
+      try { arr = JSON.parse(existing); if (!Array.isArray(arr)) arr = []; } catch { arr = []; }
+    }
+    arr.push({ ts: Date.now(), naiveTokens, graphTokens, saved, savedPct });
+    if (arr.length > 1000) arr = arr.slice(-1000);
+    store.setStat(logKey, JSON.stringify(arr));
+  } catch {
+    // best-effort only
+  }
+
   return { naiveTokens, graphTokens, saved, savedPct };
 }
 

@@ -28,6 +28,8 @@ const PATTERN_PATTERNS = [
   /(?:we use|our approach|the way we|standard is)\s+(.{10,60})/gi,
 ];
 
+import { computeCanonicalId } from "../graph/canonical.js";
+
 function makeId(...parts: string[]): string {
   return parts
     .filter(Boolean)
@@ -47,8 +49,11 @@ function mineText(text: string, sourceFile: string): SessionMineResult {
     const normalized = label.trim().toLowerCase();
     if (seenLabels.has(normalized) || normalized.length < 5) return;
     seenLabels.add(normalized);
+    // Compute canonical id for learned session-level concepts so duplicates
+    // across sessions and summaries map to the same entity.
+    const canonical = computeCanonicalId(label.trim(), kind, "project", null);
     nodes.push({
-      id: makeId("session", kind, normalized),
+      id: canonical,
       label: label.trim(),
       kind,
       sourceFile,

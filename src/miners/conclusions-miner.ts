@@ -1,5 +1,7 @@
 import type { GraphNode, GraphEdge } from "../graph/schema.js";
 
+import { computeCanonicalId } from "../graph/canonical.js";
+
 function makeId(...parts: string[]): string {
   return parts
     .filter(Boolean)
@@ -26,7 +28,9 @@ export function generateConclusionNodes(text: string, sourceLabel = "session-sum
   const now = Date.now();
   // Build a high-level conclusion node (pattern) using the first sentence.
   const conclLabel = (firstSentence(text) || "Conclusion from session");
-  const conclId = makeId("conclusion", conclLabel);
+  // Use a canonical id for conclusions so repeated summaries map to the same
+  // conceptual node across sessions.
+  const conclId = computeCanonicalId(`Conclusion: ${conclLabel}`, "pattern", "project", null);
   const conclusionNode: GraphNode = {
     id: conclId,
     label: `Conclusion: ${conclLabel}`,
@@ -50,7 +54,9 @@ export function generateConclusionNodes(text: string, sourceLabel = "session-sum
 
   for (let i = 0; i < fragments.length; i++) {
     const frag = fragments[i];
-    const fragId = makeId("fragment", String(i), frag.slice(0, 80));
+    // Fragments are smaller and semantically transient; still use a
+    // canonical id so identical fragments across summaries dedupe.
+    const fragId = computeCanonicalId(frag.slice(0, 200), "concept", "project", null);
     const node: GraphNode = {
       id: fragId,
       label: frag.length > 300 ? frag.slice(0, 297) + "..." : frag,

@@ -213,6 +213,31 @@ td.dim { color: var(--text-dim); }
 }
 
 #graph-canvas:active { cursor: grabbing; }
+
+/* Toast notifications */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 9999;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
+/* Small refresh button used next to tokens */
+.refresh-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-family: var(--mono); font-size: 12px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
+.refresh-btn:hover { color: var(--text); background: var(--bg-hover); }
+
+.ov-chart { margin-top: 12px; height: 120px; }
 `;
 
 const HTML_HEAD = `<!DOCTYPE html>
@@ -252,7 +277,7 @@ const HTML_BODY = `
   <main>
     <section class="tab active" id="tab-overview">
       <div class="grid grid-4">
-        <div class="card"><h3>Tokens Saved</h3><div class="big-number accent" id="ov-tokens">&mdash;</div><div class="subtext" id="ov-tokens-sub">cumulative</div></div>
+        <div class="card"><h3>Tokens Saved <button id="tokens-refresh" class="refresh-btn" title="Refresh tokens">⟳</button></h3><div class="big-number accent" id="ov-tokens">&mdash;</div><div class="subtext" id="ov-tokens-sub">cumulative</div><div id="ov-tokens-chart" class="ov-chart"></div></div>
         <div class="card"><h3>Cost Saved</h3><div class="big-number" id="ov-cost">&mdash;</div><div class="subtext">at $3/M tokens</div></div>
         <div class="card"><h3>Hit Rate</h3><div class="big-number" id="ov-hitrate">&mdash;</div><div class="subtext" id="ov-hitrate-sub">hook interceptions</div></div>
         <div class="card"><h3>Sessions</h3><div class="big-number" id="ov-sessions">&mdash;</div><div class="subtext">tracked</div></div>
@@ -376,6 +401,21 @@ function formatUptime(seconds) {
   return Math.floor(seconds / 3600) + "h " + Math.floor((seconds % 3600) / 60) + "m";
 }
 
+// small UI helpers: toast
+function showToast(msg, duration = 3000) {
+  try {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    // allow CSS transition
+    setTimeout(() => t.classList.add('show'), 20);
+    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 220); }, duration);
+  } catch (e) {
+    console.warn('toast failed', e);
+  }
+}
+
 // ─── Components library (SVG charts — data-agnostic) ──────────
 __COMPONENTS__
 
@@ -397,6 +437,16 @@ async function loadOverview() {
     setText("ov-cost", formatCost(tokens.totalSaved ?? 0));
     setText("ov-sessions", formatNumber(tokens.totalSessions ?? 0));
     setText("ov-tokens-sub", (Number(tokens.avgReduction ?? 0).toFixed(1) + "%") + " avg reduction");
+
+    // Render time-series if available
+    const chartEl = document.getElementById('ov-tokens-chart');
+    if (chartEl) {
+      if (tokens.sessions && Array.isArray(tokens.sessions) && tokens.sessions.length > 0) {
+        chartEl.innerHTML = renderTokenTimeSeries(tokens.sessions.slice(-200));
+      } else {
+        chartEl.innerHTML = '<div class="empty-state">No session history yet</div>';
+      }
+    }
   }
 
   if (summary) {
@@ -426,6 +476,40 @@ async function loadOverview() {
   if (health) {
     setText("version", "v" + health.version);
     setText("uptime", formatUptime(health.uptime));
+  }
+}
+
+// Render a small dual-line time-series showing naive vs graph tokens
+function renderTokenTimeSeries(sessions) {
+  try {
+    if (!sessions || sessions.length === 0) return '<div class="empty-state">No session data yet</div>';
+    const last = sessions.slice(-50);
+    const width = 800; const height = 120; const pad = 12;
+    const naive = last.map((s) => Number(s.naiveTokens || 0));
+    const graph = last.map((s) => Number(s.graphTokens || 0));
+    const maxVal = Math.max(1, ...naive, ...graph);
+    const innerW = width - pad * 2; const innerH = height - pad * 2;
+    const step = last.length === 1 ? 0 : innerW / (last.length - 1);
+
+    const points = (arr) => arr.map((v, i) => [pad + i * step, pad + innerH - (v / maxVal) * innerH]);
+    const np = points(naive); const gp = points(graph);
+    const pathD = (pts) => pts.length === 1 ? ('M' + pts[0][0] + ' ' + pts[0][1] + ' l 0 0') : ('M' + pts.map((p) => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L '));
+    const naivePath = pathD(np); const graphPath = pathD(gp);
+
+    // Area between naive and graph (saved) if naive >= graph
+    let areaD = '';
+    if (np.length > 1) {
+      const areaPts = np.concat(gp.slice().reverse());
+      areaD = 'M' + areaPts.map((p) => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L ') + ' Z';
+    }
+
+    return '<svg viewBox="0 0 ' + width + ' ' + height + '" width="100%">' +
+      (areaD ? ('<defs><linearGradient id="gSaved" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="' + COLOR_ACCENT + '" stop-opacity="0.12"/><stop offset="1" stop-color="' + COLOR_ACCENT + '" stop-opacity="0"/></linearGradient></defs><path d="' + areaD + '" fill="url(#gSaved)"/>') : '') +
+      ('<path d="' + naivePath + '" stroke="' + COLOR_DIM + '" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />') +
+      ('<path d="' + graphPath + '" stroke="' + COLOR_ACCENT + '" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />') +
+      '</svg>';
+  } catch (e) {
+    return '<div class="empty-state">Chart failed</div>';
   }
 }
 
@@ -471,9 +555,19 @@ async function refreshGraph() {
   // Replace canvas element so we don't accumulate event listeners/animation loops
   const fresh = canvas.cloneNode(true);
   canvas.parentNode.replaceChild(fresh, canvas);
-  renderGraph(fresh, nodes.nodes ?? [], godNodes ?? []);
+  const nodeList = nodes.nodes ?? [];
+  // Fetch edges for the current node set (best-effort)
+  let edges = [];
+  try {
+    const ids = nodeList.slice(0, 400).map((n) => n.id).join(",");
+    const eResp = await api("/api/graph/edges?ids=" + encodeURIComponent(ids));
+    edges = (eResp && eResp.edges) || [];
+  } catch {
+    edges = [];
+  }
+  renderGraph(fresh, nodeList, godNodes ?? [], edges);
   renderMemoryLegend();
-  setText("graph-info", (nodes.nodes?.length ?? 0) + " of " + (nodes.total ?? 0) + " nodes shown");
+  setText("graph-info", (nodeList.length ?? 0) + " of " + (nodes.total ?? 0) + " nodes shown");
 }
 
 async function loadActivity() {
@@ -635,7 +729,18 @@ async function loadGraph() {
   if (!nodes) return;
   graphLoaded = true;
   const canvas = document.getElementById("graph-canvas");
-  if (canvas) renderGraph(canvas, nodes.nodes ?? [], godNodes ?? []);
+  if (canvas) {
+    const nodeList = nodes.nodes ?? [];
+    let edges = [];
+    try {
+      const ids = nodeList.slice(0, 400).map((n) => n.id).join(",");
+      const eResp = await api("/api/graph/edges?ids=" + encodeURIComponent(ids));
+      edges = (eResp && eResp.edges) || [];
+    } catch {
+      edges = [];
+    }
+    renderGraph(canvas, nodeList, godNodes ?? [], edges);
+  }
   // Render memory legend (colors/shapes)
   renderMemoryLegend();
   setText("graph-info", (nodes.nodes?.length ?? 0) + " of " + (nodes.total ?? 0) + " nodes shown");
@@ -682,6 +787,16 @@ async function loadProviders() {
 loadOverview();
 setInterval(loadOverview, 5000);
 initSSE();
+
+// Attach refresh button handler
+const rbtn = document.getElementById('tokens-refresh');
+if (rbtn) {
+  rbtn.addEventListener('click', async () => {
+    showToast('Refreshing token metrics...');
+    await loadOverview();
+    showToast('Token metrics updated', 1400);
+  });
+}
 `;
 
 /**

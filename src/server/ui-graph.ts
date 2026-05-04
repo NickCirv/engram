@@ -62,7 +62,7 @@ function pathShape(ctx, x, y, r, shape) {
  * Main entry point. Given a canvas element and node/edge data from
  * /api/graph/nodes and /api/graph/god-nodes, starts the simulation.
  */
-function renderGraph(canvas, nodes, godNodes) {
+function renderGraph(canvas, nodes, godNodes, edges) {
   // Stop any previous running simulation to avoid animation/handler leaks
   if (typeof window.__engram_graph_stop === 'function') {
     try { window.__engram_graph_stop(); } catch {}
@@ -100,6 +100,17 @@ function renderGraph(canvas, nodes, godNodes) {
     return;
   }
 
+  // Build a quick id->node map for edge wiring
+  const nodeById = new Map(sim.map((n) => [n.id, n]));
+  const springs = [];
+  if (Array.isArray(edges)) {
+    for (const e of edges) {
+      const a = nodeById.get(e.source);
+      const b = nodeById.get(e.target);
+      if (a && b) springs.push({ a, b, relation: e.relation });
+    }
+  }
+
   // Viewport transform (pan + zoom)
   let viewX = 0, viewY = 0, zoom = 1;
   let draggingView = false, dragStartX = 0, dragStartY = 0;
@@ -107,7 +118,7 @@ function renderGraph(canvas, nodes, godNodes) {
 
   // ─── Physics step ────────────────────────────────────────────
   const REPULSION = 1200;
-  const SPRING_K = 0.02;
+  const SPRING_K = 0.06;
   const SPRING_LENGTH = 80;
   const DAMPING = 0.85;
   const CENTER_GRAVITY = 0.003;
@@ -128,6 +139,21 @@ function renderGraph(canvas, nodes, godNodes) {
         a.vx -= fx; a.vy -= fy;
         b.vx += fx; b.vy += fy;
       }
+    }
+
+    // Spring attraction along edges
+    for (const s of springs) {
+      const a = s.a;
+      const b = s.b;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const target = SPRING_LENGTH;
+      const f = SPRING_K * (dist - target);
+      const fx = (dx / dist) * f;
+      const fy = (dy / dist) * f;
+      a.vx += fx; a.vy += fy;
+      b.vx -= fx; b.vy -= fy;
     }
 
     // Gravity toward viewport center — keeps disconnected components visible
@@ -152,6 +178,32 @@ function renderGraph(canvas, nodes, godNodes) {
     ctx.translate(viewX, viewY);
     ctx.scale(zoom, zoom);
 
+    // Draw edges (lines) first
+    const RELATION_STYLES = {
+      contains: { color: '#9CA3AF', width: 1, dash: [] },
+      imports: { color: '#60A5FA', width: 1, dash: [6,4] },
+      similar_to: { color: '#FBBF24', width: 1, dash: [2,4] },
+      depends_on: { color: '#10B981', width: 1.25, dash: [] },
+      triggered_by: { color: '#A78BFA', width: 1, dash: [4,3] },
+      rationale_for: { color: '#EF4444', width: 1, dash: [2,2] },
+      default: { color: '#6B7280', width: 0.9, dash: [] },
+    };
+
+    for (const s of springs) {
+      const a = s.a;
+      const b = s.b;
+      const style = RELATION_STYLES[s.relation] || RELATION_STYLES.default;
+      ctx.beginPath();
+      if (style.dash && ctx.setLineDash) ctx.setLineDash(style.dash);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = style.color;
+      ctx.lineWidth = style.width / zoom;
+      ctx.globalAlpha = 0.9;
+      ctx.stroke();
+      if (ctx.setLineDash) ctx.setLineDash([]);
+    }
+
     // Draw nodes
     for (const n of sim) {
       const radius = n.isGod ? 7 : 4;
@@ -162,7 +214,7 @@ function renderGraph(canvas, nodes, godNodes) {
       // Draw shape path
       pathShape(ctx, n.x, n.y, radius, shape);
       ctx.fillStyle = color;
-      ctx.globalAlpha = n.id === selectedId ? 1.0 : (n.isGod ? 0.95 : 0.75);
+      ctx.globalAlpha = n.id === selectedId ? 1.0 : (n.isGod ? 0.95 : 0.85);
       ctx.fill();
 
       if (n.id === selectedId) {
