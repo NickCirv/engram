@@ -22,7 +22,7 @@
     "build": "tsup && node scripts/bundle-grammars.mjs",
     "build:nogrammars": "tsup",
     "dev": "tsup --watch",
-    "dev:reload": "nodemon --watch src --watch package.json --ext ts,js,json --exec \"npm run build && node dist/cli.js server --port 7337 -p $(pwd)\"",
+    "dev:reload": "nodemon --watch src --watch package.json --ext ts,js,json --exec \"bash scripts/dev-reload.sh\"",
     "test": "vitest",
     "lint": "tsc --noEmit",
     "prepublishOnly": "npm run build",
