@@ -689,7 +689,7 @@ async function refreshGraph() {
   }
 
   renderGraph(fresh, nodeList, godNodes ?? [], edges);
-  renderMemoryLegend(nodeList);
+  renderMemoryLegend(nodeList, edges, nodes.total ?? null);
   setText("graph-info", (nodeList.length ?? 0) + " nodes, " + (edges.length ?? 0) + " edges — " + (nodes.total ?? 0) + " total");
 }
 
@@ -827,38 +827,97 @@ function renderLegendIcon(shape, color) {
   }
 }
 
-function renderMemoryLegend(nodes) {
+function renderMemoryLegend(nodes, edges, nodesTotal) {
   const el = document.getElementById("graph-legend");
   if (!el || typeof MEMORY_SCOPE_CONFIG === "undefined") return;
   const keys = ["project", "global", "entity"];
 
-  // Compute counts from provided nodes if available; otherwise show dashes
-  const counts = { project: 0, global: 0, entity: 0 };
+  // Totals (best-effort) from provided nodes
+  const totalsNodes = { project: 0, global: 0, entity: 0 };
   if (Array.isArray(nodes)) {
     for (const n of nodes) {
       try {
         const meta = n.metadata || {};
         const ms = (meta.memoryScope || meta.memory_scope) || "project";
-        if (ms === "global") counts.global++;
-        else if (ms === "entity") counts.entity++;
-        else counts.project++;
+        if (ms === "global") totalsNodes.global++;
+        else if (ms === "entity") totalsNodes.entity++;
+        else totalsNodes.project++;
       } catch {
-        counts.project++;
+        totalsNodes.project++;
       }
     }
   }
 
-  el.innerHTML = keys
-    .map((k) => {
-      const cfg = MEMORY_SCOPE_CONFIG[k] || MEMORY_SCOPE_CONFIG.default;
-      const icon = renderLegendIcon(cfg.shape, cfg.color);
-      const label = esc(cfg.label) + ' (' + (counts[k] != null ? counts[k] : '—') + ')';
-      return '<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;">' +
-        '<div>' + icon + '</div>' +
-        '<div style="color: var(--text-dim); font-family: var(--mono); font-size:12px;">' + label + '</div>' +
-        '</div>';
-    })
-    .join('');
+  // Totals for edges (best-effort) — classify an edge by its endpoints' scope
+  const totalsEdges = { project: 0, global: 0, entity: 0, cross: 0 };
+  if (Array.isArray(edges)) {
+    // Build quick id->scope map from the provided nodes
+    const idToScope = new Map();
+    if (Array.isArray(nodes)) {
+      for (const n of nodes) {
+        const ms = (n.metadata && (n.metadata.memoryScope || n.metadata.memory_scope)) || 'project';
+        idToScope.set(n.id, ms);
+      }
+    }
+    for (const e of edges) {
+      const s = idToScope.get(e.source) || 'project';
+      const t = idToScope.get(e.target) || 'project';
+      if (s === t) totalsEdges[s] = (totalsEdges[s] || 0) + 1;
+      else totalsEdges.cross = (totalsEdges.cross || 0) + 1;
+    }
+  }
+
+  // Visible counts are provided by the running render (set on window)
+  const visibleIds = Array.isArray(window.__engram_graph_visibleNodes) ? window.__engram_graph_visibleNodes : [];
+  const visibleEdges = Array.isArray(window.__engram_graph_visibleEdges) ? window.__engram_graph_visibleEdges : [];
+
+  const idToScopeForVisible = new Map();
+  if (Array.isArray(nodes)) {
+    for (const n of nodes) {
+      const ms = (n.metadata && (n.metadata.memoryScope || n.metadata.memory_scope)) || 'project';
+      idToScopeForVisible.set(n.id, ms);
+    }
+  }
+
+  const visibleNodes = { project: 0, global: 0, entity: 0 };
+  for (const id of visibleIds) {
+    const ms = idToScopeForVisible.get(id) || 'project';
+    if (ms === 'global') visibleNodes.global++;
+    else if (ms === 'entity') visibleNodes.entity++;
+    else visibleNodes.project++;
+  }
+
+  const visibleEdgesCounts = { project: 0, global: 0, entity: 0, cross: 0 };
+  for (const e of visibleEdges) {
+    const s = idToScopeForVisible.get(e.source) || 'project';
+    const t = idToScopeForVisible.get(e.target) || 'project';
+    if (s === t) visibleEdgesCounts[s] = (visibleEdgesCounts[s] || 0) + 1;
+    else visibleEdgesCounts.cross = (visibleEdgesCounts.cross || 0) + 1;
+  }
+
+  // Render two rows: Total and Visible. Each row shows project/global/personal (nodes / edges)
+  const totalLabel = nodesTotal != null ? ('total: ' + nodesTotal) : '';
+  const rowBox = (label, nCount, eCount, accent) => {
+    const color = accent ? 'color: var(--accent);' : 'color: var(--text);';
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;min-width:120px;">' +
+      '<div style="font-family:var(--mono);font-size:12px;'+ color + '">' + esc(label) + '</div>' +
+      '<div style="font-family:var(--mono);font-size:12px;color:var(--text-dim);">' + esc(nCount) + ' nodes / ' + esc(eCount) + ' edges</div>' +
+      '</div>';
+  };
+
+  const projectBoxTotal = rowBox(MEMORY_SCOPE_CONFIG.project.label, totalsNodes.project || 0, totalsEdges.project || 0, false);
+  const globalBoxTotal = rowBox(MEMORY_SCOPE_CONFIG.global.label, totalsNodes.global || 0, totalsEdges.global || 0, false);
+  const personalBoxTotal = rowBox(MEMORY_SCOPE_CONFIG.entity.label, totalsNodes.entity || 0, totalsEdges.entity || 0, false);
+
+  const projectBoxVisible = rowBox(MEMORY_SCOPE_CONFIG.project.label, visibleNodes.project || 0, visibleEdgesCounts.project || 0, true);
+  const globalBoxVisible = rowBox(MEMORY_SCOPE_CONFIG.global.label, visibleNodes.global || 0, visibleEdgesCounts.global || 0, true);
+  const personalBoxVisible = rowBox(MEMORY_SCOPE_CONFIG.entity.label, visibleNodes.entity || 0, visibleEdgesCounts.entity || 0, true);
+
+  el.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;align-items:center;">' +
+    '<div style="font-family:var(--mono);font-size:12px;color:var(--text-dim);">' + esc(totalLabel) + '</div>' +
+    '<div style="display:flex;gap:12px;justify-content:center;align-items:center;">' + projectBoxTotal + globalBoxTotal + personalBoxTotal + '</div>' +
+    '<div style="display:flex;gap:12px;justify-content:center;align-items:center;">' + projectBoxVisible + globalBoxVisible + personalBoxVisible + '</div>' +
+    '</div>';
 }
 
 async function loadGraph() {
@@ -903,7 +962,7 @@ async function loadGraph() {
     setText("graph-info", (nodeList.length ?? 0) + " nodes, " + (edges.length ?? 0) + " edges — " + (nodes.total ?? 0) + " total");
   }
   // Render memory legend (colors/shapes)
-  renderMemoryLegend(nodes.nodes || []);
+  renderMemoryLegend(nodeList, edges, nodes.total ?? null);
 }
 
 // ─── Tab: Providers ───────────────────────────────────────────

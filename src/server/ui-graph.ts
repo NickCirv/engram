@@ -40,6 +40,13 @@ const MEMORY_SCOPE_CONFIG = {
   default: { color: "#71717a", shape: "circle", label: "Unknown" },
 };
 
+// Visual consolidation & distribution knobs
+const TOTAL_VISUAL_BUDGET = 200;    // combined visual budget baseline (nodes + edges)
+const NODE_PROP = 2 / 3;            // fraction of budget aimed at nodes
+const EDGE_PROP = 1 - NODE_PROP;    // fraction for edges
+const SCOPE_RATIOS = { project: 0.5, global: 0.25, entity: 0.25 };
+const MINORITY_THRESHOLD = 0.05;    // scopes under 5% are treated as "minorities" and preserved
+
 function pathShape(ctx, x, y, r, shape) {
   ctx.beginPath();
   if (shape === "circle") {
@@ -83,10 +90,6 @@ function renderGraph(canvas, nodes, godNodes, edges) {
   // Build simulation nodes with random starting positions near center.
   // Default memoryScope to 'project' when missing so code files show as
   // project-scope nodes by default.
-  // Limit the number of simulated nodes to keep the layout responsive
-  // on typical browsers. We'll seed initial positions based on edge
-  // degrees so connected nodes start clustered (avoids grid artifacts).
-  const MAX_SIM_NODES = 600;
 
   // Build a map of nodes (include placeholders for any edge endpoints
   // that the server didn't return). This ensures springs can be wired
@@ -110,18 +113,148 @@ function renderGraph(canvas, nodes, godNodes, edges) {
     }
   }
 
-  // Compute average degree (fallback to 1)
-  let totalDeg = 0;
-  for (const v of degreeMap.values()) totalDeg += v;
-  const avgDeg = degreeMap.size > 0 ? totalDeg / degreeMap.size : 1;
-  const radiusOuter = Math.min(W, H) * 0.45;
-  const radiusInner = Math.min(W, H) * 0.08;
+  // Consolidation helper: choose a subset of nodes/edges to render that
+  // respects a global visual budget, scope distribution, and minority
+  // preservation.
+  function consolidateNodesAndEdges(allNodesArr, allEdgesArr, godIdsSet) {
+    const totalAvailable = allNodesArr.length;
+    const nodesBudget = Math.max(10, Math.floor(TOTAL_VISUAL_BUDGET * NODE_PROP));
+    const edgesBudget = Math.max(5, TOTAL_VISUAL_BUDGET - nodesBudget);
 
-  // Prioritize nodes with higher degree so we include connected endpoints
-  // in the simulated subset when the graph is large.
-  const combined = Array.from(nodeMapAll.values());
-  combined.sort((a, b) => (degreeMap.get(b.id) || 0) - (degreeMap.get(a.id) || 0));
-  const candidateNodes = combined.slice(0, MAX_SIM_NODES);
+    // If the data is already small, return fast
+    if (totalAvailable <= nodesBudget) {
+      const keptNodes = allNodesArr.slice();
+      const keptNodeIds = new Set(keptNodes.map(n => n.id));
+      let keptEdges = (Array.isArray(allEdgesArr) ? allEdgesArr.slice() : []).filter(e => keptNodeIds.has(e.source) && keptNodeIds.has(e.target));
+      // score & trim edges if needed
+      if (keptEdges.length > edgesBudget) {
+        keptEdges.sort((a, b) => edgeScore(b) - edgeScore(a));
+        keptEdges = keptEdges.slice(0, edgesBudget);
+      }
+      return { nodes: keptNodes, edges: keptEdges };
+    }
+
+    // Bucket nodes by memory scope
+    const buckets = { project: [], global: [], entity: [] };
+    for (const n of allNodesArr) {
+      try {
+        const meta = n.metadata || {};
+        const ms = (meta.memoryScope || meta.memory_scope) || 'project';
+        if (ms === 'global') buckets.global.push(n);
+        else if (ms === 'entity' || ms === 'personal') buckets.entity.push(n);
+        else buckets.project.push(n);
+      } catch {
+        buckets.project.push(n);
+      }
+    }
+
+    // initial allocation by configured ratios
+    const initialAlloc = {
+      project: Math.floor(nodesBudget * SCOPE_RATIOS.project),
+      global: Math.floor(nodesBudget * SCOPE_RATIOS.global),
+      entity: Math.floor(nodesBudget * SCOPE_RATIOS.entity),
+    };
+
+    const minMinorityCount = Math.max(1, Math.floor(totalAvailable * MINORITY_THRESHOLD));
+
+    const alloc = { project: 0, global: 0, entity: 0 };
+    for (const k of Object.keys(initialAlloc)) {
+      const avail = buckets[k].length;
+      if (avail <= initialAlloc[k] || avail <= minMinorityCount) {
+        alloc[k] = avail; // preserve small groups entirely
+      } else {
+        alloc[k] = initialAlloc[k];
+      }
+    }
+
+    // Redistribute any remaining budget to scopes that still need nodes
+    let remaining = nodesBudget - (alloc.project + alloc.global + alloc.entity);
+    while (remaining > 0) {
+      const needs = {
+        project: Math.max(0, buckets.project.length - alloc.project),
+        global: Math.max(0, buckets.global.length - alloc.global),
+        entity: Math.max(0, buckets.entity.length - alloc.entity),
+      };
+      const totalNeed = needs.project + needs.global + needs.entity;
+      if (totalNeed === 0) break;
+      let assigned = 0;
+      for (const k of ['project', 'global', 'entity']) {
+        if (needs[k] <= 0) continue;
+        const extra = Math.max(1, Math.floor(remaining * (needs[k] / totalNeed)));
+        const give = Math.min(extra, needs[k]);
+        alloc[k] += give;
+        assigned += give;
+      }
+      if (assigned === 0) {
+        // fallback: assign one-by-one round-robin
+        for (const k of ['project', 'global', 'entity']) {
+          if (alloc[k] < buckets[k].length && remaining > 0) { alloc[k]++; remaining--; }
+        }
+        break;
+      }
+      remaining -= assigned;
+    }
+
+    // Score function for nodes: prefer god nodes and higher degree
+    function nodeScore(n) {
+      const deg = degreeMap.get(n.id) || 0;
+      const godBoost = godIdsSet && godIdsSet.has(n.id) ? 2000 : 0;
+      return godBoost + deg;
+    }
+
+    // Pick top nodes per bucket by nodeScore
+    const keptNodes = [];
+    for (const k of ['project', 'global', 'entity']) {
+      const arr = buckets[k].slice();
+      arr.sort((a, b) => nodeScore(b) - nodeScore(a));
+      const take = Math.min(arr.length, alloc[k]);
+      for (let i = 0; i < take; i++) keptNodes.push(arr[i]);
+    }
+
+    // If we still have leftover slots (due to rounding), fill with highest-scoring remaining nodes
+    if (keptNodes.length < nodesBudget) {
+      const keptIds = new Set(keptNodes.map(n => n.id));
+      const rem = allNodesArr.filter(n => !keptIds.has(n.id));
+      rem.sort((a, b) => nodeScore(b) - nodeScore(a));
+      for (let i = 0; i < Math.min(rem.length, nodesBudget - keptNodes.length); i++) keptNodes.push(rem[i]);
+    }
+
+    const keptNodeIds = new Set(keptNodes.map(n => n.id));
+
+    // Edge score: prefer edges between high-degree nodes, god-involving edges, and keep minority-scope edges slightly boosted
+    function edgeScore(e) {
+      const sDeg = degreeMap.get(e.source) || 0;
+      const tDeg = degreeMap.get(e.target) || 0;
+      const godBoost = (godIdsSet && (godIdsSet.has(e.source) || godIdsSet.has(e.target))) ? 200 : 0;
+      let scopeBoost = 0;
+      try {
+        const sScope = (nodeMapAll.get(e.source) && ((nodeMapAll.get(e.source).metadata && (nodeMapAll.get(e.source).metadata.memoryScope || nodeMapAll.get(e.source).metadata.memory_scope)))) || 'project';
+        const tScope = (nodeMapAll.get(e.target) && ((nodeMapAll.get(e.target).metadata && (nodeMapAll.get(e.target).metadata.memoryScope || nodeMapAll.get(e.target).metadata.memory_scope)))) || 'project';
+        const total = allNodesArr.length || 1;
+        // If either endpoint belongs to a small/minority scope, slightly boost the edge
+        if ((sScope === 'global' && buckets.global.length / total < MINORITY_THRESHOLD) ||
+            (tScope === 'global' && buckets.global.length / total < MINORITY_THRESHOLD) ||
+            (sScope === 'entity' && buckets.entity.length / total < MINORITY_THRESHOLD) ||
+            (tScope === 'entity' && buckets.entity.length / total < MINORITY_THRESHOLD)) {
+          scopeBoost = 20;
+        }
+      } catch (ex) {}
+      return sDeg + tDeg + godBoost + scopeBoost;
+    }
+
+    // Collect candidate edges that connect kept nodes
+    let keptEdges = (Array.isArray(allEdgesArr) ? allEdgesArr.slice() : []).filter(e => keptNodeIds.has(e.source) && keptNodeIds.has(e.target));
+    if (keptEdges.length > edgesBudget) {
+      keptEdges.sort((a, b) => edgeScore(b) - edgeScore(a));
+      keptEdges = keptEdges.slice(0, edgesBudget);
+    }
+
+    return { nodes: keptNodes, edges: keptEdges };
+  }
+
+  // Use consolidation to produce the simulated subset (this keeps layout responsive)
+  const combined = consolidateNodesAndEdges(Array.from(nodeMapAll.values()), Array.isArray(edges) ? edges : [], godIds);
+  const candidateNodes = combined.nodes.slice(0, 600); // safety cap for layout
 
   // Cluster by project when multiple projectRoots are present (useful
   // for the 'global' memory-scope view where nodes come from many projects).
@@ -168,7 +301,7 @@ function renderGraph(canvas, nodes, godNodes, edges) {
       for (let j = 0; j < nodesInCluster.length; j++) {
         const n = nodesInCluster[j];
         const deg = degreeMap.get(n.id) || 0;
-        const weight = Math.min(1, deg / Math.max(1, avgDeg));
+        const weight = Math.min(1, deg / Math.max(1, (Array.from(degreeMap.values()).reduce((s, v) => s + v, 0) / Math.max(1, degreeMap.size))));
         let x, y;
         if (godIdForProject && n.id === godIdForProject) {
           // Place god node at cluster center
@@ -197,8 +330,11 @@ function renderGraph(canvas, nodes, godNodes, edges) {
       const deg = degreeMap.get(n.id) || 0;
       // pick an angle and radius biased by degree
       const angle = (idx / Math.max(1, candidateNodes.length)) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+      const avgDeg = degreeMap.size > 0 ? (Array.from(degreeMap.values()).reduce((s, v) => s + v, 0) / degreeMap.size) : 1;
       const weight = Math.min(1, deg / Math.max(1, avgDeg));
       // nodes with higher degree sit closer to center
+      const radiusOuter = Math.min(W, H) * 0.45;
+      const radiusInner = Math.min(W, H) * 0.08;
       const r = radiusInner + (1 - weight) * (radiusOuter - radiusInner) * (0.25 + Math.random() * 0.75);
       const x = W / 2 + Math.cos(angle) * r + (Math.random() - 0.5) * 20;
       const y = H / 2 + Math.sin(angle) * r + (Math.random() - 0.5) * 20;
@@ -234,10 +370,18 @@ function renderGraph(canvas, nodes, godNodes, edges) {
     }
   }
 
+  // Expose visible nodes/edges so other UI pieces (legend) can summarize
+  try {
+    window.__engram_graph_visibleNodes = sim.map(n => n.id);
+    window.__engram_graph_visibleEdges = springs.map(s => ({ source: s.a.id, target: s.b.id, relation: s.relation }));
+  } catch (e) {}
+
   // Viewport transform (pan + zoom)
   let viewX = 0, viewY = 0, zoom = 1;
   let draggingView = false, dragStartX = 0, dragStartY = 0;
   let selectedId = null;
+  let selectedEdge = null;
+  let lastMouseX = null, lastMouseY = null;
 
   // ─── Physics step (tuned to settle faster and avoid long oscillations) ───
   // REPULSION scales down for large graphs (so springs can pull clusters together)
@@ -465,7 +609,7 @@ function renderGraph(canvas, nodes, godNodes, edges) {
   }
   tick();
 
-  // ─── Interaction: pan ───────────────────────────────────────
+  // ─── Interaction: pan + selection ───────────────────────────────────────
   canvas.addEventListener("mousedown", (e) => {
     const x = e.offsetX;
     const y = e.offsetY;
@@ -473,31 +617,66 @@ function renderGraph(canvas, nodes, godNodes, edges) {
     // Hit test for node click (world coords)
     const worldX = (x - viewX) / zoom;
     const worldY = (y - viewY) / zoom;
-    let clicked = null;
+    let clickedNode = null;
     for (const n of sim) {
       const dx = n.x - worldX;
       const dy = n.y - worldY;
       const radius = n.isGod ? 7 : 4;
       if (dx * dx + dy * dy < (radius + 3) * (radius + 3)) {
-        clicked = n;
+        clickedNode = n;
         break;
       }
     }
 
-    if (clicked) {
-      selectedId = clicked.id;
+    if (clickedNode) {
+      selectedId = clickedNode.id;
+      selectedEdge = null;
       const info = document.getElementById("graph-info");
       if (info) {
-        info.textContent = clicked.kind + " · " + clicked.label + (clicked.isGod ? " (god node)" : "");
+        info.textContent = clickedNode.kind + " · " + clickedNode.label + (clickedNode.isGod ? " (god node)" : "");
       }
     } else {
-      draggingView = true;
-      dragStartX = x - viewX;
-      dragStartY = y - viewY;
+      // If no node clicked, attempt an edge hit-test (pick the nearest segment)
+      let clickedEdge = null;
+      let bestDist = Infinity;
+      for (const s of springs) {
+        // distance from point to segment AB
+        const ax = s.a.x, ay = s.a.y, bx = s.b.x, by = s.b.y;
+        const px = worldX, py = worldY;
+        const dx = bx - ax, dy = by - ay;
+        const l2 = dx * dx + dy * dy;
+        let t = 0;
+        if (l2 > 0) t = ((px - ax) * dx + (py - ay) * dy) / l2;
+        t = Math.max(0, Math.min(1, t));
+        const projx = ax + t * dx, projy = ay + t * dy;
+        const dist2 = (projx - px) * (projx - px) + (projy - py) * (projy - py);
+        if (dist2 < bestDist) {
+          bestDist = dist2;
+          clickedEdge = s;
+        }
+      }
+      // threshold in world coords (approx)
+      if (clickedEdge && bestDist < (12 * 12)) {
+        selectedEdge = clickedEdge;
+        selectedId = null;
+        const info = document.getElementById("graph-info");
+        if (info) {
+          info.textContent = (selectedEdge.relation || 'edge') + ' · ' + selectedEdge.a.label + ' ↔ ' + selectedEdge.b.label;
+        }
+      } else {
+        // Start panning
+        draggingView = true;
+        dragStartX = x - viewX;
+        dragStartY = y - viewY;
+        selectedId = null;
+        selectedEdge = null;
+      }
     }
   });
 
   canvas.addEventListener("mousemove", (e) => {
+    lastMouseX = e.offsetX;
+    lastMouseY = e.offsetY;
     if (draggingView) {
       viewX = e.offsetX - dragStartX;
       viewY = e.offsetY - dragStartY;
@@ -507,7 +686,7 @@ function renderGraph(canvas, nodes, godNodes, edges) {
   canvas.addEventListener("mouseup", () => { draggingView = false; });
   canvas.addEventListener("mouseleave", () => { draggingView = false; });
 
-  // ─── Interaction: zoom ──────────────────────────────────────
+  // ─── Interaction: zoom (wheel + keyboard) ──────────────────────────────────────
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
     const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1;
@@ -520,6 +699,52 @@ function renderGraph(canvas, nodes, godNodes, edges) {
     viewY = my - ((my - viewY) * newZoom) / zoom;
     zoom = newZoom;
   }, { passive: false });
+
+  // Keyboard zoom: - / = keys. Center on selected node/edge if any, else on
+  // the last mouse cursor position.
+  function keyboardZoom(zoomDelta) {
+    const newZoom = Math.max(0.2, Math.min(3, zoom * zoomDelta));
+    if (selectedId) {
+      const n = nodeById.get(selectedId);
+      if (n) {
+        // center selected node in viewport at newZoom
+        viewX = (W / 2) - (n.x * newZoom);
+        viewY = (H / 2) - (n.y * newZoom);
+        zoom = newZoom;
+        return;
+      }
+    }
+    if (selectedEdge) {
+      const a = selectedEdge.a, b = selectedEdge.b;
+      const cx = (a.x + b.x) / 2;
+      const cy = (a.y + b.y) / 2;
+      viewX = (W / 2) - (cx * newZoom);
+      viewY = (H / 2) - (cy * newZoom);
+      zoom = newZoom;
+      return;
+    }
+    // Anchor on mouse cursor screen coords if available
+    if (lastMouseX != null && lastMouseY != null) {
+      const mx = lastMouseX;
+      const my = lastMouseY;
+      viewX = mx - ((mx - viewX) * newZoom) / zoom;
+      viewY = my - ((my - viewY) * newZoom) / zoom;
+      zoom = newZoom;
+      return;
+    }
+    // fallback: center viewport
+    viewX = (W / 2) - ((W / 2 - viewX) * newZoom) / zoom;
+    viewY = (H / 2) - ((H / 2 - viewY) * newZoom) / zoom;
+    zoom = newZoom;
+  }
+
+  window.addEventListener('keydown', (ev) => {
+    if (ev.key === '-' || ev.key === '_') {
+      keyboardZoom(0.9);
+    } else if (ev.key === '=' || ev.key === '+' ) {
+      keyboardZoom(1.1);
+    }
+  });
 }
 `;
 }
