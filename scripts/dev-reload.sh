@@ -7,8 +7,12 @@ PIDFILE="$PROJECT_ROOT/.engram/http-server.pid"
 
 echo "[dev-reload] port=$PORT project=$PROJECT_ROOT"
 
-# Kill anything listening on the target port (127.0.0.1:$PORT)
-pids=$(lsof -ti TCP:127.0.0.1:${PORT} -sTCP:LISTEN || true)
+# Kill anything listening on the target port. Try a portable lsof invocation.
+# Some lsof builds dislike the 127.0.0.1:PORT form — try a couple of variants.
+pids=$(lsof -ti "tcp:${PORT}" -sTCP:LISTEN 2>/dev/null || true)
+if [ -z "$pids" ]; then
+  pids=$(lsof -ti "TCP:${PORT}" -sTCP:LISTEN 2>/dev/null || true)
+fi
 if [ -n "$pids" ]; then
   echo "[dev-reload] killing processes listening on 127.0.0.1:${PORT}: $pids"
   echo "$pids" | xargs -r kill -9 || true
