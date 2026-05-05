@@ -21,7 +21,7 @@
  * any other persistent storage. Only metadata about the injection
  * decision (yes/no) may be logged.
  */
-import { query, computeKeywordIDF } from "../../core.js";
+import { query, computeKeywordIDF, learn } from "../../core.js";
 import { findProjectRoot, isValidCwd } from "../context.js";
 import { isHookDisabled, PASSTHROUGH, type HandlerResult } from "../safety.js";
 import { buildSessionContextResponse } from "../formatter.js";
@@ -162,6 +162,19 @@ export async function handleUserPromptSubmit(
   if (projectRoot === null) return PASSTHROUGH;
 
   if (isHookDisabled(projectRoot)) return PASSTHROUGH;
+
+  // Explicit memory requests: if the user explicitly asks the agent to
+  // remember/save/store this prompt, persist it to the project's memory.
+  // Fire-and-forget so we don't delay the hook response. We bypass the
+  // autoMemoryEnabled flag for explicit user requests.
+  try {
+    const explicitRemember = /^\s*(?:remember|save|store|dont forget|don't forget|note)\b/i;
+    if (explicitRemember.test(prompt)) {
+      void learn(projectRoot, prompt, "user:remember", "project").catch(() => {});
+    }
+  } catch {
+    /* swallow */
+  }
 
   // v0.3.1: TF-IDF common-term filter.
   //

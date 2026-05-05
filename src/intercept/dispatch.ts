@@ -52,6 +52,7 @@ import {
   handleCwdChanged,
   type CwdChangedHookPayload,
 } from "./handlers/cwd-changed.js";
+import { handleAssistantMessage, type AssistantMessagePayload } from "./handlers/assistant-message.js";
 import { findProjectRoot, isValidCwd } from "./context.js";
 import { resolve as resolvePath } from "node:path";
 import { getStore } from "../core.js";
@@ -148,6 +149,11 @@ export async function dispatchHook(
     case "CwdChanged":
       return runHandler(() =>
         handleCwdChanged(payload as unknown as CwdChangedHookPayload)
+      );
+
+    case "AssistantMessage":
+      return runHandler(() =>
+        handleAssistantMessage(payload as unknown as AssistantMessagePayload)
       );
 
     default:

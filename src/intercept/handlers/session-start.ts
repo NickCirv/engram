@@ -232,9 +232,11 @@ export async function handleSessionStart(
 ): Promise<HandlerResult> {
   if (payload.hook_event_name !== "SessionStart") return PASSTHROUGH;
 
-  // Skip resumed sessions — they already have prior context.
+  // Include resumed sessions too — inject the brief even on resume so
+  // session context is always available to the agent. onSessionStart is
+  // idempotent / dedupes, so repeated injections are safe.
   const source = payload.source ?? "startup";
-  if (source === "resume") return PASSTHROUGH;
+  // fall through for 'resume' — inject on resume as well.
 
   // cwd must be a real absolute directory. Anything else causes
   // findProjectRoot to walk from the ambient process cwd, which could
