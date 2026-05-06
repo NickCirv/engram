@@ -506,6 +506,223 @@ async function handleLearn(
   }
 }
 
+/**
+ * Classify a short assistant message for memory-worthiness using an
+ * optional configured LLM provider (OpenAI/Anthropic). If no provider
+ * is configured or the provider call fails, return a conservative
+ * heuristic-based result.
+ */
+async function handleClassify(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): Promise<void> {
+  let body: string;
+  try {
+    body = await readBody(req);
+  } catch {
+    json(res, 400, { error: "Failed to read request body" });
+    return;
+  }
+
+  let parsed: { content?: string };
+  try {
+    parsed = JSON.parse(body) as typeof parsed;
+  } catch {
+    json(res, 400, { error: "Invalid JSON body" });
+    return;
+  }
+
+  const content = (parsed.content ?? "").toString().trim();
+  if (!content) {
+    json(res, 400, { error: "Missing 'content' in request body" });
+    return;
+  }
+
+  // Local heuristic fallback (same as the PI-side detector but server-side)
+  function heuristic(text: string) {
+    const trimmed = text.trim();
+    const markerRegex = /\[engram:([a-z0-9_-]+)(?:\s*:\s*([^\]]+))?\]/i;
+    const markerMatch = trimmed.match(markerRegex);
+    if (markerMatch) {
+      const markerType = (markerMatch[1] || "remember").toLowerCase();
+      const metaStr = markerMatch[2] || "";
+      const meta: Record<string, string> = {};
+      if (metaStr) {
+        for (const part of metaStr.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)) {
+          const kv = part.split("=");
+          if (kv.length === 2) meta[kv[0].toLowerCase()] = kv[1];
+          else meta[part.toLowerCase()] = "true";
+        }
+      }
+      const scope = meta.scope || (markerType === "global" ? "global" : "project");
+      const summary = trimmed.replace(markerRegex, "").trim() || trimmed;
+      return { shouldSave: true, type: meta.type || markerType, scope, summary, confidence: 0.95, reason: "explicit-marker" };
+    }
+
+    const htmlMatch = trimmed.match(/<memory>([\s\S]*?)<\/memory>/i);
+    if (htmlMatch) {
+      const inner = (htmlMatch[1] || "").trim();
+      return { shouldSave: true, type: "assistant-tag", scope: "project", summary: inner || trimmed, confidence: 0.9, reason: "html-tag" };
+    }
+
+    const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const headerRegex = /^(conclusion|summary|takeaway|decided|decision|recommendation|proposal|idea|problem|issue|note|observation)[:\s\-]/i;
+    for (const line of lines) {
+      const m = line.match(headerRegex);
+      if (m) {
+        const t = (m[1] || "summary").toLowerCase();
+        const scope = t === "idea" ? "entity" : "project";
+        return { shouldSave: true, type: t, scope, summary: line, confidence: 0.85, reason: "line-header" };
+      }
+    }
+
+    if (/\bI recommend\b|\bwe should\b|\bI suggest\b|\bmy recommendation\b|\bshould be refactored\b/i.test(trimmed)) {
+      return { shouldSave: true, type: "recommendation", scope: "project", summary: trimmed.slice(0, 1000), confidence: 0.8, reason: "recommendation-phrase" };
+    }
+
+    if (/in summary|overall|to summarize|in conclusion|takeaway[:\s]/i.test(trimmed)) {
+      return { shouldSave: true, type: "summary", scope: "project", summary: trimmed.slice(0, 1000), confidence: 0.8, reason: "summary-phrase" };
+    }
+
+    if (/\b(problem|bug|issue|regression)\b/i.test(trimmed) && /\breproduce|steps to reproduce|steps to repro|cause\b/i.test(trimmed)) {
+      return { shouldSave: true, type: "problem", scope: "project", summary: trimmed.slice(0, 1500), confidence: 0.85, reason: "problem-detailed" };
+    }
+
+    return { shouldSave: false, confidence: 0.0, reason: "heuristic-none" };
+  }
+
+  // If no AI backend configured, return heuristic result.
+  const openaiKey = process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || null;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY || null;
+  const providerEnv = (process.env.ENGRAM_AI_PROVIDER || "").toLowerCase();
+
+  const heuristicResult = heuristic(content);
+
+  if (!openaiKey && !anthropicKey) {
+    json(res, 200, heuristicResult);
+    return;
+  }
+
+  // Prefer OpenAI if configured or providerEnv explicitly set to openai
+  const useOpenAI = Boolean(openaiKey) && (providerEnv === "openai" || !anthropicKey);
+
+  // Build a concise instruction for the LLM to emit JSON only.
+  const systemPrompt = `You are a concise classifier. Decide whether the given assistant message should be stored in project memory as a durable memory. Respond with a single JSON object only, no surrounding text. Fields: shouldSave (boolean), type (one of: conclusion, summary, recommendation, idea, problem, note, other), scope (one of: project, global, entity), summary (short one-line <=160 chars), confidence (0.0-1.0).`;
+  const userPrompt = `Message:\n${content}\n\nReturn the JSON object only.`;
+
+  try {
+    if (useOpenAI) {
+      // Call OpenAI Chat Completions
+      const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+      const controller = new AbortController();
+      const to = Number(process.env.ENGRAM_AI_TIMEOUT_MS ?? 8000);
+      const timer = setTimeout(() => controller.abort(), to);
+      try {
+        const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${openaiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            max_tokens: 512,
+            temperature: 0.0,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+
+        if (!resp.ok) {
+          const txt = await resp.text();
+          // On failure, return heuristic
+          json(res, 200, { ...heuristicResult, note: `openai_error:${resp.status}` });
+          return;
+        }
+
+        const data = await resp.json();
+        const text = (data.choices && data.choices[0] && (data.choices[0].message?.content ?? data.choices[0].text)) || "";
+        // Extract first JSON object in the text
+        const jsMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsMatch) {
+          json(res, 200, heuristicResult);
+          return;
+        }
+        try {
+          const parsedJson = JSON.parse(jsMatch[0]);
+          // sanitize fields
+          parsedJson.confidence = Number(parsedJson.confidence) || 0.0;
+          parsedJson.shouldSave = Boolean(parsedJson.shouldSave);
+          parsedJson.type = parsedJson.type || "other";
+          parsedJson.scope = parsedJson.scope || "project";
+          parsedJson.summary = (parsedJson.summary || content.slice(0, 300)).toString().slice(0, 200);
+          json(res, 200, parsedJson);
+          return;
+        } catch {
+          json(res, 200, heuristicResult);
+          return;
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    } else {
+      // Anthropic path (best-effort)
+      const model = process.env.ANTHROPIC_MODEL || "claude-v1";
+      const controller = new AbortController();
+      const to = Number(process.env.ENGRAM_AI_TIMEOUT_MS ?? 8000);
+      const timer = setTimeout(() => controller.abort(), to);
+      try {
+        const prompt = `${systemPrompt}\n\n${userPrompt}`;
+        const resp = await fetch("https://api.anthropic.com/v1/complete", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${anthropicKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ model, prompt, max_tokens_to_sample: 512, temperature: 0.0 }),
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        if (!resp.ok) {
+          json(res, 200, { ...heuristicResult, note: `anthropic_error:${resp.status}` });
+          return;
+        }
+        const data = await resp.json();
+        const text = data?.completion ?? "";
+        const jsMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsMatch) {
+          json(res, 200, heuristicResult);
+          return;
+        }
+        try {
+          const parsedJson = JSON.parse(jsMatch[0]);
+          parsedJson.confidence = Number(parsedJson.confidence) || 0.0;
+          parsedJson.shouldSave = Boolean(parsedJson.shouldSave);
+          parsedJson.type = parsedJson.type || "other";
+          parsedJson.scope = parsedJson.scope || "project";
+          parsedJson.summary = (parsedJson.summary || content.slice(0, 300)).toString().slice(0, 200);
+          json(res, 200, parsedJson);
+          return;
+        } catch {
+          json(res, 200, heuristicResult);
+          return;
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  } catch (err) {
+    // Any classifier failure falls back to heuristic
+    json(res, 200, { ...heuristicResult, note: `classifier_error:${String(err)}` });
+    return;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Dashboard API handlers
 // ---------------------------------------------------------------------------
@@ -1307,6 +1524,8 @@ export function createHttpServer(
           handleProviders(req, res);
         } else if (req.method === "POST" && path === "/learn") {
           await handleLearn(req, res, projectRoot);
+        } else if (req.method === "POST" && path === "/classify") {
+          await handleClassify(req, res, projectRoot);
         // Dashboard API routes
         } else if (req.method === "GET" && path === "/api/hook-log") {
           await handleHookLog(req, res, projectRoot);
