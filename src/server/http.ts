@@ -22,7 +22,7 @@
  *   removed on shutdown. Checked by component-status.ts for HUD display.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { writeFileSync, unlinkSync, mkdirSync, existsSync, statSync } from "node:fs";
+import { writeFileSync, unlinkSync, mkdirSync, existsSync, statSync, appendFileSync } from "node:fs"; import { homedir } from "node:os";
 import { join, resolve, relative, basename } from "node:path";
 import { query, stats, learn, init, getStore, projectStatKey } from "../core.js";
 import { readHookLog, logHookEvent } from "../intelligence/hook-log.js";
@@ -1384,7 +1384,29 @@ function handleSSE(
 function writePid(projectRoot: string): void {
   const dir = join(projectRoot, ".engram");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "http-server.pid"), String(process.pid), "utf-8");
+  const pidPath = join(dir, "http-server.pid");
+  writeFileSync(pidPath, String(process.pid), "utf-8");
+
+  // Audit log: append a short startup line with timestamp, pid, port, and project.
+  // Write both to a project-scoped audit file and the user-level ~/.engram/http-server.log
+  try {
+    const ts = new Date().toISOString();
+    const line = `${ts} START pid=${process.pid} port=${serverPort} project=${projectRoot}\n`;
+    try {
+      appendFileSync(join(dir, "http-server.start.log"), line, "utf-8");
+    } catch {
+      // best-effort — don't fail startup
+    }
+    try {
+      const homeLogDir = join(homedir(), ".engram");
+      if (!existsSync(homeLogDir)) mkdirSync(homeLogDir, { recursive: true });
+      appendFileSync(join(homeLogDir, "http-server.log"), line, "utf-8");
+    } catch {
+      // best-effort
+    }
+  } catch {
+    // swallow audit failures
+  }
 }
 
 function removePid(projectRoot: string): void {
