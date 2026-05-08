@@ -752,6 +752,27 @@ export async function learn(
     store.close();
   }
 
+  // If this project has never been mined (no last_mined stat), trigger a
+  // best-effort incremental init in the background so file-level nodes
+  // (AST-extracted) become available for Read interception and the
+  // dashboard's Files tab. This is fire-and-forget and must not block
+  // the calling thread.
+  (async () => {
+    try {
+      const s = await getStore(projectRoot);
+      try {
+        const lm = s.getStat(projectStatKey(projectRoot, "last_mined"));
+        if (!lm || Number(lm) === 0) {
+          await init(projectRoot, { incremental: true });
+        }
+      } finally {
+        s.close();
+      }
+    } catch {
+      // swallow background init failures — learning succeeded regardless
+    }
+  })();
+
   return { nodesAdded: combinedNodes.length };
 }
 
