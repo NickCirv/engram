@@ -592,6 +592,15 @@ export async function learn(
     // Bulk upsert nodes + edges (project-scoped)
     store.bulkUpsert(combinedNodes, combinedEdges, projectRoot, undefined, memoryScope);
 
+    // Ensure the project is discoverable even when graph content was created
+    // by a manual `learn` call (no full init). Write a namespaced project_root
+    // stat entry so the dashboard's project list includes this project.
+    try {
+      store.setStat(projectStatKey(projectRoot, "project_root"), projectRoot);
+    } catch {
+      // best-effort — non-fatal if stats write fails
+    }
+
     // Post-insert: create linking edges from conclusion nodes to existing
     // graph nodes by simple keyword overlap. This helps surface relations
     // between learned conclusions/fragments and code entities/files.
