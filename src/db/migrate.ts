@@ -15,7 +15,7 @@ export interface MigrationResult {
 }
 
 /** Current schema version — bump this when adding new migrations. */
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 export interface RollbackResult {
   readonly fromVersion: number;
@@ -183,6 +183,114 @@ CREATE INDEX IF NOT EXISTS idx_query_cache_file ON query_cache(file_path);`,
         ON nodes(kind, valid_until)
         WHERE kind = 'mistake' AND valid_until IS NOT NULL;
     `);
+  },
+
+  // v3.1.0: project scoping — add project_root/project_branch/memory_scope
+  // columns so a single global DB can host multiple projects' data and
+  // memory types (project/global/entity). Backfill is optional — new
+  // rows will populate these columns automatically.
+  9: (db: ExecDb) => {
+    addColumnIfMissing(db, "nodes", "project_root", "project_root TEXT NOT NULL DEFAULT ''");
+    addColumnIfMissing(db, "nodes", "project_branch", "project_branch TEXT");
+    addColumnIfMissing(db, "nodes", "memory_scope", "memory_scope TEXT");
+
+    addColumnIfMissing(db, "edges", "project_root", "project_root TEXT NOT NULL DEFAULT ''");
+
+    // Add project_root to provider_cache so caches can be scoped per project
+    addColumnIfMissing(db, "provider_cache", "project_root", "project_root TEXT NOT NULL DEFAULT ''");
+
+    // Index project_root on nodes/edges/provider_cache for efficient per-project queries
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_nodes_project_root ON nodes(project_root)"); } catch {}
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_edges_project_root ON edges(project_root)"); } catch {}
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_provider_cache_project_root ON provider_cache(project_root)"); } catch {}
+  },
+
+  // v3.2.0: canonical ids for deterministic dedupe + migration to merge existing duplicates
+  10: (db: ExecDb) => {
+    addColumnIfMissing(db, "nodes", "canonical_id", "canonical_id TEXT");
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_nodes_canonical_project ON nodes(canonical_id, project_root)"); } catch {}
+
+    // Compute canonical ids for existing nodes and backfill
+    try {
+      // Import computeCanonicalId dynamically so migrations are self-contained
+      const { computeCanonicalId } = require("../graph/canonical.js");
+      const res = db.exec("SELECT id, label, kind, memory_scope, project_root FROM nodes");
+      const rows = (res[0] && res[0].values) ? res[0].values : [];
+      for (const r of rows) {
+        const id = String(r[0] ?? "");
+        const label = String(r[1] ?? "");
+        const kind = String(r[2] ?? "");
+        const memoryScope = r[3] ?? "project";
+        const projectRoot = r[4] ?? "";
+        const canonical = computeCanonicalId(label, kind, memoryScope, projectRoot);
+        try {
+          // Use parameterized run when available
+          (db as unknown as RunDb).run("UPDATE nodes SET canonical_id = ? WHERE id = ?", [canonical, id]);
+        } catch {
+          try { db.exec(`UPDATE nodes SET canonical_id = '${String(canonical).replace(/'/g, "''")}' WHERE id = '${String(id).replace(/'/g, "''")}'`); } catch {}
+        }
+      }
+
+      // Find canonical groups with >1 member and merge duplicates
+      const groups = db.exec("SELECT canonical_id, project_root FROM nodes WHERE canonical_id IS NOT NULL AND canonical_id <> '' GROUP BY canonical_id, project_root HAVING COUNT(*) > 1");
+      const gvals = (groups[0] && groups[0].values) ? groups[0].values : [];
+      for (const gv of gvals) {
+        const canonical = String(gv[0]);
+        const proj = String(gv[1] ?? "");
+        const selSql = `SELECT id FROM nodes WHERE canonical_id = '${String(canonical).replace(/'/g, "''")}' AND project_root = '${String(proj).replace(/'/g, "''")}' ORDER BY confidence_score DESC, last_verified DESC`;
+        const sel = db.exec(selSql);
+        const nrows = (sel[0] && sel[0].values) ? sel[0].values.map((v) => String(v[0])) : [];
+        if (nrows.length <= 1) continue;
+        const primary = nrows[0];
+        const duplicates = nrows.slice(1);
+
+        for (const dup of duplicates) {
+          try {
+            // Re-insert source edges with primary as source (INSERT OR IGNORE)
+            const srcEdges = db.exec(`SELECT source, target, relation, confidence, confidence_score, source_file, source_location, last_verified, metadata, project_root FROM edges WHERE source = '${String(dup).replace(/'/g, "''")}'`);
+            const srcVals = (srcEdges[0] && srcEdges[0].values) ? srcEdges[0].values : [];
+            for (const e of srcVals) {
+              const [_s, target, relation, confidence, confidence_score, source_file, source_location, last_verified, metadata, edge_proj] = e;
+              try {
+                (db as unknown as RunDb).run(
+                  `INSERT OR IGNORE INTO edges (source, target, relation, confidence, confidence_score, source_file, source_location, last_verified, metadata, project_root) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [primary, target, relation, confidence, confidence_score, source_file, source_location, last_verified, metadata, edge_proj]
+                );
+              } catch { /* best-effort */ }
+            }
+
+            // Re-insert target edges with primary as target
+            const tgtEdges = db.exec(`SELECT source, target, relation, confidence, confidence_score, source_file, source_location, last_verified, metadata, project_root FROM edges WHERE target = '${String(dup).replace(/'/g, "''")}'`);
+            const tgtVals = (tgtEdges[0] && tgtEdges[0].values) ? tgtEdges[0].values : [];
+            for (const e of tgtVals) {
+              const [source, _t, relation, confidence, confidence_score, source_file, source_location, last_verified, metadata, edge_proj] = e;
+              try {
+                (db as unknown as RunDb).run(
+                  `INSERT OR IGNORE INTO edges (source, target, relation, confidence, confidence_score, source_file, source_location, last_verified, metadata, project_root) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [source, primary, relation, confidence, confidence_score, source_file, source_location, last_verified, metadata, edge_proj]
+                );
+              } catch { /* best-effort */ }
+            }
+
+            // Remove old edges referencing the duplicate
+            try {
+              (db as unknown as RunDb).run("DELETE FROM edges WHERE source = ? OR target = ?", [dup, dup]);
+            } catch { db.exec(`DELETE FROM edges WHERE source = '${String(dup).replace(/'/g, "''")}' OR target = '${String(dup).replace(/'/g, "''")}'`); }
+
+            // Finally remove the duplicate node
+            try {
+              (db as unknown as RunDb).run("DELETE FROM nodes WHERE id = ?", [dup]);
+            } catch { db.exec(`DELETE FROM nodes WHERE id = '${String(dup).replace(/'/g, "''")}'`); }
+          } catch {
+            // continue on error for best-effort merging
+          }
+        }
+      }
+    } catch (e) {
+      // Best-effort migration: if any of the merge steps fail, we don't
+      // want to abort the whole migration run. The canonical_id column
+      // still exists and the system will continue to operate.
+    }
   },
 };
 

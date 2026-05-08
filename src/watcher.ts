@@ -76,9 +76,9 @@ export async function syncFile(
   if (!existsSync(absPath)) {
     const store = await getStore(projectRoot);
     try {
-      const prior = store.countBySourceFile(relPath);
+      const prior = store.countBySourceFile(relPath, projectRoot);
       if (prior === 0) return { action: "skipped", count: 0 };
-      store.deleteBySourceFile(relPath);
+      store.deleteBySourceFile(relPath, projectRoot);
       return { action: "pruned", count: prior };
     } finally {
       store.close();
@@ -93,10 +93,10 @@ export async function syncFile(
 
   const store = await getStore(projectRoot);
   try {
-    store.deleteBySourceFile(relPath);
+    store.deleteBySourceFile(relPath, projectRoot);
     const { nodes, edges } = extractFile(absPath, projectRoot);
     if (nodes.length > 0 || edges.length > 0) {
-      store.bulkUpsert(nodes, edges);
+      store.bulkUpsert(nodes, edges, projectRoot, undefined, "project");
     }
     return { action: "indexed", count: nodes.length };
   } finally {
@@ -114,10 +114,10 @@ export function formatReindexLine(
   displayPath: string
 ): string | null {
   if (result.action === "indexed") {
-    return `engram: reindexed ${displayPath} (${formatThousands(result.count)} nodes)`;
+    return `engramx: reindexed ${displayPath} (${formatThousands(result.count)} nodes)`;
   }
   if (result.action === "pruned") {
-    return `engram: pruned ${displayPath} (${formatThousands(result.count)} nodes)`;
+    return `engramx: pruned ${displayPath} (${formatThousands(result.count)} nodes)`;
   }
   return null;
 }
@@ -186,7 +186,7 @@ export function watchProject(
 
   if (!existsSync(getDbPath(root))) {
     throw new Error(
-      `engram: no graph found at ${root}. Run 'engram init' first.`
+      `engramx: no graph found at ${root}. Run 'engram init' first.`
     );
   }
 

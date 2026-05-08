@@ -56,7 +56,7 @@ describe("handlePreCompact", () => {
     expect(output).toBeDefined();
     const ctx = output.additionalContext as string;
     expect(ctx).toBeDefined();
-    expect(ctx).toContain("[engram] Compaction survival");
+    expect(ctx).toContain("[engramx] Compaction survival");
     expect(ctx).toContain("myapp");
   });
 

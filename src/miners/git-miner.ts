@@ -22,7 +22,7 @@ function runGit(args: string[], cwd: string): string {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("TIMEOUT") || msg.includes("timed out")) {
-      console.error(`[engram] git command timed out: git ${args.join(" ")}`);
+      console.error(`[engramx] git command timed out: git ${args.join(" ")}`);
     }
     return "";
   }

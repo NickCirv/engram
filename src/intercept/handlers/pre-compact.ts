@@ -50,7 +50,7 @@ function formatCompactBrief(args: {
   const lines: string[] = [];
 
   lines.push(
-    `[engram] Compaction survival — ${args.projectName} (${args.nodeCount} nodes, ${args.edgeCount} edges)`
+    `[engramx] Compaction survival — ${args.projectName} (${args.nodeCount} nodes, ${args.edgeCount} edges)`
   );
 
   if (args.godNodes.length > 0) {

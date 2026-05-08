@@ -1,4 +1,4 @@
-/**
+/*
  * engram Web Dashboard — served at GET /ui by the HTTP server.
  *
  * Zero external dependencies. HTML, CSS, and JS are template literals
@@ -51,6 +51,7 @@ body {
 }
 
 header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -70,6 +71,27 @@ header .brand {
 
 header .brand .diamond { color: var(--accent); font-size: 18px; }
 header .brand .version { color: var(--text-dim); font-size: 12px; font-weight: 400; }
+
+/* Centered scope/project selector */
+header .center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+header .center select {
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  min-width: 320px;
+  max-width: 520px;
+}
 
 header .status {
   display: flex; align-items: center; gap: 16px;
@@ -213,6 +235,31 @@ td.dim { color: var(--text-dim); }
 }
 
 #graph-canvas:active { cursor: grabbing; }
+
+/* Toast notifications */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 9999;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
+/* Small refresh button used next to tokens */
+.refresh-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-family: var(--mono); font-size: 12px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
+.refresh-btn:hover { color: var(--text); background: var(--bg-hover); }
+
+.ov-chart { margin-top: 12px; height: 120px; }
 `;
 
 const HTML_HEAD = `<!DOCTYPE html>
@@ -234,6 +281,11 @@ const HTML_BODY = `
       <span>engram</span>
       <span class="version" id="version">loading...</span>
     </div>
+    <div class="center">
+      <select id="scope-select" aria-label="Memory scope">
+        <option>Loading…</option>
+      </select>
+    </div>
     <div class="status">
       <span><span class="dot"></span>connected</span>
       <span id="uptime">&mdash;</span>
@@ -252,7 +304,7 @@ const HTML_BODY = `
   <main>
     <section class="tab active" id="tab-overview">
       <div class="grid grid-4">
-        <div class="card"><h3>Tokens Saved</h3><div class="big-number accent" id="ov-tokens">&mdash;</div><div class="subtext" id="ov-tokens-sub">cumulative</div></div>
+        <div class="card"><h3>Tokens Saved <button id="tokens-refresh" class="refresh-btn" title="Refresh tokens">⟳</button></h3><div class="big-number accent" id="ov-tokens">&mdash;</div><div class="subtext" id="ov-tokens-sub">cumulative</div><div id="ov-tokens-chart" class="ov-chart"></div></div>
         <div class="card"><h3>Cost Saved</h3><div class="big-number" id="ov-cost">&mdash;</div><div class="subtext">at $3/M tokens</div></div>
         <div class="card"><h3>Hit Rate</h3><div class="big-number" id="ov-hitrate">&mdash;</div><div class="subtext" id="ov-hitrate-sub">hook interceptions</div></div>
         <div class="card"><h3>Sessions</h3><div class="big-number" id="ov-sessions">&mdash;</div><div class="subtext">tracked</div></div>
@@ -293,6 +345,7 @@ const HTML_BODY = `
         <h2>Knowledge Graph Visualization</h2>
         <div class="subtext" style="margin-bottom: 12px;">Drag to pan &middot; Scroll to zoom &middot; Click nodes for details</div>
         <canvas id="graph-canvas"></canvas>
+        <div id="graph-legend" class="subtext" style="margin-top: 12px; display:flex; justify-content:center; gap:16px; align-items:center; flex-wrap:wrap; padding:6px 8px;"></div>
         <div id="graph-info" class="subtext" style="margin-top: 10px;"></div>
       </div>
     </section>
@@ -356,6 +409,24 @@ async function api(path) {
   } catch { return null; }
 }
 
+async function scopedApi(path) {
+  try {
+    const sel = document.getElementById('scope-select');
+    let query = '';
+    if (sel && sel.value) {
+      const val = sel.value;
+      if (val.startsWith('proj:')) {
+        const pid = val.slice(5);
+        query = (path.includes('?') ? '&' : '?') + 'projectId=' + encodeURIComponent(pid);
+      } else if (val.startsWith('scope:')) {
+        const scopeId = val.slice(6);
+        query = (path.includes('?') ? '&' : '?') + 'scope=' + encodeURIComponent(scopeId);
+      }
+    }
+    return await api(path + query);
+  } catch { return null; }
+}
+
 function formatNumber(n) {
   if (n === null || n === undefined) return "—";
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -375,19 +446,87 @@ function formatUptime(seconds) {
   return Math.floor(seconds / 3600) + "h " + Math.floor((seconds % 3600) / 60) + "m";
 }
 
+// small UI helpers: toast
+function showToast(msg, duration = 3000) {
+  try {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    // allow CSS transition
+    setTimeout(() => t.classList.add('show'), 20);
+    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 220); }, duration);
+  } catch (e) {
+    console.warn('toast failed', e);
+  }
+}
+
 // ─── Components library (SVG charts — data-agnostic) ──────────
 __COMPONENTS__
 
 // ─── Graph canvas module ──────────────────────────────────────
 __GRAPH__
 
+// ─── Scopes / Projects selector ───────────────────────────────
+async function loadScopes() {
+  const data = await api('/api/scopes');
+  const sel = document.getElementById('scope-select');
+  if (!sel) return;
+  sel.innerHTML = '';
+  try {
+    if (data && data.scopes && Array.isArray(data.scopes)) {
+      for (const s of data.scopes) {
+        const opt = document.createElement('option');
+        opt.value = 'scope:' + s.id;
+        opt.textContent = s.label;
+        sel.appendChild(opt);
+      }
+    }
+    if (data && data.projects && Array.isArray(data.projects)) {
+      // Insert a disabled divider option for visual separation (selects can't render true separators reliably)
+      if (data.projects.length > 0) {
+        const divider = document.createElement('option');
+        divider.textContent = '--- Projects ---';
+        divider.disabled = true;
+        sel.appendChild(divider);
+      }
+      for (const p of data.projects) {
+        const opt = document.createElement('option');
+        opt.value = 'proj:' + p.id;
+        const name = (p.name || p.root || '').toString();
+        opt.textContent = name.length > 40 ? name.slice(0, 40) : name;
+        sel.appendChild(opt);
+      }
+    }
+  } catch (e) {
+    // best-effort — leave the select as-is
+  }
+
+  // Default: if there's at least one project, select the first project
+  if (sel.options.length > 0) {
+    // If the first option is a scope entry, that's fine; otherwise choose the first project entry
+    sel.selectedIndex = 0;
+  }
+
+  sel.addEventListener('change', () => {
+    // refresh active tab(s)
+    loadOverview();
+    if (document.querySelector('.tab-btn[data-tab="graph"].active')) loadGraph();
+    if (document.querySelector('.tab-btn[data-tab="sessions"].active')) loadSessions();
+    if (document.querySelector('.tab-btn[data-tab="files"].active')) loadFiles();
+    if (document.querySelector('.tab-btn[data-tab="providers"].active')) loadProviders();
+    if (document.querySelector('.tab-btn[data-tab="activity"].active')) loadActivity();
+    showToast('View updated', 1200);
+  });
+}
+
 // ─── Tab: Overview ────────────────────────────────────────────
 async function loadOverview() {
   const [tokens, summary, cache, graphStats, health] = await Promise.all([
-    api("/api/tokens"),
-    api("/api/hook-log/summary"),
-    api("/api/cache/stats"),
-    api("/stats"),
+    scopedApi("/api/tokens"),
+    scopedApi("/api/hook-log/summary"),
+    scopedApi("/api/cache/stats"),
+    scopedApi("/stats"),
     api("/health"),
   ]);
 
@@ -396,6 +535,16 @@ async function loadOverview() {
     setText("ov-cost", formatCost(tokens.totalSaved ?? 0));
     setText("ov-sessions", formatNumber(tokens.totalSessions ?? 0));
     setText("ov-tokens-sub", (Number(tokens.avgReduction ?? 0).toFixed(1) + "%") + " avg reduction");
+
+    // Render time-series if available
+    const chartEl = document.getElementById('ov-tokens-chart');
+    if (chartEl) {
+      if (tokens.sessions && Array.isArray(tokens.sessions) && tokens.sessions.length > 0) {
+        chartEl.innerHTML = renderTokenTimeSeries(tokens.sessions.slice(-200));
+      } else {
+        chartEl.innerHTML = '<div class="empty-state">No session history yet</div>';
+      }
+    }
   }
 
   if (summary) {
@@ -428,9 +577,43 @@ async function loadOverview() {
   }
 }
 
+// Render a small dual-line time-series showing naive vs graph tokens
+function renderTokenTimeSeries(sessions) {
+  try {
+    if (!sessions || sessions.length === 0) return '<div class="empty-state">No session data yet</div>';
+    const last = sessions.slice(-50);
+    const width = 800; const height = 120; const pad = 12;
+    const naive = last.map((s) => Number(s.naiveTokens || 0));
+    const graph = last.map((s) => Number(s.graphTokens || 0));
+    const maxVal = Math.max(1, ...naive, ...graph);
+    const innerW = width - pad * 2; const innerH = height - pad * 2;
+    const step = last.length === 1 ? 0 : innerW / (last.length - 1);
+
+    const points = (arr) => arr.map((v, i) => [pad + i * step, pad + innerH - (v / maxVal) * innerH]);
+    const np = points(naive); const gp = points(graph);
+    const pathD = (pts) => pts.length === 1 ? ('M' + pts[0][0] + ' ' + pts[0][1] + ' l 0 0') : ('M' + pts.map((p) => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L '));
+    const naivePath = pathD(np); const graphPath = pathD(gp);
+
+    // Area between naive and graph (saved) if naive >= graph
+    let areaD = '';
+    if (np.length > 1) {
+      const areaPts = np.concat(gp.slice().reverse());
+      areaD = 'M' + areaPts.map((p) => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L ') + ' Z';
+    }
+
+    return '<svg viewBox="0 0 ' + width + ' ' + height + '" width="100%">' +
+      (areaD ? ('<defs><linearGradient id="gSaved" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="' + COLOR_ACCENT + '" stop-opacity="0.12"/><stop offset="1" stop-color="' + COLOR_ACCENT + '" stop-opacity="0"/></linearGradient></defs><path d="' + areaD + '" fill="url(#gSaved)"/>') : '') +
+      ('<path d="' + naivePath + '" stroke="' + COLOR_DIM + '" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />') +
+      ('<path d="' + graphPath + '" stroke="' + COLOR_ACCENT + '" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />') +
+      '</svg>';
+  } catch (e) {
+    return '<div class="empty-state">Chart failed</div>';
+  }
+}
+
 // ─── Tab: Sessions ────────────────────────────────────────────
 async function loadSessions() {
-  const tokens = await api("/api/tokens");
+  const tokens = await scopedApi("/api/tokens");
   if (!tokens) return;
 
   const sparkline = document.getElementById("sessions-sparkline");
@@ -457,11 +640,61 @@ async function loadSessions() {
 
 // ─── Tab: Activity (live via SSE) ─────────────────────────────
 let sseSource = null;
+let ssePending = false;
+
+async function refreshGraph() {
+  const [nodes, godNodes] = await Promise.all([
+    scopedApi("/api/graph/nodes?limit=300"),
+    scopedApi("/api/graph/god-nodes"),
+  ]);
+  if (!nodes) return;
+  const canvas = document.getElementById("graph-canvas");
+  if (!canvas) return;
+  // Replace canvas element so we don't accumulate event listeners/animation loops
+  const fresh = canvas.cloneNode(true);
+  canvas.parentNode.replaceChild(fresh, canvas);
+  const nodeList = nodes.nodes ?? [];
+  // Fetch edges for the current node set in manageable chunks (best-effort).
+  // Some browsers/servers limit URL length, so request edges in chunks of up
+  // to 400 ids and concatenate results.
+  let edges = [];
+  try {
+    const CHUNK = 400;
+    for (let i = 0; i < nodeList.length; i += CHUNK) {
+      const chunk = nodeList.slice(i, i + CHUNK).map((n) => n.id).join(",");
+      const eResp = await scopedApi("/api/graph/edges?ids=" + encodeURIComponent(chunk));
+      if (eResp && Array.isArray(eResp.edges)) edges = edges.concat(eResp.edges);
+    }
+  } catch (e) {
+    edges = [];
+  }
+
+  // Augment nodeList with placeholder nodes for any edge endpoints that
+  // weren't included in the initial node fetch. This ensures edges can be
+  // rendered even when the server's nodes list is paginated/truncated.
+  try {
+    const nodeById = new Map(nodeList.map((n) => [n.id, n]));
+    const missingIds = new Set();
+    for (const ed of edges) {
+      if (!nodeById.has(ed.source)) missingIds.add(ed.source);
+      if (!nodeById.has(ed.target)) missingIds.add(ed.target);
+    }
+    for (const mid of missingIds) {
+      // create a lightweight placeholder
+      const p = { id: mid, label: mid, kind: 'default', metadata: { }, sourceFile: '', sourceLocation: null };
+      nodeList.push(p);
+    }
+  } catch (e) {
+    // ignore augmentation failures — fall back to drawing whatever we have
+  }
+
+  renderGraph(fresh, nodeList, godNodes ?? [], edges);
+  renderMemoryLegend(nodeList, edges, nodes.total ?? null);
+  setText("graph-info", (nodeList.length ?? 0) + " nodes, " + (edges.length ?? 0) + " edges — " + (nodes.total ?? 0) + " total");
+}
 
 async function loadActivity() {
-  if (sseSource) return;
-
-  const log = await api("/api/hook-log?limit=20");
+  const log = await scopedApi("/api/hook-log?limit=20");
   const streamEl = document.getElementById("activity-stream");
   if (streamEl) {
     if (log && log.entries && log.entries.length > 0) {
@@ -471,22 +704,58 @@ async function loadActivity() {
     }
   }
 
-  const summary = await api("/api/hook-log/summary");
+  const summary = await scopedApi("/api/hook-log/summary");
   const toolsEl = document.getElementById("activity-tools");
   if (toolsEl) {
     toolsEl.innerHTML = renderToolBreakdown((summary && summary.byTool) || {});
   }
 
+  // Ensure SSE connection exists
+  initSSE();
+}
+
+function initSSE() {
+  if (sseSource) return;
   try {
     sseSource = new EventSource("/api/sse");
-    sseSource.addEventListener("message", async () => {
-      const fresh = await api("/api/hook-log?limit=20");
-      if (fresh && fresh.entries && streamEl) {
-        streamEl.innerHTML = fresh.entries.slice().reverse().map(renderActivityRow).join("");
-      }
+    sseSource.addEventListener("message", async (ev) => {
+      // throttle bursty updates
+      if (ssePending) return;
+      ssePending = true;
+      setTimeout(async () => {
+        ssePending = false;
+        // update overview (always)
+        loadOverview();
+        // update active tab(s)
+        if (document.querySelector('.tab-btn[data-tab="activity"].active')) {
+          const streamEl = document.getElementById("activity-stream");
+          const fresh = await scopedApi("/api/hook-log?limit=20");
+          if (fresh && fresh.entries && streamEl) {
+            streamEl.innerHTML = fresh.entries.slice().reverse().map(renderActivityRow).join("");
+          }
+          const summary = await scopedApi("/api/hook-log/summary");
+          const toolsEl = document.getElementById("activity-tools");
+          if (toolsEl) toolsEl.innerHTML = renderToolBreakdown((summary && summary.byTool) || {});
+        }
+        if (document.querySelector('.tab-btn[data-tab="graph"].active')) {
+          await refreshGraph();
+        }
+        if (document.querySelector('.tab-btn[data-tab="files"].active')) {
+          loadFiles();
+        }
+        if (document.querySelector('.tab-btn[data-tab="providers"].active')) {
+          loadProviders();
+        }
+        if (document.querySelector('.tab-btn[data-tab="sessions"].active')) {
+          loadSessions();
+        }
+      }, 300);
+    });
+    sseSource.addEventListener("error", (e) => {
+      console.warn("SSE error", e);
     });
   } catch (e) {
-    console.warn("SSE failed", e);
+    console.warn("SSE init failed", e);
   }
 }
 
@@ -520,7 +789,7 @@ function renderToolBreakdown(byTool) {
 
 // ─── Tab: Files ───────────────────────────────────────────────
 async function loadFiles() {
-  const heatmap = await api("/api/files/heatmap?limit=30");
+  const heatmap = await scopedApi("/api/files/heatmap?limit=30");
   const tableEl = document.getElementById("files-table");
   if (!tableEl) return;
 
@@ -545,24 +814,162 @@ async function loadFiles() {
 // ─── Tab: Graph ───────────────────────────────────────────────
 let graphLoaded = false;
 
+function renderLegendIcon(shape, color) {
+  const size = 16;
+  if (shape === "circle") {
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" xmlns="http://www.w3.org/2000/svg"><circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + (Math.floor(size/3)) + '" fill="' + esc(color) + '" /></svg>';
+  } else if (shape === "square") {
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="2" width="' + (size-4) + '" height="' + (size-4) + '" fill="' + esc(color) + '" rx="2"/></svg>';
+  } else if (shape === "diamond") {
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" xmlns="http://www.w3.org/2000/svg"><polygon points="' + (size/2) + ',2 ' + (size-2) + ',' + (size/2) + ' ' + (size/2) + ',' + (size-2) + ' 2,' + (size/2) + '" fill="' + esc(color) + '"/></svg>';
+  } else {
+    return renderLegendIcon("circle", color);
+  }
+}
+
+function renderMemoryLegend(nodes, edges, nodesTotal) {
+  const el = document.getElementById("graph-legend");
+  if (!el || typeof MEMORY_SCOPE_CONFIG === "undefined") return;
+  const keys = ["project", "global", "entity"];
+
+  // Totals (best-effort) from provided nodes
+  const totalsNodes = { project: 0, global: 0, entity: 0 };
+  if (Array.isArray(nodes)) {
+    for (const n of nodes) {
+      try {
+        const meta = n.metadata || {};
+        const ms = (meta.memoryScope || meta.memory_scope) || "project";
+        if (ms === "global") totalsNodes.global++;
+        else if (ms === "entity") totalsNodes.entity++;
+        else totalsNodes.project++;
+      } catch {
+        totalsNodes.project++;
+      }
+    }
+  }
+
+  // Totals for edges (best-effort) — classify an edge by its endpoints' scope
+  const totalsEdges = { project: 0, global: 0, entity: 0, cross: 0 };
+  if (Array.isArray(edges)) {
+    // Build quick id->scope map from the provided nodes
+    const idToScope = new Map();
+    if (Array.isArray(nodes)) {
+      for (const n of nodes) {
+        const ms = (n.metadata && (n.metadata.memoryScope || n.metadata.memory_scope)) || 'project';
+        idToScope.set(n.id, ms);
+      }
+    }
+    for (const e of edges) {
+      const s = idToScope.get(e.source) || 'project';
+      const t = idToScope.get(e.target) || 'project';
+      if (s === t) totalsEdges[s] = (totalsEdges[s] || 0) + 1;
+      else totalsEdges.cross = (totalsEdges.cross || 0) + 1;
+    }
+  }
+
+  // Visible counts are provided by the running render (set on window)
+  const visibleIds = Array.isArray(window.__engram_graph_visibleNodes) ? window.__engram_graph_visibleNodes : [];
+  const visibleEdges = Array.isArray(window.__engram_graph_visibleEdges) ? window.__engram_graph_visibleEdges : [];
+
+  const idToScopeForVisible = new Map();
+  if (Array.isArray(nodes)) {
+    for (const n of nodes) {
+      const ms = (n.metadata && (n.metadata.memoryScope || n.metadata.memory_scope)) || 'project';
+      idToScopeForVisible.set(n.id, ms);
+    }
+  }
+
+  const visibleNodes = { project: 0, global: 0, entity: 0 };
+  for (const id of visibleIds) {
+    const ms = idToScopeForVisible.get(id) || 'project';
+    if (ms === 'global') visibleNodes.global++;
+    else if (ms === 'entity') visibleNodes.entity++;
+    else visibleNodes.project++;
+  }
+
+  const visibleEdgesCounts = { project: 0, global: 0, entity: 0, cross: 0 };
+  for (const e of visibleEdges) {
+    const s = idToScopeForVisible.get(e.source) || 'project';
+    const t = idToScopeForVisible.get(e.target) || 'project';
+    if (s === t) visibleEdgesCounts[s] = (visibleEdgesCounts[s] || 0) + 1;
+    else visibleEdgesCounts.cross = (visibleEdgesCounts.cross || 0) + 1;
+  }
+
+  // Render two rows: Total and Visible. Each row shows project/global/personal (nodes / edges)
+  const totalLabel = nodesTotal != null ? ('total: ' + nodesTotal) : '';
+  const rowBox = (label, nCount, eCount, accent) => {
+    const color = accent ? 'color: var(--accent);' : 'color: var(--text);';
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;min-width:120px;">' +
+      '<div style="font-family:var(--mono);font-size:12px;'+ color + '">' + esc(label) + '</div>' +
+      '<div style="font-family:var(--mono);font-size:12px;color:var(--text-dim);">' + esc(nCount) + ' nodes / ' + esc(eCount) + ' edges</div>' +
+      '</div>';
+  };
+
+  const projectBoxTotal = rowBox(MEMORY_SCOPE_CONFIG.project.label, totalsNodes.project || 0, totalsEdges.project || 0, false);
+  const globalBoxTotal = rowBox(MEMORY_SCOPE_CONFIG.global.label, totalsNodes.global || 0, totalsEdges.global || 0, false);
+  const personalBoxTotal = rowBox(MEMORY_SCOPE_CONFIG.entity.label, totalsNodes.entity || 0, totalsEdges.entity || 0, false);
+
+  const projectBoxVisible = rowBox(MEMORY_SCOPE_CONFIG.project.label, visibleNodes.project || 0, visibleEdgesCounts.project || 0, true);
+  const globalBoxVisible = rowBox(MEMORY_SCOPE_CONFIG.global.label, visibleNodes.global || 0, visibleEdgesCounts.global || 0, true);
+  const personalBoxVisible = rowBox(MEMORY_SCOPE_CONFIG.entity.label, visibleNodes.entity || 0, visibleEdgesCounts.entity || 0, true);
+
+  el.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;align-items:center;">' +
+    '<div style="font-family:var(--mono);font-size:12px;color:var(--text-dim);">' + esc(totalLabel) + '</div>' +
+    '<div style="display:flex;gap:12px;justify-content:center;align-items:center;">' + projectBoxTotal + globalBoxTotal + personalBoxTotal + '</div>' +
+    '<div style="display:flex;gap:12px;justify-content:center;align-items:center;">' + projectBoxVisible + globalBoxVisible + personalBoxVisible + '</div>' +
+    '</div>';
+}
+
 async function loadGraph() {
   if (graphLoaded) return;
   const [nodes, godNodes] = await Promise.all([
-    api("/api/graph/nodes?limit=300"),
-    api("/api/graph/god-nodes"),
+    scopedApi("/api/graph/nodes?limit=300"),
+    scopedApi("/api/graph/god-nodes"),
   ]);
   if (!nodes) return;
   graphLoaded = true;
   const canvas = document.getElementById("graph-canvas");
-  if (canvas) renderGraph(canvas, nodes.nodes ?? [], godNodes ?? []);
-  setText("graph-info", (nodes.nodes?.length ?? 0) + " of " + (nodes.total ?? 0) + " nodes shown");
+  if (canvas) {
+    const nodeList = nodes.nodes ?? [];
+    let edges = [];
+    try {
+      const CHUNK = 400;
+      for (let i = 0; i < nodeList.length; i += CHUNK) {
+        const ids = nodeList.slice(i, i + CHUNK).map((n) => n.id).join(",");
+        const eResp = await scopedApi("/api/graph/edges?ids=" + encodeURIComponent(ids));
+        if (eResp && Array.isArray(eResp.edges)) edges = edges.concat(eResp.edges);
+      }
+    } catch {
+      edges = [];
+    }
+
+    try {
+      const nodeById = new Map(nodeList.map((n) => [n.id, n]));
+      const missingIds = new Set();
+      for (const ed of edges) {
+        if (!nodeById.has(ed.source)) missingIds.add(ed.source);
+        if (!nodeById.has(ed.target)) missingIds.add(ed.target);
+      }
+      for (const mid of missingIds) {
+        const p = { id: mid, label: mid, kind: 'default', metadata: { }, sourceFile: '', sourceLocation: null };
+        nodeList.push(p);
+      }
+    } catch {
+      // ignore
+    }
+
+    renderGraph(canvas, nodeList, godNodes ?? [], edges);
+    setText("graph-info", (nodeList.length ?? 0) + " nodes, " + (edges.length ?? 0) + " edges — " + (nodes.total ?? 0) + " total");
+  }
+  // Render memory legend (colors/shapes)
+  renderMemoryLegend(nodeList, edges, nodes.total ?? null);
 }
 
 // ─── Tab: Providers ───────────────────────────────────────────
 async function loadProviders() {
   const [health, cache] = await Promise.all([
     api("/api/providers/health"),
-    api("/api/cache/stats"),
+    scopedApi("/api/cache/stats"),
   ]);
 
   let html = "";
@@ -596,8 +1003,22 @@ async function loadProviders() {
 }
 
 // ─── Initial load ─────────────────────────────────────────────
-loadOverview();
-setInterval(loadOverview, 5000);
+// Load scopes first, then bootstrap dashboard data so all requests carry the selected scope/project
+loadScopes().then(() => {
+  loadOverview();
+  setInterval(loadOverview, 5000);
+  initSSE();
+});
+
+// Attach refresh button handler
+const rbtn = document.getElementById('tokens-refresh');
+if (rbtn) {
+  rbtn.addEventListener('click', async () => {
+    showToast('Refreshing token metrics...');
+    await loadOverview();
+    showToast('Token metrics updated', 1400);
+  });
+}
 `;
 
 /**

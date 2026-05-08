@@ -48,7 +48,7 @@ describe("handleCwdChanged", () => {
 
     const output = (result as Record<string, unknown>).hookSpecificOutput as Record<string, unknown>;
     const ctx = output.additionalContext as string;
-    expect(ctx).toContain("[engram] Project switched to project-alpha");
+    expect(ctx).toContain("[engramx] Project switched to project-alpha");
     expect(ctx).toContain("engram interception is active");
   });
 

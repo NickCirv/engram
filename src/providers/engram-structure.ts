@@ -1,5 +1,5 @@
 /**
- * engram:structure provider — serves the structural summary from the
+ * engramx:structure provider — serves the structural summary from the
  * local graph. This is the existing renderFileStructure behavior
  * wrapped in the ContextProvider interface.
  *
@@ -10,7 +10,7 @@ import { getStore } from "../core.js";
 import type { ContextProvider, NodeContext, ProviderResult } from "./types.js";
 
 export const structureProvider: ContextProvider = {
-  name: "engram:structure",
+  name: "engramx:structure",
   label: "STRUCTURE",
   tier: 1,
   tokenBudget: 250,
@@ -27,7 +27,7 @@ export const structureProvider: ContextProvider = {
         if (!result || result.nodeCount === 0) return null;
 
         return {
-          provider: "engram:structure",
+          provider: "engramx:structure",
           content: result.text,
           confidence: result.avgConfidence,
           cached: false,

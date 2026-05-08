@@ -22,12 +22,12 @@
  *   removed on shutdown. Checked by component-status.ts for HUD display.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { writeFileSync, unlinkSync, mkdirSync, existsSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { query, stats, learn, getStore } from "../core.js";
-import { readHookLog } from "../intelligence/hook-log.js";
+import { writeFileSync, unlinkSync, mkdirSync, existsSync, statSync, appendFileSync } from "node:fs"; import { homedir } from "node:os";
+import { join, resolve, relative, basename } from "node:path";
+import { query, stats, learn, init, getStore, projectStatKey } from "../core.js";
+import { readHookLog, logHookEvent } from "../intelligence/hook-log.js";
 import { summarizeHookLog } from "../intercept/stats.js";
-import { getCumulativeStats } from "../intelligence/token-tracker.js";
+import { getCumulativeStats, recordSession } from "../intelligence/token-tracker.js";
 import { getContextCache, ContextCache } from "../intelligence/cache.js";
 import { getComponentStatus } from "../intercept/component-status.js";
 import { buildDashboardHtml } from "./ui.js";
@@ -39,9 +39,11 @@ import {
   safeEqual,
   type TokenInfo,
 } from "./auth.js";
+import { extractTextFromFile } from "../miners/pdf-miner.js";
 
 // Read version — try both paths (works from src/ in dev and dist/ when built).
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 const require = createRequire(import.meta.url);
 const PKG_VERSION = (() => {
   for (const p of ["../package.json", "../../package.json"]) {
@@ -131,6 +133,64 @@ function json(
   res.end(JSON.stringify(data));
 }
 
+// Helper: decode a base64 project id back into an absolute project root path.
+function decodeProjectId(projectId: string | null): string | null {
+  if (!projectId) return null;
+  try {
+    return Buffer.from(projectId, "base64").toString("utf-8");
+  } catch {
+    return null;
+  }
+}
+
+// Helper: enumerate known projects recorded in the stats table.
+// Returns array sorted by lastModified desc (newest first). Each entry has
+// { id, root, name, lastModified } where id is base64(root).
+async function listKnownProjects(store: any): Promise<Array<{ id: string; root: string; name: string; lastModified: number }>> {
+  try {
+    const stmt = store.prepare("SELECT value FROM stats WHERE key LIKE ?");
+    stmt.bind(["%:project_root"]);
+    const roots: string[] = [];
+    while (stmt.step()) {
+      try {
+        const row = stmt.getAsObject();
+        const v = row.value as string;
+        if (v) roots.push(v);
+      } catch {
+        // ignore malformed
+      }
+    }
+    stmt.free();
+
+    const uniq = Array.from(new Set(roots));
+    const projects = uniq.map((root) => {
+      let mtime = 0;
+      try {
+        mtime = statSync(root).mtimeMs;
+      } catch {
+        try {
+          const lm = store.getStat(projectStatKey(root, "last_mined"));
+          if (lm) mtime = Number(lm) || 0;
+        } catch {
+          mtime = 0;
+        }
+      }
+      const name = basename(root) || root;
+      return {
+        id: Buffer.from(root).toString("base64"),
+        root,
+        name: name.length > 40 ? name.slice(0, 40) : name,
+        lastModified: mtime || 0,
+      };
+    });
+
+    projects.sort((a, b) => b.lastModified - a.lastModified);
+    return projects;
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Fail-closed auth. Accepts `Authorization: Bearer <token>` (CLI/curl) or
  * `Cookie: engram_token=<token>` (same-origin dashboard). Returns 401 on
@@ -217,7 +277,7 @@ async function handleQuery(
  *
  *   id: 0
  *   event: provider
- *   data: {"provider":"engram:ast","content":"…","confidence":1.0,"cached":false}
+ *   data: {"provider":"engramx:ast","content":"…","confidence":1.0,"cached":false}
  *
  *   id: 1
  *   event: provider
@@ -316,13 +376,32 @@ async function handleContextStream(
 }
 
 async function handleStats(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   projectRoot: string
 ): Promise<void> {
   try {
-    const result = await stats(projectRoot);
-    json(res, 200, result);
+    const url = parseUrl(req);
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
+
+    // Open the global store (getStore ignores the arg for DB path) and
+    // call store.getStats with an optional projectRoot to scope results.
+    const store = await getStore(projectRoot);
+    try {
+      let target: string | undefined = projectRoot;
+      if (projectId) {
+        const decoded = decodeProjectId(projectId);
+        if (decoded) target = decoded;
+      } else if (scope === "accumulative") {
+        // undefined = no project filter (aggregate across all projects)
+        target = undefined;
+      }
+      const result = store.getStats(target as any);
+      json(res, 200, result);
+    } finally {
+      store.close();
+    }
   } catch (err) {
     json(res, 500, { error: "Stats failed", detail: String(err) });
   }
@@ -346,7 +425,7 @@ async function handleLearn(
     return;
   }
 
-  let parsed: { content?: string; kind?: string; file?: string };
+  let parsed: { content?: string; kind?: string; file?: string; scope?: string };
   try {
     parsed = JSON.parse(body) as typeof parsed;
   } catch {
@@ -354,22 +433,322 @@ async function handleLearn(
     return;
   }
 
+  // If content is missing but a file path was provided, try to read/extract it
+  if ((!parsed.content || typeof parsed.content !== "string" || parsed.content.trim() === "") && parsed.file && typeof parsed.file === "string") {
+    try {
+      const candidate = parsed.file;
+      const rootAbs = resolve(projectRoot);
+      const abs = candidate.startsWith("/") ? resolve(candidate) : resolve(join(projectRoot, candidate));
+
+      // Ensure the resolved file is inside the project root to avoid accidental disclosure
+      if (!abs.startsWith(rootAbs)) {
+        json(res, 400, { error: "File must be inside project root" });
+        return;
+      }
+
+      if (!existsSync(abs)) {
+        json(res, 404, { error: "File not found", path: parsed.file });
+        return;
+      }
+
+      const extracted = await extractTextFromFile(abs);
+      if (!extracted) {
+        json(res, 500, { error: "Failed to extract text from file", path: parsed.file });
+        return;
+      }
+
+      parsed.content = extracted;
+    } catch (err) {
+      json(res, 500, { error: "Failed to read/parse file", detail: String(err) });
+      return;
+    }
+  }
+
   if (!parsed.content || typeof parsed.content !== "string") {
     json(res, 400, { error: "Missing 'content' in request body" });
     return;
   }
 
+  // memory scope: project | global | entity (default: project)
+  const scope = typeof parsed.scope === "string" && parsed.scope ? parsed.scope : "project";
+
   try {
-    await learn(projectRoot, parsed.content, parsed.file ?? "http-api");
-    json(res, 201, { ok: true });
+    const result = await learn(projectRoot, parsed.content, parsed.file ?? "http-api", scope);
+    // Treat manual learn calls as a session event for dashboard metrics.
+    try {
+      const store = await getStore(projectRoot);
+      try {
+        // Record a session with zero token counts (we don't have query tokens here).
+        recordSession(store, 0, 0, projectRoot);
+      } finally {
+        store.close();
+      }
+    } catch {
+      // Non-fatal: metrics are best-effort
+    }
+
+    try {
+      // Log a lightweight hook-like event so the dashboard's Activity tab
+      // shows manual learn actions. Do NOT include the learned content.
+      logHookEvent(projectRoot, {
+        event: "Learn",
+        tool: "HTTP",
+        path: parsed.file ?? "http-api",
+        tokensSaved: 0,
+      });
+    } catch {
+      // best effort
+    }
+
+    json(res, 201, { ok: true, nodesAdded: result.nodesAdded });
   } catch (err) {
     json(res, 500, { error: "Learn failed", detail: String(err) });
+  }
+}
+
+/**
+ * Classify a short assistant message for memory-worthiness using an
+ * optional configured LLM provider (OpenAI/Anthropic). If no provider
+ * is configured or the provider call fails, return a conservative
+ * heuristic-based result.
+ */
+async function handleClassify(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): Promise<void> {
+  let body: string;
+  try {
+    body = await readBody(req);
+  } catch {
+    json(res, 400, { error: "Failed to read request body" });
+    return;
+  }
+
+  let parsed: { content?: string };
+  try {
+    parsed = JSON.parse(body) as typeof parsed;
+  } catch {
+    json(res, 400, { error: "Invalid JSON body" });
+    return;
+  }
+
+  const content = (parsed.content ?? "").toString().trim();
+  if (!content) {
+    json(res, 400, { error: "Missing 'content' in request body" });
+    return;
+  }
+
+  // Local heuristic fallback (same as the PI-side detector but server-side)
+  function heuristic(text: string) {
+    const trimmed = text.trim();
+    const markerRegex = /\[engram:([a-z0-9_-]+)(?:\s*:\s*([^\]]+))?\]/i;
+    const markerMatch = trimmed.match(markerRegex);
+    if (markerMatch) {
+      const markerType = (markerMatch[1] || "remember").toLowerCase();
+      const metaStr = markerMatch[2] || "";
+      const meta: Record<string, string> = {};
+      if (metaStr) {
+        for (const part of metaStr.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)) {
+          const kv = part.split("=");
+          if (kv.length === 2) meta[kv[0].toLowerCase()] = kv[1];
+          else meta[part.toLowerCase()] = "true";
+        }
+      }
+      const scope = meta.scope || (markerType === "global" ? "global" : "project");
+      const summary = trimmed.replace(markerRegex, "").trim() || trimmed;
+      return { shouldSave: true, type: meta.type || markerType, scope, summary, confidence: 0.95, reason: "explicit-marker" };
+    }
+
+    const htmlMatch = trimmed.match(/<memory>([\s\S]*?)<\/memory>/i);
+    if (htmlMatch) {
+      const inner = (htmlMatch[1] || "").trim();
+      return { shouldSave: true, type: "assistant-tag", scope: "project", summary: inner || trimmed, confidence: 0.9, reason: "html-tag" };
+    }
+
+    const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const headerRegex = /^(conclusion|summary|takeaway|decided|decision|recommendation|proposal|idea|problem|issue|note|observation)[:\s\-]/i;
+    for (const line of lines) {
+      const m = line.match(headerRegex);
+      if (m) {
+        const t = (m[1] || "summary").toLowerCase();
+        const scope = t === "idea" ? "entity" : "project";
+        return { shouldSave: true, type: t, scope, summary: line, confidence: 0.85, reason: "line-header" };
+      }
+    }
+
+    if (/\bI recommend\b|\bwe should\b|\bI suggest\b|\bmy recommendation\b|\bshould be refactored\b/i.test(trimmed)) {
+      return { shouldSave: true, type: "recommendation", scope: "project", summary: trimmed.slice(0, 1000), confidence: 0.8, reason: "recommendation-phrase" };
+    }
+
+    if (/in summary|overall|to summarize|in conclusion|takeaway[:\s]/i.test(trimmed)) {
+      return { shouldSave: true, type: "summary", scope: "project", summary: trimmed.slice(0, 1000), confidence: 0.8, reason: "summary-phrase" };
+    }
+
+    if (/\b(problem|bug|issue|regression)\b/i.test(trimmed) && /\breproduce|steps to reproduce|steps to repro|cause\b/i.test(trimmed)) {
+      return { shouldSave: true, type: "problem", scope: "project", summary: trimmed.slice(0, 1500), confidence: 0.85, reason: "problem-detailed" };
+    }
+
+    return { shouldSave: false, confidence: 0.0, reason: "heuristic-none" };
+  }
+
+  // If no AI backend configured, return heuristic result.
+  const openaiKey = process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || null;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY || null;
+  const providerEnv = (process.env.ENGRAM_AI_PROVIDER || "").toLowerCase();
+
+  const heuristicResult = heuristic(content);
+
+  if (!openaiKey && !anthropicKey) {
+    json(res, 200, heuristicResult);
+    return;
+  }
+
+  // Prefer OpenAI if configured or providerEnv explicitly set to openai
+  const useOpenAI = Boolean(openaiKey) && (providerEnv === "openai" || !anthropicKey);
+
+  // Build a concise instruction for the LLM to emit JSON only.
+  const systemPrompt = `You are a concise classifier. Decide whether the given assistant message should be stored in project memory as a durable memory. Respond with a single JSON object only, no surrounding text. Fields: shouldSave (boolean), type (one of: conclusion, summary, recommendation, idea, problem, note, other), scope (one of: project, global, entity), summary (short one-line <=160 chars), confidence (0.0-1.0).`;
+  const userPrompt = `Message:\n${content}\n\nReturn the JSON object only.`;
+
+  try {
+    if (useOpenAI) {
+      // Call OpenAI Chat Completions
+      const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+      const controller = new AbortController();
+      const to = Number(process.env.ENGRAM_AI_TIMEOUT_MS ?? 8000);
+      const timer = setTimeout(() => controller.abort(), to);
+      try {
+        const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${openaiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            max_tokens: 512,
+            temperature: 0.0,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+
+        if (!resp.ok) {
+          const txt = await resp.text();
+          // On failure, return heuristic
+          json(res, 200, { ...heuristicResult, note: `openai_error:${resp.status}` });
+          return;
+        }
+
+        const data = await resp.json();
+        const text = (data.choices && data.choices[0] && (data.choices[0].message?.content ?? data.choices[0].text)) || "";
+        // Extract first JSON object in the text
+        const jsMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsMatch) {
+          json(res, 200, heuristicResult);
+          return;
+        }
+        try {
+          const parsedJson = JSON.parse(jsMatch[0]);
+          // sanitize fields
+          parsedJson.confidence = Number(parsedJson.confidence) || 0.0;
+          parsedJson.shouldSave = Boolean(parsedJson.shouldSave);
+          parsedJson.type = parsedJson.type || "other";
+          parsedJson.scope = parsedJson.scope || "project";
+          parsedJson.summary = (parsedJson.summary || content.slice(0, 300)).toString().slice(0, 200);
+          json(res, 200, parsedJson);
+          return;
+        } catch {
+          json(res, 200, heuristicResult);
+          return;
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    } else {
+      // Anthropic path (best-effort)
+      const model = process.env.ANTHROPIC_MODEL || "claude-v1";
+      const controller = new AbortController();
+      const to = Number(process.env.ENGRAM_AI_TIMEOUT_MS ?? 8000);
+      const timer = setTimeout(() => controller.abort(), to);
+      try {
+        const prompt = `${systemPrompt}\n\n${userPrompt}`;
+        const resp = await fetch("https://api.anthropic.com/v1/complete", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${anthropicKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ model, prompt, max_tokens_to_sample: 512, temperature: 0.0 }),
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        if (!resp.ok) {
+          json(res, 200, { ...heuristicResult, note: `anthropic_error:${resp.status}` });
+          return;
+        }
+        const data = await resp.json();
+        const text = data?.completion ?? "";
+        const jsMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsMatch) {
+          json(res, 200, heuristicResult);
+          return;
+        }
+        try {
+          const parsedJson = JSON.parse(jsMatch[0]);
+          parsedJson.confidence = Number(parsedJson.confidence) || 0.0;
+          parsedJson.shouldSave = Boolean(parsedJson.shouldSave);
+          parsedJson.type = parsedJson.type || "other";
+          parsedJson.scope = parsedJson.scope || "project";
+          parsedJson.summary = (parsedJson.summary || content.slice(0, 300)).toString().slice(0, 200);
+          json(res, 200, parsedJson);
+          return;
+        } catch {
+          json(res, 200, heuristicResult);
+          return;
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  } catch (err) {
+    // Any classifier failure falls back to heuristic
+    json(res, 200, { ...heuristicResult, note: `classifier_error:${String(err)}` });
+    return;
   }
 }
 
 // ---------------------------------------------------------------------------
 // Dashboard API handlers
 // ---------------------------------------------------------------------------
+
+async function handleScopes(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): Promise<void> {
+  try {
+    const store = await getStore(projectRoot);
+    try {
+      const projects = await listKnownProjects(store);
+      const scopes = [
+        { id: "accumulative", label: "ACCUMMULATIVE MEMORIES" },
+        { id: "global", label: "GLOBAL MEMORIES" },
+        { id: "personal", label: "PERSONAL MEMORIES" },
+      ];
+      json(res, 200, { scopes, projects });
+    } finally {
+      store.close();
+    }
+  } catch (err) {
+    json(res, 500, { error: "Scopes failed", detail: String(err) });
+  }
+}
 
 async function handleHookLog(
   req: IncomingMessage,
@@ -380,21 +759,169 @@ async function handleHookLog(
     const url = parseUrl(req);
     const limit = parseInt(url.searchParams.get("limit") ?? "100", 10);
     const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
-    const entries = readHookLog(projectRoot);
-    const paginated = entries.slice(offset, offset + limit);
-    json(res, 200, { entries: paginated, total: entries.length });
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
+
+    let entries: any[] = [];
+
+    if (projectId) {
+      const decoded = decodeProjectId(projectId) || projectRoot;
+      entries = readHookLog(decoded);
+
+      // Fallback to session_log for that project if no file exists
+      if ((!entries || entries.length === 0)) {
+        try {
+          const store = await getStore(projectRoot);
+          try {
+            const raw = store.getStat(projectStatKey(decoded, "session_log"));
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                entries = parsed.map((s: any) => ({
+                  event: "Session",
+                  tool: "learn",
+                  path: null,
+                  tokensSaved: s.saved ?? 0,
+                  naiveTokens: s.naiveTokens ?? 0,
+                  graphTokens: s.graphTokens ?? 0,
+                  ts: new Date(s.ts).toISOString(),
+                }));
+              }
+            }
+          } finally {
+            store.close();
+          }
+        } catch {
+          // ignore
+        }
+      }
+    } else if (scope === "accumulative") {
+      // Aggregate hook logs across all known projects
+      const store = await getStore(projectRoot);
+      try {
+        const projects = await listKnownProjects(store);
+        let combined: any[] = [];
+        for (const p of projects) {
+          try {
+            const e = readHookLog(p.root);
+            if (e && e.length > 0) {
+              combined = combined.concat(e);
+            } else {
+              const raw = store.getStat(projectStatKey(p.root, "session_log"));
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                  combined = combined.concat(parsed.map((s: any) => ({
+                    event: "Session",
+                    tool: "learn",
+                    path: null,
+                    tokensSaved: s.saved ?? 0,
+                    naiveTokens: s.naiveTokens ?? 0,
+                    graphTokens: s.graphTokens ?? 0,
+                    ts: new Date(s.ts).toISOString(),
+                  })));
+                }
+              }
+            }
+          } catch {
+            // ignore per-project failures
+          }
+        }
+        // Sort by timestamp desc
+        combined.sort((a, b) => {
+          const ta = a.ts ? new Date(a.ts).getTime() : 0;
+          const tb = b.ts ? new Date(b.ts).getTime() : 0;
+          return tb - ta;
+        });
+        entries = combined;
+      } finally {
+        store.close();
+      }
+    } else {
+      entries = readHookLog(projectRoot);
+
+      // If no hook-log exists, fall back to session log entries (best-effort)
+      if ((!entries || entries.length === 0)) {
+        try {
+          const store = await getStore(projectRoot);
+          try {
+            const raw = store.getStat(projectStatKey(projectRoot, "session_log"));
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                entries = parsed.map((s: any) => ({
+                  event: "Session",
+                  tool: "learn",
+                  path: null,
+                  tokensSaved: s.saved ?? 0,
+                  naiveTokens: s.naiveTokens ?? 0,
+                  graphTokens: s.graphTokens ?? 0,
+                  ts: new Date(s.ts).toISOString(),
+                }));
+              }
+            }
+          } finally {
+            store.close();
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const paginated = (entries || []).slice(offset, offset + limit);
+    json(res, 200, { entries: paginated, total: (entries || []).length });
   } catch (err) {
     json(res, 500, { error: "Hook log read failed", detail: String(err) });
   }
 }
 
 function handleHookLogSummary(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   projectRoot: string
 ): void {
   try {
-    const entries = readHookLog(projectRoot);
+    const url = parseUrl(req);
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
+
+    let entries: any[] = [];
+
+    if (projectId) {
+      const decoded = decodeProjectId(projectId) || projectRoot;
+      entries = readHookLog(decoded);
+    } else if (scope === "accumulative") {
+      // aggregate across projects
+      (async () => {
+        const store = await getStore(projectRoot);
+        try {
+          const projects = await listKnownProjects(store);
+          let combined: any[] = [];
+          for (const p of projects) {
+            try {
+              const e = readHookLog(p.root);
+              if (e && e.length > 0) combined = combined.concat(e);
+            } catch {}
+          }
+          combined.sort((a, b) => {
+            const ta = a.ts ? new Date(a.ts).getTime() : 0;
+            const tb = b.ts ? new Date(b.ts).getTime() : 0;
+            return tb - ta;
+          });
+          const summary = summarizeHookLog(combined);
+          json(res, 200, summary);
+        } catch (err) {
+          json(res, 500, { error: "Summary failed", detail: String(err) });
+        } finally {
+          try { store.close(); } catch {}
+        }
+      })();
+      return;
+    } else {
+      entries = readHookLog(projectRoot);
+    }
+
     const summary = summarizeHookLog(entries);
     json(res, 200, summary);
   } catch (err) {
@@ -403,15 +930,86 @@ function handleHookLogSummary(
 }
 
 async function handleTokens(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   projectRoot: string
 ): Promise<void> {
   try {
+    const url = parseUrl(req);
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
+
     const store = await getStore(projectRoot);
     try {
-      const tokenStats = getCumulativeStats(store);
-      json(res, 200, tokenStats);
+      if (projectId) {
+        const decoded = decodeProjectId(projectId) || projectRoot;
+        const tokenStats = getCumulativeStats(store, decoded);
+        let sessions: any[] = [];
+        try {
+          const raw = store.getStat(projectStatKey(decoded, "session_log"));
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) sessions = parsed.slice(-200);
+          }
+        } catch {}
+        json(res, 200, { ...tokenStats, sessions });
+        return;
+      }
+
+      if (scope === "accumulative") {
+        // Sum per-project stats across all known projects
+        const projects = await listKnownProjects(store);
+        let totalSessions = 0;
+        let totalNaiveTokens = 0;
+        let totalGraphTokens = 0;
+        let totalSaved = 0;
+        let sessionsArr: any[] = [];
+        for (const p of projects) {
+          try {
+            const s = getCumulativeStats(store, p.root);
+            totalSessions += s.totalSessions;
+            totalNaiveTokens += s.totalNaiveTokens;
+            totalGraphTokens += s.totalGraphTokens;
+            totalSaved += s.totalSaved;
+            const raw = store.getStat(projectStatKey(p.root, "session_log"));
+            if (raw) {
+              try {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) sessionsArr = sessionsArr.concat(parsed);
+              } catch {}
+            }
+          } catch {
+            // per-project failures are best-effort
+          }
+        }
+        // Sort sessions by ts desc and keep last 200
+        sessionsArr.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        const sessions = sessionsArr.slice(0, 200);
+        const avgReduction = totalNaiveTokens > 0 ? Math.round((totalSaved / totalNaiveTokens) * 1000) / 10 : 0;
+        const estimatedCostSaved = Math.round((totalSaved / 1_000_000) * 3 * 100) / 100;
+        json(res, 200, {
+          totalSessions,
+          totalNaiveTokens,
+          totalGraphTokens,
+          totalSaved,
+          avgReduction,
+          estimatedCostSaved,
+          sessions,
+        });
+        return;
+      }
+
+      // Default: per-server projectRoot
+      const tokenStats = getCumulativeStats(store, projectRoot);
+      let sessions: any[] = [];
+      try {
+        const raw = store.getStat(projectStatKey(projectRoot, "session_log"));
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) sessions = parsed.slice(-200);
+        }
+      } catch {}
+      json(res, 200, { ...tokenStats, sessions });
     } finally {
       store.close();
     }
@@ -428,17 +1026,94 @@ async function handleFilesHeatmap(
   try {
     const url = parseUrl(req);
     const limit = parseInt(url.searchParams.get("limit") ?? "20", 10);
-    const entries = readHookLog(projectRoot);
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
 
-    // Aggregate by file path
-    const fileMap = new Map<string, { count: number; tokensSaved: number }>();
-    for (const entry of entries) {
-      if (!entry.path) continue;
-      const existing = fileMap.get(entry.path) ?? { count: 0, tokensSaved: 0 };
-      fileMap.set(entry.path, {
-        count: existing.count + 1,
-        tokensSaved: existing.tokensSaved + (entry.tokensSaved ?? 0),
-      });
+    let fileMap = new Map<string, { count: number; tokensSaved: number }>();
+
+    if (projectId) {
+      const decoded = decodeProjectId(projectId) || projectRoot;
+      const entries = readHookLog(decoded);
+      for (const entry of entries) {
+        if (!entry.path) continue;
+        const existing = fileMap.get(entry.path) ?? { count: 0, tokensSaved: 0 };
+        fileMap.set(entry.path, {
+          count: existing.count + 1,
+          tokensSaved: existing.tokensSaved + (entry.tokensSaved ?? 0),
+        });
+      }
+
+      if (fileMap.size === 0) {
+        const store = await getStore(projectRoot);
+        try {
+          const allNodes = store.getAllNodes(decoded);
+          for (const n of allNodes) {
+            if (!n.sourceFile) continue;
+            const existing = fileMap.get(n.sourceFile) ?? { count: 0, tokensSaved: 0 };
+            fileMap.set(n.sourceFile, { count: existing.count + 1, tokensSaved: existing.tokensSaved });
+          }
+        } finally {
+          store.close();
+        }
+      }
+    } else if (scope === "accumulative") {
+      const store = await getStore(projectRoot);
+      try {
+        // Aggregate across all nodes in DB
+        const allNodes = store.getAllNodes();
+        for (const n of allNodes) {
+          if (!n.sourceFile) continue;
+          const existing = fileMap.get(n.sourceFile) ?? { count: 0, tokensSaved: 0 };
+          fileMap.set(n.sourceFile, { count: existing.count + 1, tokensSaved: existing.tokensSaved });
+        }
+      } finally {
+        store.close();
+      }
+    } else if (scope === "global" || scope === "personal") {
+      // Filter files by nodes' memory scope across all projects
+      const desired = scope === "global" ? "global" : "entity";
+      const store = await getStore(projectRoot);
+      try {
+        const allNodes = store.getAllNodes();
+        for (const n of allNodes) {
+          try {
+            const meta = n.metadata || {};
+            const ms = (meta.memoryScope || meta.memory_scope) || "project";
+            if (ms !== desired) continue;
+            if (!n.sourceFile) continue;
+            const existing = fileMap.get(n.sourceFile) ?? { count: 0, tokensSaved: 0 };
+            fileMap.set(n.sourceFile, { count: existing.count + 1, tokensSaved: existing.tokensSaved });
+          } catch {
+            // ignore node-level parse errors
+          }
+        }
+      } finally {
+        store.close();
+      }
+    } else {
+      const entries = readHookLog(projectRoot);
+      for (const entry of entries) {
+        if (!entry.path) continue;
+        const existing = fileMap.get(entry.path) ?? { count: 0, tokensSaved: 0 };
+        fileMap.set(entry.path, {
+          count: existing.count + 1,
+          tokensSaved: existing.tokensSaved + (entry.tokensSaved ?? 0),
+        });
+      }
+
+      if (fileMap.size === 0) {
+        const store = await getStore(projectRoot);
+        try {
+          const allNodes = store.getAllNodes(projectRoot);
+          for (const n of allNodes) {
+            if (!n.sourceFile) continue;
+            const existing = fileMap.get(n.sourceFile) ?? { count: 0, tokensSaved: 0 };
+            fileMap.set(n.sourceFile, { count: existing.count + 1, tokensSaved: existing.tokensSaved });
+          }
+        } finally {
+          store.close();
+        }
+      }
     }
 
     // Sort by count descending, take top N
@@ -512,9 +1187,37 @@ async function handleGraphNodes(
     const url = parseUrl(req);
     const limit = parseInt(url.searchParams.get("limit") ?? "100", 10);
     const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
+
     const store = await getStore(projectRoot);
     try {
-      const allNodes = store.getAllNodes();
+      // Special-case memory-scope filters across all projects
+      if (scope === "global" || scope === "personal") {
+        const desired = scope === "global" ? "global" : "entity";
+        const all = store.getAllNodes();
+        const filtered = all.filter((n) => {
+          try {
+            const meta = n.metadata || {};
+            const ms = (meta.memoryScope || meta.memory_scope) || "project";
+            return ms === desired;
+          } catch {
+            return false;
+          }
+        });
+        const paginated = filtered.slice(offset, offset + limit);
+        json(res, 200, { nodes: paginated, total: filtered.length });
+        return;
+      }
+
+      let target: string | undefined = projectRoot;
+      if (projectId) {
+        const decoded = decodeProjectId(projectId);
+        if (decoded) target = decoded;
+      } else if (scope === "accumulative") {
+        target = undefined; // all nodes
+      }
+      const allNodes = store.getAllNodes(target as any);
       const paginated = allNodes.slice(offset, offset + limit);
       json(res, 200, { nodes: paginated, total: allNodes.length });
     } finally {
@@ -525,15 +1228,77 @@ async function handleGraphNodes(
   }
 }
 
-async function handleGraphGodNodes(
-  _req: IncomingMessage,
+async function handleGraphEdges(
+  req: IncomingMessage,
   res: ServerResponse,
   projectRoot: string
 ): Promise<void> {
   try {
+    const url = parseUrl(req);
+    const idsParam = url.searchParams.get("ids");
+    if (!idsParam) {
+      json(res, 400, { error: "Missing 'ids' query parameter (comma-separated)" });
+      return;
+    }
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
+    // decodeURIComponent isn't needed for comma-separated ids generated by join
+    const ids = idsParam.split(",").filter((s) => s.trim().length > 0);
     const store = await getStore(projectRoot);
     try {
-      const godNodes = store.getGodNodes(10);
+      let target: string | undefined = projectRoot;
+      if (projectId) {
+        const decoded = decodeProjectId(projectId);
+        if (decoded) target = decoded;
+      } else if (scope === "accumulative") {
+        target = undefined;
+      }
+      const edges = store.getEdgesForNodes(ids, target as any);
+      json(res, 200, { edges });
+    } finally {
+      store.close();
+    }
+  } catch (err) {
+    json(res, 500, { error: "Graph edges failed", detail: String(err) });
+  }
+}
+
+async function handleGraphGodNodes(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectRoot: string
+): Promise<void> {
+  try {
+    const url = parseUrl(req);
+    const projectId = url.searchParams.get("projectId");
+    const scope = url.searchParams.get("scope");
+    const store = await getStore(projectRoot);
+    try {
+      // If memory-scope filter requested, compute across all projects
+      if (scope === "global" || scope === "personal") {
+        const desired = scope === "global" ? "global" : "entity";
+        const allGods = store.getGodNodes(200); // larger pool to choose from
+        const filtered = allGods.filter((g: any) => {
+          try {
+            const meta = g.node.metadata || {};
+            const ms = (meta.memoryScope || meta.memory_scope) || "project";
+            return ms === desired;
+          } catch {
+            return false;
+          }
+        });
+        json(res, 200, filtered.slice(0, 10));
+        return;
+      }
+
+      let target: string | undefined = projectRoot;
+      if (projectId) {
+        const decoded = decodeProjectId(projectId);
+        if (decoded) target = decoded;
+      } else if (scope === "accumulative") {
+        target = undefined;
+      }
+      const godNodes = store.getGodNodes(10, target as any);
       json(res, 200, godNodes);
     } finally {
       store.close();
@@ -566,35 +1331,40 @@ function handleSSE(
   res.write("data: {\"type\":\"connected\"}\n\n");
   sseClients.add(res);
 
-  // Start watching hook log if not already
+  // Start watching hook log if not already. Always install a periodic
+  // watcher — the log file may be created later and we still want to
+  // detect new events. Initialize lastSize to current file size or 0.
   if (!hookLogWatcher) {
     const logPath = join(projectRoot, ".engram", "hook-log.jsonl");
-    if (existsSync(logPath)) {
-      let lastSize = statSync(logPath).size;
+    let lastSize = 0;
+    try {
+      if (existsSync(logPath)) lastSize = statSync(logPath).size;
+    } catch {
+      lastSize = 0;
+    }
 
-      const checkFile = (): void => {
-        try {
-          const currentSize = statSync(logPath).size;
-          if (currentSize > lastSize) {
-            lastSize = currentSize;
-            // Broadcast to all SSE clients
-            const msg = JSON.stringify({ type: "hook-event", timestamp: Date.now() });
-            for (const client of sseClients) {
-              try {
-                client.write(`data: ${msg}\n\n`);
-              } catch {
-                sseClients.delete(client);
-              }
+    const checkFile = (): void => {
+      try {
+        const currentSize = existsSync(logPath) ? statSync(logPath).size : 0;
+        if (currentSize > lastSize) {
+          lastSize = currentSize;
+          // Broadcast to all SSE clients
+          const msg = JSON.stringify({ type: "hook-event", timestamp: Date.now() });
+          for (const client of sseClients) {
+            try {
+              client.write(`data: ${msg}\n\n`);
+            } catch {
+              sseClients.delete(client);
             }
           }
-        } catch {
-          // Log file gone or unreadable
         }
-      };
+      } catch {
+        // Log file gone or unreadable
+      }
+    };
 
-      const interval = setInterval(checkFile, 1000);
-      hookLogWatcher = () => clearInterval(interval);
-    }
+    const interval = setInterval(checkFile, 1000);
+    hookLogWatcher = () => clearInterval(interval);
   }
 
   // Cleanup on disconnect
@@ -614,7 +1384,29 @@ function handleSSE(
 function writePid(projectRoot: string): void {
   const dir = join(projectRoot, ".engram");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "http-server.pid"), String(process.pid), "utf-8");
+  const pidPath = join(dir, "http-server.pid");
+  writeFileSync(pidPath, String(process.pid), "utf-8");
+
+  // Audit log: append a short startup line with timestamp, pid, port, and project.
+  // Write both to a project-scoped audit file and the user-level ~/.engram/http-server.log
+  try {
+    const ts = new Date().toISOString();
+    const line = `${ts} START pid=${process.pid} port=${serverPort} project=${projectRoot}\n`;
+    try {
+      appendFileSync(join(dir, "http-server.start.log"), line, "utf-8");
+    } catch {
+      // best-effort — don't fail startup
+    }
+    try {
+      const homeLogDir = join(homedir(), ".engram");
+      if (!existsSync(homeLogDir)) mkdirSync(homeLogDir, { recursive: true });
+      appendFileSync(join(homeLogDir, "http-server.log"), line, "utf-8");
+    } catch {
+      // best-effort
+    }
+  } catch {
+    // swallow audit failures
+  }
 }
 
 function removePid(projectRoot: string): void {
@@ -754,11 +1546,15 @@ export function createHttpServer(
           handleProviders(req, res);
         } else if (req.method === "POST" && path === "/learn") {
           await handleLearn(req, res, projectRoot);
+        } else if (req.method === "POST" && path === "/classify") {
+          await handleClassify(req, res, projectRoot);
         // Dashboard API routes
         } else if (req.method === "GET" && path === "/api/hook-log") {
           await handleHookLog(req, res, projectRoot);
         } else if (req.method === "GET" && path === "/api/hook-log/summary") {
           handleHookLogSummary(req, res, projectRoot);
+        } else if (req.method === "GET" && path === "/api/scopes") {
+          await handleScopes(req, res, projectRoot);
         } else if (req.method === "GET" && path === "/api/tokens") {
           await handleTokens(req, res, projectRoot);
         } else if (req.method === "GET" && path === "/api/files/heatmap") {
@@ -769,6 +1565,8 @@ export function createHttpServer(
           await handleCacheStats(req, res, projectRoot);
         } else if (req.method === "GET" && path === "/api/graph/nodes") {
           await handleGraphNodes(req, res, projectRoot);
+        } else if (req.method === "GET" && path === "/api/graph/edges") {
+          await handleGraphEdges(req, res, projectRoot);
         } else if (req.method === "GET" && path === "/api/graph/god-nodes") {
           await handleGraphGodNodes(req, res, projectRoot);
         } else if (req.method === "GET" && path === "/api/sse") {
@@ -788,11 +1586,126 @@ export function createHttpServer(
             "X-Content-Type-Options": "nosniff",
           });
           res.end(buildDashboardHtml());
+        } else if (req.method === "POST" && path === "/hook") {
+          // Hook dispatch endpoint: accept a Hook payload (SessionStart,
+          // UserPromptSubmit, PreToolUse, etc.) and run the same dispatcher
+          // used by the `engram intercept` entry point. This lets external
+          // clients (pi, CLIs, tests) invoke engram's hook handlers over
+          // the local HTTP server securely.
+          let bodyStr: string;
+          try {
+            bodyStr = await readBody(req);
+          } catch {
+            json(res, 400, { error: "Failed to read request body" });
+            return;
+          }
+
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(bodyStr);
+          } catch {
+            json(res, 400, { error: "Invalid JSON body" });
+            return;
+          }
+
+          try {
+            const { dispatchHook } = await import("../intercept/dispatch.js");
+            const result = await dispatchHook(parsed);
+            if (result === null) {
+              // PASSTHROUGH — indicate with 204 No Content so callers know
+              // engram opted out.
+              res.writeHead(204, { ...corsHeaders(req) });
+              res.end();
+              return;
+            }
+
+            // Return the handler's result as JSON.
+            json(res, 200, result);
+            return;
+          } catch (err) {
+            json(res, 500, { error: "Hook dispatch failed", detail: String(err) });
+            return;
+          }
         } else {
           json(res, 404, { error: "Not found" });
         }
       } catch (err) {
         json(res, 500, { error: "Internal server error", detail: String(err) });
+      }
+    });
+
+    // Upgrade handler — accept WebSocket connections for streaming ingest
+    // Path: /learn-ws
+    server.on("upgrade", (req, socket, head) => {
+      try {
+        const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+        if (url.pathname !== "/learn-ws") {
+          socket.destroy();
+          return;
+        }
+
+        // Basic host + origin checks (same as HTTP handlers)
+        if (!isHostValid(req.headers.host, port)) {
+          socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+        const origin = req.headers.origin as string | undefined;
+        if (origin && !isOriginAllowed(origin, port)) {
+          socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
+        // Auth: accept Authorization: Bearer <token> or cookie engram_token
+        let ok = false;
+        const authHeader = (req.headers.authorization ?? "") as string;
+        if (typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
+          const presented = authHeader.slice(7).trim();
+          if (safeEqual(presented, currentToken())) ok = true;
+        }
+        if (!ok) {
+          const cookies = parseCookies(req.headers.cookie);
+          if (cookies.engram_token && safeEqual(cookies.engram_token, currentToken())) ok = true;
+        }
+        if (!ok) {
+          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
+        const key = req.headers["sec-websocket-key"];
+        if (!key || typeof key !== "string") {
+          socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
+        // Compute accept key per RFC6455
+        const accept = createHash("sha1")
+          .update(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+          .digest("base64");
+
+        const headers = [
+          "HTTP/1.1 101 Switching Protocols",
+          "Upgrade: websocket",
+          "Connection: Upgrade",
+          `Sec-WebSocket-Accept: ${accept}`,
+        ];
+        socket.write(headers.join("\r\n") + "\r\n\r\n");
+        socket.setNoDelay(true);
+
+        // Hand off to the WebSocket frame handler module (dynamic import so
+        // we don't add a hard dependency at module init). The handler runs
+        // the learned ingestion in background and notifies the socket with
+        // per-chunk results.
+        import("./learn-ws.js")
+          .then((m) => m.handleWebSocket(socket, projectRoot))
+          .catch(() => {
+            try { socket.destroy(); } catch { /* ignore */ }
+          });
+      } catch (e) {
+        try { socket.destroy(); } catch { /* ignore */ }
       }
     });
 
@@ -812,6 +1725,37 @@ export function createHttpServer(
       process.on("SIGTERM", cleanup);
 
       resolve(tokenInfo);
+
+      // Background initialization: remove kill-switch if present, trigger
+      // DB migrations by opening the store, and run an incremental init to
+      // ensure the graph is scanned so the dashboard has "Files" data.
+      // Best-effort only; failures must not crash the server.
+      (async () => {
+        try {
+          const flagPath = join(projectRoot, ".engram", "hook-disabled");
+          try {
+            if (existsSync(flagPath)) unlinkSync(flagPath);
+          } catch {
+            // ignore
+          }
+
+          // Trigger migrations and quick store open
+          try {
+            const s = await getStore(projectRoot);
+            try { s.close(); } catch {}
+          } catch {}
+
+          // Run incremental init to scan files but avoid a full heavy sweep
+          try {
+            await init(projectRoot, { incremental: true });
+          } catch {
+            // ignore
+          }
+        } catch {
+          // ignore
+        }
+      })();
+
       // Keep the process alive — the Promise resolves once the server is
       // listening, but the server continues running until a signal arrives.
     });

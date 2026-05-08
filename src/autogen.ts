@@ -14,8 +14,8 @@ import { join } from "node:path";
 import type { GraphStore } from "./graph/store.js";
 import type { GraphNode } from "./graph/schema.js";
 
-const AUTOGEN_START = "<!-- engram:start -->";
-const AUTOGEN_END = "<!-- engram:end -->";
+const AUTOGEN_START = "<!-- engramx:start -->";
+const AUTOGEN_END = "<!-- engramx:end -->";
 
 // ─── View data model ────────────────────────────────────────────────────────
 
@@ -333,7 +333,7 @@ export function writeToFile(filePath: string, summary: string): void {
 
   if (analysis.state === "unbalanced") {
     throw new Error(
-      `engram: cannot safely update ${filePath}: ${analysis.error} Re-run engram gen after fixing the markers.`
+      `engramx: cannot safely update ${filePath}: ${analysis.error} Re-run engram gen after fixing the markers.`
     );
   }
 

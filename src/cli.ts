@@ -48,6 +48,7 @@ import { getComponentStatus, formatHudStatus } from "./intercept/component-statu
 import {
   buildEngramSection,
   writeEngramSectionToMemoryMd,
+  writeEngramSectionToPath,
 } from "./intercept/memory-md.js";
 import { basename } from "node:path";
 
@@ -279,7 +280,7 @@ program
       const root = pathResolve(opts.project);
       if (!existsSync(join(root, ".engram", "graph.db"))) {
         console.error(
-          `engram: no graph found at ${root}. Run 'engram init' first.`
+          `engramx: no graph found at ${root}. Run 'engram init' first.`
         );
         process.exit(1);
       }
@@ -291,7 +292,7 @@ program
         process.exitCode = 0;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`engram: ${msg}`);
+        console.error(`engramx: ${msg}`);
         if (opts.verbose && err instanceof Error && err.stack) {
           console.error(err.stack);
         }
@@ -548,8 +549,9 @@ program
   .description("Teach engram a decision, pattern, or lesson")
   .argument("<text>", "What to remember (e.g., 'We chose JWT over sessions for horizontal scaling')")
   .option("-p, --project <path>", "Project directory", ".")
-  .action(async (text: string, opts: { project: string }) => {
-    const result = await learn(opts.project, text);
+  .option("--scope <scope>", "Memory scope: project|global|entity", "project")
+  .action(async (text: string, opts: { project: string; scope: string }) => {
+    const result = await learn(opts.project, text, "manual", opts.scope);
     if (result.nodesAdded > 0) {
       console.log(chalk.green(`🧠 Learned ${result.nodesAdded} new insight(s).`));
     } else {
@@ -1463,9 +1465,10 @@ program
     "Write engram's structural facts into MEMORY.md (complementary to Anthropic Auto-Dream)"
   )
   .option("-p, --project <path>", "Project directory", ".")
+  .option("--scope <scope>", "Memory scope: project|global|entity", "project")
   .option("--dry-run", "Print what would be written without writing", false)
   .action(
-    async (opts: { project: string; dryRun: boolean }) => {
+    async (opts: { project: string; scope: string; dryRun: boolean }) => {
       const absProject = pathResolve(opts.project);
       const projectRoot = findProjectRoot(absProject);
       if (!projectRoot) {
@@ -1476,87 +1479,189 @@ program
         process.exit(1);
       }
 
-      // Gather facts from core APIs
-      const [gods, mistakeList, graphStats] = await Promise.all([
-        godNodes(projectRoot, 10).catch(() => []),
-        mistakes(projectRoot, { limit: 5 }).catch(() => []),
-        stats(projectRoot).catch(() => null),
-      ]);
+      const scope = typeof opts.scope === "string" && opts.scope ? opts.scope : "project";
 
-      if (!graphStats) {
-        console.error(chalk.red("Failed to read graph stats."));
-        process.exit(1);
-      }
-
-      // Read git branch from .git/HEAD (reuses the logic pattern
-      // from the SessionStart handler)
-      let branch: string | null = null;
+      const { getStore } = await import("./core.js");
+      const store = await getStore(projectRoot);
       try {
-        const headPath = join(projectRoot, ".git", "HEAD");
-        if (existsSync(headPath)) {
-          const content = readFileSync(headPath, "utf-8").trim();
-          const m = content.match(/^ref:\s+refs\/heads\/(.+)$/);
-          if (m) branch = m[1];
+        const graphStats = store.getStats(scope === "project" ? projectRoot : undefined);
+
+        // Helper to read current branch for project-scoped writes
+        let branch: string | null = null;
+        if (scope === "project") {
+          try {
+            const headPath = join(projectRoot, ".git", "HEAD");
+            if (existsSync(headPath)) {
+              const content = readFileSync(headPath, "utf-8").trim();
+              const m = content.match(/^ref:\s+refs\/heads\/(.+)$/);
+              if (m) branch = m[1];
+            }
+          } catch {
+            /* ignore */
+          }
         }
-      } catch {
-        /* branch stays null */
-      }
 
-      const section = buildEngramSection({
-        projectName: basename(projectRoot),
-        branch,
-        stats: {
-          nodes: graphStats.nodes,
-          edges: graphStats.edges,
-          extractedPct: graphStats.extractedPct,
-        },
-        godNodes: gods,
-        landmines: mistakeList.map((m) => ({
-          label: m.label,
-          sourceFile: m.sourceFile,
-        })),
-        lastMined: graphStats.lastMined,
-      });
+        const slugify = (s: string) =>
+          s
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/(^-|-$)/g, "") || "entity";
 
-      console.log(
-        chalk.bold(`\n📝 engram memory-sync`)
-      );
-      console.log(
-        chalk.dim(`   Target: ${join(projectRoot, "MEMORY.md")}`)
-      );
+        if (scope === "project") {
+          const godsRows = store.getGodNodes(10, projectRoot);
+          const gods = godsRows
+            .filter((g) => {
+              const ms = (g.node.metadata as Record<string, unknown>).memoryScope as string | null | undefined;
+              return ms === "project" || ms === null || ms === undefined;
+            })
+            .slice(0, 10)
+            .map((g) => ({ label: g.node.label, kind: g.node.kind, sourceFile: g.node.sourceFile }));
 
-      if (opts.dryRun) {
-        console.log(chalk.cyan("\n   Section to write (dry-run):\n"));
-        console.log(
-          section
-            .split("\n")
-            .map((l) => "     " + l)
-            .join("\n")
-        );
-        console.log(chalk.dim("\n   (dry-run — no changes written)"));
-        return;
-      }
+          let mistakeList = store.getAllNodes(projectRoot).filter((n) => n.kind === "mistake");
+          mistakeList = mistakeList.filter((m) => {
+            const ms = (m.metadata as Record<string, unknown>).memoryScope as string | null | undefined;
+            return ms === "project" || ms === null || ms === undefined;
+          });
+          mistakeList.sort((a, b) => b.lastVerified - a.lastVerified);
+          mistakeList = mistakeList.slice(0, 5);
 
-      const ok = writeEngramSectionToMemoryMd(projectRoot, section);
-      if (!ok) {
-        console.error(
-          chalk.red(
-            "\n   ❌ Write failed. MEMORY.md may be too large, or the engram section exceeded its size cap."
-          )
-        );
+          const section = buildEngramSection({
+            projectName: basename(projectRoot),
+            branch,
+            stats: {
+              nodes: graphStats.nodes,
+              edges: graphStats.edges,
+              extractedPct: graphStats.extractedPct,
+            },
+            godNodes: gods,
+            landmines: mistakeList.map((m) => ({ label: m.label, sourceFile: m.sourceFile })),
+            lastMined: graphStats.lastMined,
+          });
+
+          console.log(chalk.bold(`\n📝 engram memory-sync`));
+          console.log(chalk.dim(`   Target: ${join(projectRoot, "MEMORY.md")}`));
+
+          if (opts.dryRun) {
+            console.log(chalk.cyan("\n   Section to write (dry-run):\n"));
+            console.log(section.split("\n").map((l) => "     " + l).join("\n"));
+            console.log(chalk.dim("\n   (dry-run — no changes written)"));
+            return;
+          }
+
+          const ok = writeEngramSectionToMemoryMd(projectRoot, section);
+          if (!ok) {
+            console.error(chalk.red("\n   ❌ Write failed. MEMORY.md may be too large, or the engram section exceeded its size cap."));
+            process.exit(1);
+          }
+
+          console.log(chalk.green(`\n   ✅ Synced ${gods.length} god nodes${mistakeList.length > 0 ? ` and ${mistakeList.length} landmines` : ""} to MEMORY.md`));
+          console.log(chalk.dim(`\n   Next: Anthropic's Auto-Dream will consolidate this alongside its prose entries.\n`));
+          return;
+        }
+
+        if (scope === "global") {
+          const godsRows = store.getGodNodes(200);
+          const gods = godsRows
+            .filter((g) => (g.node.metadata as Record<string, unknown>).memoryScope === "global")
+            .slice(0, 10)
+            .map((g) => ({ label: g.node.label, kind: g.node.kind, sourceFile: g.node.sourceFile }));
+
+          let mistakeList = store.getAllNodes().filter((n) => n.kind === "mistake");
+          mistakeList = mistakeList.filter((m) => (m.metadata as Record<string, unknown>).memoryScope === "global");
+          mistakeList.sort((a, b) => b.lastVerified - a.lastVerified);
+          mistakeList = mistakeList.slice(0, 5);
+
+          const section = buildEngramSection({
+            projectName: "Global engramx memory",
+            branch: null,
+            stats: {
+              nodes: graphStats.nodes,
+              edges: graphStats.edges,
+              extractedPct: graphStats.extractedPct,
+            },
+            godNodes: gods,
+            landmines: mistakeList.map((m) => ({ label: m.label, sourceFile: m.sourceFile })),
+            lastMined: graphStats.lastMined,
+          });
+
+          const globalPath = join(homedir(), ".engramx", "MEMORY.md");
+          mkdirSync(dirname(globalPath), { recursive: true });
+
+          console.log(chalk.bold(`\n📝 engram memory-sync (global)`));
+          console.log(chalk.dim(`   Target: ${globalPath}`));
+
+          if (opts.dryRun) {
+            console.log(chalk.cyan("\n   Section to write (dry-run):\n"));
+            console.log(section.split("\n").map((l) => "     " + l).join("\n"));
+            console.log(chalk.dim("\n   (dry-run — no changes written)"));
+            return;
+          }
+
+          const ok = writeEngramSectionToPath(globalPath, section);
+          if (!ok) {
+            console.error(chalk.red("\n   ❌ Write failed. Global MEMORY.md write failed or exceeded size cap."));
+            process.exit(1);
+          }
+
+          console.log(chalk.green(`\n   ✅ Synced ${gods.length} god nodes${mistakeList.length > 0 ? ` and ${mistakeList.length} landmines` : ""} to ${globalPath}`));
+          console.log(chalk.dim(`\n   Next: Anthropic's Auto-Dream will consolidate this alongside its prose entries.\n`));
+          return;
+        }
+
+        if (scope === "entity") {
+          const godsRows = store.getGodNodes(500);
+          const entityGods = godsRows.filter((g) => (g.node.metadata as Record<string, unknown>).memoryScope === "entity");
+
+          if (entityGods.length === 0) {
+            console.log(chalk.dim("   No entity-scoped memories found."));
+            return;
+          }
+
+          const outDir = join(homedir(), ".engramx", "entities");
+          mkdirSync(outDir, { recursive: true });
+
+          let written = 0;
+          for (const g of entityGods.slice(0, 20)) {
+            const section = buildEngramSection({
+              projectName: g.node.label,
+              branch: null,
+              stats: {
+                nodes: graphStats.nodes,
+                edges: graphStats.edges,
+                extractedPct: graphStats.extractedPct,
+              },
+              godNodes: [{ label: g.node.label, kind: g.node.kind, sourceFile: g.node.sourceFile }],
+              landmines: [],
+              lastMined: graphStats.lastMined,
+            });
+
+            const filename = `${slugify(g.node.label)}.MEMORY.md`;
+            const outPath = join(outDir, filename);
+
+            console.log(chalk.dim(`   Target: ${outPath}`));
+
+            if (opts.dryRun) {
+              console.log(chalk.cyan("\n   Section to write (dry-run):\n"));
+              console.log(section.split("\n").map((l) => "     " + l).join("\n"));
+              continue;
+            }
+
+            const ok = writeEngramSectionToPath(outPath, section);
+            if (ok) written++;
+          }
+
+          if (!opts.dryRun) {
+            console.log(chalk.green(`\n   ✅ Synced ${written} entity memories to ${outDir}`));
+            console.log(chalk.dim(`\n   Next: Anthropic's Auto-Dream will consolidate these alongside prose entries.\n`));
+          }
+          return;
+        }
+
+        console.error(chalk.red(`Unknown scope: ${scope}`));
         process.exit(1);
+      } finally {
+        store.close();
       }
-
-      console.log(
-        chalk.green(
-          `\n   ✅ Synced ${gods.length} god nodes${mistakeList.length > 0 ? ` and ${mistakeList.length} landmines` : ""} to MEMORY.md`
-        )
-      );
-      console.log(
-        chalk.dim(
-          `\n   Next: Anthropic's Auto-Dream will consolidate this alongside its prose entries.\n`
-        )
-      );
     }
   );
 

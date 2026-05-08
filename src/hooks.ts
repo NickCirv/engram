@@ -40,7 +40,7 @@ if [ -z "$ENGRAM_BIN" ]; then
 fi
 
 if [ -d ".engram" ] && [ -f "$ENGRAM_BIN" ]; then
-  echo "[engram] Branch switched — rebuilding graph..."
+  echo "[engramx] Branch switched — rebuilding graph..."
   node "$ENGRAM_BIN" init . --quiet 2>/dev/null &
 fi
 ${HOOK_END}

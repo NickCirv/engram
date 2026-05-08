@@ -24,7 +24,7 @@ The spike confirmed TWO response mechanisms work for PreToolUse:Read:
      "hookSpecificOutput": {
        "hookEventName": "PreToolUse",
        "permissionDecision": "deny",
-       "permissionDecisionReason": "[engram] <summary>"
+       "permissionDecisionReason": "[engramx] <summary>"
      }
    }
    ```
@@ -36,7 +36,7 @@ The spike confirmed TWO response mechanisms work for PreToolUse:Read:
      "hookSpecificOutput": {
        "hookEventName": "PreToolUse",
        "permissionDecision": "allow",
-       "additionalContext": "[engram] <warning>"
+       "additionalContext": "[engramx] <warning>"
      }
    }
    ```

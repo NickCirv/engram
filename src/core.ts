@@ -13,19 +13,67 @@ import { mineGitHistory } from "./miners/git-miner.js";
 import { mineSessionHistory, learnFromSession } from "./miners/session-miner.js";
 import { mineSkills } from "./miners/skills-miner.js";
 import type { GraphStats } from "./graph/schema.js";
+import { recordSession } from "./intelligence/token-tracker.js";
 
 const ENGRAM_DIR = ".engram";
 const DB_FILE = "graph.db";
 const LOCK_FILE = "init.lock";
 const DEFAULT_SKILLS_DIR = join(homedir(), ".claude", "skills");
 
-export function getDbPath(projectRoot: string): string {
-  return join(projectRoot, ENGRAM_DIR, DB_FILE);
+// Global DB config: single database for all projects
+const GLOBAL_DB_DIR = process.env.ENGRAM_GLOBAL_DB_DIR || join(homedir(), ".engramx");
+const GLOBAL_DB_FILE = process.env.ENGRAM_GLOBAL_DB_FILE || "memory.db";
+
+export function getGlobalDbPath(): string {
+  return process.env.ENGRAM_GLOBAL_DB_PATH || join(GLOBAL_DB_DIR, GLOBAL_DB_FILE);
+}
+
+export function getDbPath(_projectRoot: string): string {
+  // Backwards-compatible alias: always use the single global DB.
+  return getGlobalDbPath();
 }
 
 export async function getStore(projectRoot: string): Promise<GraphStore> {
+  // GraphStore is now a global DB; callers should pass projectRoot to
+  // project-aware methods when needed.
   return GraphStore.open(getDbPath(projectRoot));
 }
+
+/**
+ * Helper to encode a project-specific stat key stored in the global stats table.
+ * Use a stable base64-encoding of the projectRoot so keys are filesystem-safe.
+ */
+export function projectStatKey(projectRoot: string, key: string): string {
+  const id = Buffer.from(projectRoot).toString("base64");
+  return `project:${id}:${key}`;
+}
+
+/**
+ * Read the current git branch for a project. Lightweight (no shell) — reads
+ * .git/HEAD and returns branch name or 'detached' or null.
+ */
+export function readGitBranch(projectRoot: string): string | null {
+  try {
+    let current = resolve(projectRoot);
+    for (let depth = 0; depth < 10; depth++) {
+      const headPath = join(current, ".git", "HEAD");
+      if (existsSync(headPath)) {
+        const content = readFileSync(headPath, "utf-8").trim();
+        const refMatch = content.match(/^ref:\s+refs\/heads\/(.+)$/);
+        if (refMatch) return refMatch[1];
+        if (/^[0-9a-f]{7,40}$/i.test(content)) return "detached";
+        return null;
+      }
+      const parent = dirname(current);
+      if (parent === current) return null;
+      current = parent;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 
 export interface InitResult {
   nodes: number;
@@ -72,7 +120,7 @@ export async function init(
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "EEXIST") {
       throw new Error(
-        `engram: another init is running on ${root} (lock: ${lockPath}). ` +
+        `engramx: another init is running on ${root} (lock: ${lockPath}). ` +
           `If no other process is active, delete the lock file manually.`
       );
     }
@@ -85,7 +133,7 @@ export async function init(
     if (options.incremental) {
       const store = await getStore(root);
       try {
-        const mtimeJson = store.getStat("file_mtimes");
+        const mtimeJson = store.getStat(projectStatKey(root, "file_mtimes"));
         if (mtimeJson) {
           previousMtimes = new Map(JSON.parse(mtimeJson));
         }
@@ -138,18 +186,20 @@ export async function init(
         const clearedFiles = new Set<string>();
         for (const node of allNodes) {
           if (node.sourceFile && !clearedFiles.has(node.sourceFile)) {
-            store.removeNodesForFile(node.sourceFile);
+            store.removeNodesForFile(node.sourceFile, root);
             clearedFiles.add(node.sourceFile);
           }
         }
       } else {
         store.clearAll();
       }
-      store.bulkUpsert(allNodes, allEdges);
-      store.setStat("last_mined", String(Date.now()));
-      store.setStat("project_root", root);
-      // Persist mtimes for next incremental run
-      store.setStat("file_mtimes", JSON.stringify([...mtimes.entries()]));
+      const branch = readGitBranch(root);
+      // Bulk upsert with project scoping so the global DB can host multiple projects.
+      store.bulkUpsert(allNodes, allEdges, root, branch ?? undefined, "project");
+      store.setStat(projectStatKey(root, "last_mined"), String(Date.now()));
+      store.setStat(projectStatKey(root, "project_root"), root);
+      // Persist mtimes for next incremental run (project-scoped)
+      store.setStat(projectStatKey(root, "file_mtimes"), JSON.stringify([...mtimes.entries()]));
     } finally {
       store.close();
     }
@@ -178,9 +228,61 @@ export async function query(
   question: string,
   options: { mode?: "bfs" | "dfs"; depth?: number; tokenBudget?: number } = {}
 ): Promise<{ text: string; estimatedTokens: number; nodesFound: number }> {
+  const root = resolve(projectRoot);
   const store = await getStore(projectRoot);
   try {
-    const result = queryGraph(store, question, options);
+    const result = queryGraph(store, question, { ...options, projectRoot: root });
+
+    // Instrument: record session metrics using full-corpus baseline.
+    // Baseline heuristic: naiveTokens = ceil(totalCharsAcrossProject / 4)
+    try {
+      // Collect unique source files for this project and sum their lengths.
+      const allNodes = store.getAllNodes(root);
+      const seenFiles = new Set<string>();
+      for (const n of allNodes) {
+        if (n.sourceFile) seenFiles.add(n.sourceFile);
+      }
+
+      let totalChars = 0;
+      for (const f of seenFiles) {
+        try {
+          const fullPath = join(root, f);
+          if (existsSync(fullPath)) {
+            totalChars += readFileSync(fullPath, "utf-8").length;
+          }
+        } catch {
+          // ignore read errors
+        }
+      }
+
+      const naiveTokens = Math.max(1, Math.ceil(totalChars / 4));
+      const graphTokens = Math.max(1, Math.round(result.estimatedTokens || 0));
+
+      // Best-effort: record session stats into the store under project scope
+      try {
+        recordSession(store, naiveTokens, graphTokens, root);
+      } catch {
+        // non-fatal
+      }
+    } catch {
+      // non-fatal
+    }
+
+    // Aggressive auto: ingest the query result into memory in the background
+    try {
+      void import("./intercept/auto-memory.js").then((m) => {
+        try {
+          // Use a shortened question as a relPath hint for dedupe keys
+          const hint = `query:${question.slice(0, 200)}`;
+          return m.performAutoLearnForContent(projectRoot, result.text, hint, `auto:query`);
+        } catch {
+          return undefined as unknown as Promise<void>;
+        }
+      }).catch(() => undefined as unknown as Promise<void>);
+    } catch {
+      /* swallow */
+    }
+
     return { text: result.text, estimatedTokens: result.estimatedTokens, nodesFound: result.nodes.length };
   } finally {
     store.close();
@@ -194,7 +296,7 @@ export async function path(
 ): Promise<{ text: string; hops: number }> {
   const store = await getStore(projectRoot);
   try {
-    const result = shortestPath(store, source, target);
+    const result = shortestPath(store, source, target, undefined, projectRoot);
     return { text: result.text, hops: result.edges.length };
   } finally {
     store.close();
@@ -207,7 +309,7 @@ export async function godNodes(
 ): Promise<Array<{ label: string; kind: string; degree: number; sourceFile: string }>> {
   const store = await getStore(projectRoot);
   try {
-    return store.getGodNodes(topN).map((g) => ({
+    return store.getGodNodes(topN, projectRoot).map((g) => ({
       label: g.node.label, kind: g.node.kind, degree: g.degree, sourceFile: g.node.sourceFile,
     }));
   } finally {
@@ -218,7 +320,7 @@ export async function godNodes(
 export async function stats(projectRoot: string): Promise<GraphStats> {
   const store = await getStore(projectRoot);
   try {
-    return store.getStats();
+    return store.getStats(projectRoot);
   } finally {
     store.close();
   }
@@ -351,7 +453,7 @@ export async function getFileContext(
 
     const store = await getStore(root);
     try {
-      const summary = renderFileStructure(store, relPath);
+      const summary = renderFileStructure(store, relPath, undefined, root);
       if (summary.codeNodeCount === 0) {
         // No code declarations → not worth a summary even if there's a
         // file metadata node. Treat as passthrough.
@@ -430,7 +532,7 @@ export async function computeKeywordIDF(
 
     const store = await getStore(root);
     try {
-      const allNodes = store.getAllNodes();
+      const allNodes = store.getAllNodes(projectRoot);
       const total = allNodes.length;
       if (total === 0) return [];
 
@@ -467,20 +569,211 @@ export async function computeKeywordIDF(
   }
 }
 
+import { generateConclusionNodes } from "./miners/conclusions-miner.js";
+import { extractLinkCandidates } from "./miners/linking-helpers.js";
+
 export async function learn(
   projectRoot: string,
   text: string,
-  sourceLabel = "manual"
+  sourceLabel = "manual",
+  memoryScope: string = "project"
 ): Promise<{ nodesAdded: number }> {
-  const { nodes, edges } = learnFromSession(text, sourceLabel);
-  if (nodes.length === 0 && edges.length === 0) return { nodesAdded: 0 };
+  // Primary session mining (decisions/mistakes/patterns)
+  const sessionResult = learnFromSession(text, sourceLabel);
+  const conclusionResult = generateConclusionNodes(text, sourceLabel);
+
+  const combinedNodes = [...sessionResult.nodes, ...conclusionResult.nodes];
+  const combinedEdges = [...sessionResult.edges, ...conclusionResult.edges];
+
+  if (combinedNodes.length === 0 && combinedEdges.length === 0) return { nodesAdded: 0 };
+
   const store = await getStore(projectRoot);
   try {
-    store.bulkUpsert(nodes, edges);
+    // Bulk upsert nodes + edges (project-scoped)
+    store.bulkUpsert(combinedNodes, combinedEdges, projectRoot, undefined, memoryScope);
+
+    // Ensure the project is discoverable even when graph content was created
+    // by a manual `learn` call (no full init). Write a namespaced project_root
+    // stat entry so the dashboard's project list includes this project.
+    try {
+      store.setStat(projectStatKey(projectRoot, "project_root"), projectRoot);
+    } catch {
+      // best-effort — non-fatal if stats write fails
+    }
+
+    // Post-insert: create linking edges from conclusion nodes to existing
+    // graph nodes by simple keyword overlap. This helps surface relations
+    // between learned conclusions/fragments and code entities/files.
+    const now = Date.now();
+    const allNodes = store.getAllNodes(projectRoot);
+
+    const edgesToAdd = [] as typeof combinedEdges;
+    const seen = new Set<string>();
+
+    for (const c of conclusionResult.nodes) {
+      // only consider conclusion/pattern nodes we created (metadata marker)
+      if (!c.metadata || (c.metadata as Record<string, unknown>).miner !== "conclusion") continue;
+
+      // Gather candidates from both the node label and the full session text
+      const scanText = `${c.label}\n${text}`;
+      const { keywords, filePaths, commands } = extractLinkCandidates(scanText);
+
+      // Use IDF filtering to drop overly-common graph terms
+      let goodTokens: string[] = [];
+      try {
+        const idf = await computeKeywordIDF(projectRoot, keywords.slice(0, 80));
+        goodTokens = idf.filter((r) => r.idf > 0).slice(0, 12).map((r) => r.keyword.toLowerCase());
+      } catch {
+        goodTokens = keywords.slice(0, 12).map((k) => k.toLowerCase());
+      }
+
+      // 1) Keyword-based linking (similar_to)
+      for (const tok of goodTokens) {
+        for (const n of allNodes) {
+          if (n.id === c.id) continue;
+          if (n.label.toLowerCase().includes(tok)) {
+            const key = `${c.id}|${n.id}|similar_to`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            edgesToAdd.push({
+              source: c.id,
+              target: n.id,
+              relation: "similar_to",
+              confidence: "INFERRED",
+              confidenceScore: 0.6,
+              sourceFile: sourceLabel,
+              sourceLocation: null,
+              lastVerified: now,
+              metadata: { auto: true, matchedToken: tok },
+            });
+          } else if (n.metadata && JSON.stringify(n.metadata).toLowerCase().includes(tok)) {
+            const key = `${c.id}|${n.id}|similar_to`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            edgesToAdd.push({
+              source: c.id,
+              target: n.id,
+              relation: "similar_to",
+              confidence: "INFERRED",
+              confidenceScore: 0.55,
+              sourceFile: sourceLabel,
+              sourceLocation: null,
+              lastVerified: now,
+              metadata: { auto: true, matchedToken: tok, metaMatch: true },
+            });
+          }
+        }
+      }
+
+      // 2) File path linking (depends_on)
+      for (const fp of filePaths) {
+        try {
+          let candidate = fp.replace(/^\.\//, "");
+          candidate = candidate.replace(/^[A-Z]:\\/i, "");
+
+          const fileNodes = store.getNodesByFile(candidate, 500, projectRoot);
+          if (fileNodes.length > 0) {
+            for (const fn of fileNodes) {
+              const key = `${c.id}|${fn.id}|depends_on`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              edgesToAdd.push({
+                source: c.id,
+                target: fn.id,
+                relation: "depends_on",
+                confidence: "INFERRED",
+                confidenceScore: 0.85,
+                sourceFile: sourceLabel,
+                sourceLocation: null,
+                lastVerified: now,
+                metadata: { auto: true, detectedPath: fp },
+              });
+            }
+            continue;
+          }
+
+          // Fallback: match basename against node labels / sourceFile endings
+          const base = (candidate.split(/[\\/]/).pop() || candidate).toLowerCase();
+          for (const n of allNodes) {
+            if (!n.sourceFile && !n.label) continue;
+            const sf = (n.sourceFile || "").toLowerCase();
+            if (sf.endsWith(base) || (n.label || "").toLowerCase().includes(base)) {
+              const key = `${c.id}|${n.id}|depends_on`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              edgesToAdd.push({
+                source: c.id,
+                target: n.id,
+                relation: "depends_on",
+                confidence: "INFERRED",
+                confidenceScore: 0.75,
+                sourceFile: sourceLabel,
+                sourceLocation: null,
+                lastVerified: now,
+                metadata: { auto: true, detectedPath: fp, fallback: true },
+              });
+            }
+          }
+        } catch {
+          // non-fatal
+        }
+      }
+
+      // 3) Command mentions (mentions)
+      for (const cmd of commands) {
+        const lower = cmd.toLowerCase();
+        for (const n of allNodes) {
+          if (n.id === c.id) continue;
+          if ((n.label || "").toLowerCase().includes(lower) || JSON.stringify(n.metadata || {}).toLowerCase().includes(lower)) {
+            const key = `${c.id}|${n.id}|mentions`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            edgesToAdd.push({
+              source: c.id,
+              target: n.id,
+              relation: "mentions",
+              confidence: "INFERRED",
+              confidenceScore: 0.55,
+              sourceFile: sourceLabel,
+              sourceLocation: null,
+              lastVerified: now,
+              metadata: { auto: true, matchedCommand: cmd },
+            });
+          }
+        }
+      }
+    }
+
+    if (edgesToAdd.length > 0) {
+      // Upsert linking edges (no new nodes)
+      store.bulkUpsert([], edgesToAdd, projectRoot, undefined, memoryScope);
+    }
   } finally {
     store.close();
   }
-  return { nodesAdded: nodes.length };
+
+  // If this project has never been mined (no last_mined stat), trigger a
+  // best-effort incremental init in the background so file-level nodes
+  // (AST-extracted) become available for Read interception and the
+  // dashboard's Files tab. This is fire-and-forget and must not block
+  // the calling thread.
+  (async () => {
+    try {
+      const s = await getStore(projectRoot);
+      try {
+        const lm = s.getStat(projectStatKey(projectRoot, "last_mined"));
+        if (!lm || Number(lm) === 0) {
+          await init(projectRoot, { incremental: true });
+        }
+      } finally {
+        s.close();
+      }
+    } catch {
+      // swallow background init failures — learning succeeded regardless
+    }
+  })();
+
+  return { nodesAdded: combinedNodes.length };
 }
 
 export interface MistakeEntry {
@@ -511,7 +804,7 @@ export async function mistakes(
 ): Promise<MistakeEntry[]> {
   const store = await getStore(projectRoot);
   try {
-    let items = store.getAllNodes().filter((n) => n.kind === "mistake");
+    let items = store.getAllNodes(projectRoot).filter((n) => n.kind === "mistake");
 
     if (options.sourceFile !== undefined) {
       const target = options.sourceFile;

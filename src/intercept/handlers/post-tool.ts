@@ -19,6 +19,7 @@ import { isHookDisabled, PASSTHROUGH, type HandlerResult } from "../safety.js";
 import { logHookEvent } from "../../intelligence/hook-log.js";
 import { handleBashPostTool, type FileOp } from "./bash-postool.js";
 import { syncFile } from "../../watcher.js";
+import { onPostToolFile } from "../auto-memory.js";
 
 export interface PostToolHookPayload {
   readonly hook_event_name: "PostToolUse" | string;
@@ -128,6 +129,19 @@ export async function handlePostTool(
       void reindexBashOps(payload, projectRoot).catch(() => {
         /* silent */
       });
+    }
+
+    // Aggressive auto: ingest textual tool outputs / files into memory.
+    // Fire-and-forget — must not block the hook response.
+    try {
+      if (
+        (toolName === "Read" || toolName === "Edit" || toolName === "Write") &&
+        typeof filePath === "string"
+      ) {
+        void onPostToolFile(projectRoot, cwd, filePath, payload.tool_response).catch(() => {});
+      }
+    } catch {
+      /* swallow */
     }
   } catch {
     // Observer errors are never surfaced.

@@ -134,8 +134,8 @@ export async function handleRead(
     // Skip the structure provider — we already have the summary. Only
     // resolve the enrichment providers.
     const enrichmentProviders = [
-      "engram:mistakes",
-      "engram:git",
+      "engramx:mistakes",
+      "engramx:git",
       "mempalace",
       "context7",
       "obsidian",
@@ -168,8 +168,8 @@ async function buildNodeContext(
 ): Promise<NodeContext> {
   const store = await getStore(projectRoot);
   try {
-    const nodes = store.getNodesByFile(relPath);
-    const edges = store.getEdgesForNodes(nodes.map((n) => n.id));
+    const nodes = store.getNodesByFile(relPath, 500, projectRoot);
+    const edges = store.getEdgesForNodes(nodes.map((n) => n.id), projectRoot);
 
     // Extract import package names from import edges
     const imports = edges
@@ -188,7 +188,7 @@ async function buildNodeContext(
       `tests/${baseName.split("/").pop()}`,
     ];
     const hasTests = testPatterns.some((pattern) =>
-      store.searchNodes(pattern, 1).length > 0
+      store.searchNodes(pattern, 1, projectRoot).length > 0
     );
 
     // Get churn rate from git metadata if available

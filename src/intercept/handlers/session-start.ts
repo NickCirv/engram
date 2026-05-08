@@ -29,6 +29,7 @@ import { findProjectRoot, isValidCwd } from "../context.js";
 import { isHookDisabled, PASSTHROUGH, type HandlerResult } from "../safety.js";
 import { buildSessionContextResponse } from "../formatter.js";
 import { warmAllProviders } from "../../providers/resolver.js";
+import { onSessionStart } from "../auto-memory.js";
 
 export interface SessionStartHookPayload {
   readonly hook_event_name: "SessionStart" | string;
@@ -108,7 +109,7 @@ function formatBrief(args: {
       ? describeAgo(Date.now() - args.stats.lastMined)
       : "unknown";
   const branchStr = args.branch ? ` (branch: ${args.branch})` : "";
-  lines.push(`[engram] Project brief for ${args.projectName}${branchStr}`);
+  lines.push(`[engramx] Project brief for ${args.projectName}${branchStr}`);
   lines.push(
     `Graph: ${args.stats.nodes} nodes, ${args.stats.edges} edges, ${args.stats.extractedPct}% extracted. Last mined: ${minedAgo}.`
   );
@@ -231,9 +232,11 @@ export async function handleSessionStart(
 ): Promise<HandlerResult> {
   if (payload.hook_event_name !== "SessionStart") return PASSTHROUGH;
 
-  // Skip resumed sessions — they already have prior context.
+  // Include resumed sessions too — inject the brief even on resume so
+  // session context is always available to the agent. onSessionStart is
+  // idempotent / dedupes, so repeated injections are safe.
   const source = payload.source ?? "startup";
-  if (source === "resume") return PASSTHROUGH;
+  // fall through for 'resume' — inject on resume as well.
 
   // cwd must be a real absolute directory. Anything else causes
   // findProjectRoot to walk from the ambient process cwd, which could
@@ -309,6 +312,14 @@ export async function handleSessionStart(
       // Silent failure. If warmup fails, Read handlers will do live
       // resolution with per-provider timeouts and graceful degradation.
     });
+
+    // Aggressive auto: learn the session brief into memory across scopes.
+    // Fire-and-forget — must never block session start.
+    try {
+      void onSessionStart(projectRoot, fullText).catch(() => {});
+    } catch {
+      /* swallow */
+    }
 
     return buildSessionContextResponse("SessionStart", fullText);
   } catch {

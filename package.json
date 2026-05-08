@@ -22,6 +22,7 @@
     "build": "tsup && node scripts/bundle-grammars.mjs",
     "build:nogrammars": "tsup",
     "dev": "tsup --watch",
+    "dev:reload": "nodemon --watch src --watch package.json --ext ts,js,json --exec \"bash scripts/dev-reload.sh\"",
     "test": "vitest",
     "lint": "tsc --noEmit",
     "prepublishOnly": "npm run build",
@@ -76,6 +77,7 @@
     "@types/node": "^25.5.2",
     "tsup": "^8.5.1",
     "typescript": "^6.0.2",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.4",
+    "nodemon": "^3.0.2"
   }
 }

@@ -21,6 +21,10 @@ export interface EngramConfig {
   readonly confidenceThreshold: number;
   readonly totalTokenBudget: number;
   readonly providers: Readonly<Record<string, ProviderOverride>>;
+  /** Auto-memory ingestion: enabled (true) or disabled (false). */
+  readonly autoMemoryEnabled?: boolean;
+  /** Scopes to auto-ingest when autoMemoryEnabled is true. */
+  readonly autoMemoryScopes?: readonly ("project" | "global" | "entity")[];
 }
 
 /** Baseline defaults. Must match the hard-coded values in resolver.ts. */
@@ -28,6 +32,9 @@ const DEFAULTS: EngramConfig = {
   confidenceThreshold: 0.7,
   totalTokenBudget: 600,
   providers: {},
+  // Aggressive auto by default per user request
+  autoMemoryEnabled: true,
+  autoMemoryScopes: ["project", "global", "entity"],
 };
 
 /**

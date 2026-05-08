@@ -44,7 +44,7 @@ describe("spike regression — PreToolUse Read deny+reason", () => {
     // v4 spike: the hook returned deny + permissionDecisionReason, and
     // Claude Code delivered the reason to the agent as a system-reminder.
     const reason =
-      "[engram] graph summary for target-v2.txt\n\n" +
+      "[engramx] graph summary for target-v2.txt\n\n" +
       "NODE target [file] src=/tmp/engram-spike/test-project/target-v2.txt L1\n" +
       "Use this context instead of reading the file directly.";
     const response = buildDenyResponse(reason);
@@ -75,7 +75,7 @@ describe("spike regression — PreToolUse Edit allow+additionalContext", () => {
     // v5 spike: allow + additionalContext. Agent sees both tool result
     // AND the context injection as a system-reminder.
     const warning =
-      "[engram landmines] This file has 2 past mistakes:\n" +
+      "[engramx landmines] This file has 2 past mistakes:\n" +
       "  - bug: null pointer in validateToken (src/auth.ts)\n" +
       "  - fix: token refresh race condition (src/auth.ts)\n" +
       "Review before editing.";
@@ -124,7 +124,7 @@ describe("spike regression — UserPromptSubmit context injection", () => {
 
   it("produces a UserPromptSubmit additionalContext response", () => {
     const ctx =
-      "[engram pre-query] matches for 'authentication flow':\n" +
+      "[engramx pre-query] matches for 'authentication flow':\n" +
       "NODE authMiddleware [function] src=src/auth.ts";
     const response = buildSessionContextResponse("UserPromptSubmit", ctx);
     expect(response).not.toBe(null);

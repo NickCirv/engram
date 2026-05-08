@@ -74,7 +74,7 @@ export interface CachedContext {
  * - Providers MUST NOT throw — return null on any error
  */
 export interface ContextProvider {
-  /** Provider identifier (e.g., 'mempalace', 'engram:structure'). */
+  /** Provider identifier (e.g., 'mempalace', 'engramx:structure'). */
   readonly name: string;
   /** Display label for the rich packet section header. */
   readonly label: string;
@@ -161,9 +161,9 @@ export type RawPluginShape = Partial<ContextProvider> & {
 
 /** Provider priority order (highest first). Used when total output exceeds budget. */
 export const PROVIDER_PRIORITY: readonly string[] = [
-  "engram:ast",
-  "engram:structure",
-  "engram:mistakes",
+  "engramx:ast",
+  "engramx:structure",
+  "engramx:mistakes",
   // anthropic:memory sits between mistakes and mempalace — it's cheap
   // (tier 1, single local file read), strictly relevant when present,
   // and complements mistakes (mistakes = 'this broke'; anthropic:memory
@@ -172,9 +172,9 @@ export const PROVIDER_PRIORITY: readonly string[] = [
   "anthropic:memory",
   "mempalace",
   "context7",
-  "engram:git",
+  "engramx:git",
   "obsidian",
-  "engram:lsp",
+  "engramx:lsp",
 ];
 
 /** Default TTL for cached provider results (1 hour). */

@@ -99,15 +99,87 @@ export class GraphStore {
     runMigrations(this.db, this.dbPath);
   }
 
+  // Non-blocking save: export the DB synchronously (cheap) then
+  // write the bytes to disk asynchronously so file I/O doesn't block
+  // the main event loop. Coalesce rapid successive saves into a single
+  // final write to avoid thrashing the filesystem.
+  private _savePending = false as boolean;
+  private _saveQueuedBuffer: Buffer | null = null;
+
   save(): void {
-    const data = this.db.export();
-    writeFileSync(this.dbPath, Buffer.from(data));
+    let data: Uint8Array;
+    try {
+      data = this.db.export();
+    } catch (e) {
+      // If export fails for any reason, fall back to a best-effort
+      // synchronous write attempt (rare). Swallow errors to avoid
+      // crashing callers.
+      try {
+        writeFileSync(this.dbPath, Buffer.from([]));
+      } catch {
+        /* swallow */
+      }
+      return;
+    }
+
+    const buffer = Buffer.from(data);
+    const tmpPath = this.dbPath + ".tmp";
+
+    // If a save is already in progress, stash the latest buffer and
+    // return. The in-progress write will detect _saveQueuedBuffer and
+    // write it afterwards. This coalesces rapid updates.
+    if (this._savePending) {
+      this._saveQueuedBuffer = buffer;
+      return;
+    }
+
+    this._savePending = true;
+    const writeOnce = async (): Promise<void> => {
+      try {
+        // Async write temp -> rename for atomicity
+        await import("node:fs/promises").then((fs) => fs.writeFile(tmpPath, buffer));
+        await import("node:fs/promises").then((fs) => fs.rename(tmpPath, this.dbPath));
+
+        // If another save was queued while we were writing, write it now
+        if (this._saveQueuedBuffer) {
+          const nextBuf = this._saveQueuedBuffer;
+          this._saveQueuedBuffer = null;
+          try {
+            await import("node:fs/promises").then((fs) => fs.writeFile(tmpPath, nextBuf!));
+            await import("node:fs/promises").then((fs) => fs.rename(tmpPath, this.dbPath));
+          } catch (e) {
+            // Best-effort fallback to synchronous write
+            try {
+              writeFileSync(this.dbPath, nextBuf!);
+            } catch {
+              /* swallow */
+            }
+          }
+        }
+      } catch (e) {
+        // Best-effort fallback: synchronous write
+        try {
+          writeFileSync(this.dbPath, buffer);
+        } catch {
+          /* swallow */
+        }
+      } finally {
+        this._savePending = false;
+      }
+    };
+
+    // Fire-and-forget
+    void writeOnce();
   }
 
-  upsertNode(node: GraphNode): void {
+  upsertNode(node: GraphNode, defaults?: { projectRoot?: string; projectBranch?: string; memoryScope?: string }): void {
+    const projectRoot = (node as any).projectRoot ?? defaults?.projectRoot ?? "";
+    const projectBranch = (node as any).projectBranch ?? defaults?.projectBranch ?? null;
+    const memoryScope = (node as any).memoryScope ?? defaults?.memoryScope ?? null;
+
     this.db.run(
-      `INSERT OR REPLACE INTO nodes (id, label, kind, source_file, source_location, confidence, confidence_score, last_verified, query_count, metadata, valid_until, invalidated_by_commit)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO nodes (id, label, kind, source_file, source_location, confidence, confidence_score, last_verified, query_count, metadata, valid_until, invalidated_by_commit, project_root, project_branch, memory_scope)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         node.id,
         node.label,
@@ -121,14 +193,134 @@ export class GraphStore {
         JSON.stringify(node.metadata),
         node.validUntil ?? null,
         node.invalidatedByCommit ?? null,
+        projectRoot,
+        projectBranch,
+        memoryScope,
       ]
     );
   }
 
-  upsertEdge(edge: GraphEdge): void {
+  /**
+   * Merge-aware single node upsert. If a node supplies a canonical_id (or
+   * if a canonical id can be derived from the node.id prefix `c_`), the
+   * method will try to find an existing node with that canonical_id (scoped
+   * to project_root) and merge metadata/fields rather than blindly
+   * replacing the row.
+   *
+   * Returns the final node id written to the DB (existing or newly-created).
+   */
+  mergeUpsertNode(node: GraphNode, defaults?: { projectRoot?: string; projectBranch?: string; memoryScope?: string }): string {
+    const projectRoot = defaults?.projectRoot ?? "";
+    const projectBranch = defaults?.projectBranch ?? null;
+    const memoryScope = defaults?.memoryScope ?? null;
+
+    const canonical = (node as any).canonicalId ?? node.id?.startsWith("c_") ? (node as any).canonicalId ?? node.id : null;
+
+    if (!canonical) {
+      // No canonical id — fall back to simple upsert using provided id.
+      this.upsertNode(node, { projectRoot, projectBranch, memoryScope });
+      return node.id;
+    }
+
+    // Try to find existing node by canonical_id (project-scoped)
+    const sql = projectRoot
+      ? "SELECT * FROM nodes WHERE canonical_id = ? AND project_root = ? LIMIT 1"
+      : "SELECT * FROM nodes WHERE canonical_id = ? LIMIT 1";
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([canonical, projectRoot]);
+    else stmt.bind([canonical]);
+
+    if (stmt.step()) {
+      const row = stmt.getAsObject();
+      stmt.free();
+      const existing = this.rowToNode(row);
+
+      // Merge metadata (shallow merge; arrays concatenated dedup)
+      const existingMeta = existing.metadata ?? {};
+      const incomingMeta = node.metadata ?? {};
+      const mergedMeta: Record<string, unknown> = { ...existingMeta };
+      for (const k of Object.keys(incomingMeta)) {
+        const v = (incomingMeta as Record<string, unknown>)[k];
+        const ev = (existingMeta as Record<string, unknown>)[k];
+        if (Array.isArray(ev) && Array.isArray(v)) {
+          mergedMeta[k] = Array.from(new Set([...ev, ...v]));
+        } else if (ev === undefined || ev === null) {
+          mergedMeta[k] = v;
+        } else {
+          // prefer existing value for opaque fields
+          mergedMeta[k] = ev;
+        }
+      }
+
+      const mergedLabel = (existing.label && existing.label.length >= (node.label || "").length) ? existing.label : (node.label || existing.label);
+      const mergedKind = existing.kind || node.kind;
+      const mergedSourceFile = existing.sourceFile || node.sourceFile || "";
+      const mergedSourceLocation = existing.sourceLocation || node.sourceLocation || null;
+      const mergedConfidence = existing.confidence || node.confidence;
+      const mergedConfidenceScore = Math.max(existing.confidenceScore || 0, node.confidenceScore || 0);
+      const mergedLastVerified = Math.max(existing.lastVerified || 0, node.lastVerified || 0);
+      const mergedQueryCount = Math.max(existing.queryCount || 0, node.queryCount || 0);
+
+      const updateSql = `UPDATE nodes SET label = ?, kind = ?, source_file = ?, source_location = ?, confidence = ?, confidence_score = ?, last_verified = ?, query_count = ?, metadata = ?, valid_until = ?, invalidated_by_commit = ?, project_root = ?, project_branch = ?, memory_scope = ?, canonical_id = ? WHERE id = ?`;
+
+      let metadataStr = "{}";
+      try { metadataStr = JSON.stringify(mergedMeta); } catch { metadataStr = "{}"; }
+
+      this.db.run(updateSql, [
+        mergedLabel,
+        mergedKind,
+        mergedSourceFile,
+        mergedSourceLocation,
+        mergedConfidence,
+        mergedConfidenceScore,
+        mergedLastVerified,
+        mergedQueryCount,
+        metadataStr,
+        node.validUntil ?? null,
+        node.invalidatedByCommit ?? null,
+        projectRoot,
+        projectBranch,
+        memoryScope,
+        canonical,
+        existing.id,
+      ]);
+
+      return existing.id;
+    }
+
+    // No existing — insert a new node using the canonical id as the primary id
+    const idToUse = canonical;
     this.db.run(
-      `INSERT OR REPLACE INTO edges (source, target, relation, confidence, confidence_score, source_file, source_location, last_verified, metadata)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO nodes (id, label, kind, source_file, source_location, confidence, confidence_score, last_verified, query_count, metadata, valid_until, invalidated_by_commit, project_root, project_branch, memory_scope, canonical_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        idToUse,
+        node.label,
+        node.kind,
+        node.sourceFile,
+        node.sourceLocation,
+        node.confidence,
+        node.confidenceScore,
+        node.lastVerified,
+        node.queryCount,
+        JSON.stringify(node.metadata),
+        node.validUntil ?? null,
+        node.invalidatedByCommit ?? null,
+        projectRoot,
+        projectBranch,
+        memoryScope,
+        canonical,
+      ]
+    );
+
+    return idToUse;
+  }
+
+  upsertEdge(edge: GraphEdge, defaults?: { projectRoot?: string }): void {
+    const projectRoot = (edge as any).projectRoot ?? defaults?.projectRoot ?? "";
+    this.db.run(
+      `INSERT OR REPLACE INTO edges (source, target, relation, confidence, confidence_score, source_file, source_location, last_verified, metadata, project_root)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         edge.source,
         edge.target,
@@ -139,20 +331,27 @@ export class GraphStore {
         edge.sourceLocation,
         edge.lastVerified,
         JSON.stringify(edge.metadata),
+        projectRoot,
       ]
     );
   }
 
   /**
    * Remove all nodes and edges associated with a specific source file.
+   * If projectRoot is provided, only clears nodes/edges for that project.
    * Used by the file watcher for incremental re-indexing — old nodes for
    * a changed file are cleared before re-extracting.
    */
-  deleteBySourceFile(sourceFile: string): void {
+  deleteBySourceFile(sourceFile: string, projectRoot?: string): void {
     this.db.run("BEGIN TRANSACTION");
     try {
-      this.db.run("DELETE FROM edges WHERE source_file = ?", [sourceFile]);
-      this.db.run("DELETE FROM nodes WHERE source_file = ?", [sourceFile]);
+      if (projectRoot) {
+        this.db.run("DELETE FROM edges WHERE source_file = ? AND project_root = ?", [sourceFile, projectRoot]);
+        this.db.run("DELETE FROM nodes WHERE source_file = ? AND project_root = ?", [sourceFile, projectRoot]);
+      } else {
+        this.db.run("DELETE FROM edges WHERE source_file = ?", [sourceFile]);
+        this.db.run("DELETE FROM nodes WHERE source_file = ?", [sourceFile]);
+      }
       this.db.run("COMMIT");
     } catch (e) {
       this.db.run("ROLLBACK");
@@ -160,11 +359,13 @@ export class GraphStore {
     }
   }
 
-  countBySourceFile(sourceFile: string): number {
-    const stmt = this.db.prepare(
-      "SELECT COUNT(*) AS n FROM nodes WHERE source_file = ?"
-    );
-    stmt.bind([sourceFile]);
+  countBySourceFile(sourceFile: string, projectRoot?: string): number {
+    const sql = projectRoot
+      ? "SELECT COUNT(*) AS n FROM nodes WHERE source_file = ? AND project_root = ?"
+      : "SELECT COUNT(*) AS n FROM nodes WHERE source_file = ?";
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([sourceFile, projectRoot]);
+    else stmt.bind([sourceFile]);
     let count = 0;
     if (stmt.step()) {
       const row = stmt.getAsObject() as { n: number };
@@ -174,10 +375,35 @@ export class GraphStore {
     return count;
   }
 
-  bulkUpsert(nodes: GraphNode[], edges: GraphEdge[]): void {
+  /**
+   * Merge-aware bulk upsert. Nodes that provide a canonical_id will be
+   * merged into any existing node with the same canonical_id (project-scoped).
+   * Returns after inserting/updating nodes and edges; edges referencing
+   * replaced node ids are remapped to the merged node id.
+   */
+  bulkUpsert(nodes: GraphNode[], edges: GraphEdge[], projectRoot?: string, projectBranch?: string, memoryScope?: string): void {
     this.db.run("BEGIN TRANSACTION");
-    for (const node of nodes) this.upsertNode(node);
-    for (const edge of edges) this.upsertEdge(edge);
+    const idMap = new Map<string, string>();
+
+    for (const node of nodes) {
+      try {
+        const finalId = this.mergeUpsertNode(node, { projectRoot, projectBranch, memoryScope });
+        if (finalId && finalId !== node.id) idMap.set(node.id, finalId);
+      } catch (e) {
+        // Best-effort: swallow per-node errors to avoid failing the whole bulk
+      }
+    }
+
+    for (const edge of edges) {
+      // Remap source/target ids if nodes were canonicalized/merged
+      const s = idMap.get(edge.source) ?? edge.source;
+      const t = idMap.get(edge.target) ?? edge.target;
+      const edgeCopy = { ...edge, source: s, target: t };
+      try {
+        this.upsertEdge(edgeCopy, { projectRoot });
+      } catch {}
+    }
+
     this.db.run("COMMIT");
     this.save();
   }
@@ -194,14 +420,16 @@ export class GraphStore {
     return null;
   }
 
-  searchNodes(query: string, limit = 20): GraphNode[] {
+  searchNodes(query: string, limit = 20, projectRoot?: string): GraphNode[] {
     const escaped = query.replace(/%/g, "\\%").replace(/_/g, "\\_");
     const pattern = `%${escaped}%`;
     const results: GraphNode[] = [];
-    const stmt = this.db.prepare(
-      "SELECT * FROM nodes WHERE label LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\' ORDER BY query_count DESC LIMIT ?"
-    );
-    stmt.bind([pattern, pattern, limit]);
+    const sql = projectRoot
+      ? "SELECT * FROM nodes WHERE (label LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\') AND project_root = ? ORDER BY query_count DESC LIMIT ?"
+      : "SELECT * FROM nodes WHERE label LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\' ORDER BY query_count DESC LIMIT ?";
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([pattern, pattern, projectRoot, limit]);
+    else stmt.bind([pattern, pattern, limit]);
     while (stmt.step()) {
       results.push(this.rowToNode(stmt.getAsObject()));
     }
@@ -211,14 +439,23 @@ export class GraphStore {
 
   getNeighbors(
     nodeId: string,
-    relationFilter?: EdgeRelation
+    relationFilter?: EdgeRelation,
+    projectRoot?: string
   ): Array<{ node: GraphNode; edge: GraphEdge }> {
     const sql = relationFilter
-      ? "SELECT * FROM edges WHERE (source = ? OR target = ?) AND relation = ?"
-      : "SELECT * FROM edges WHERE source = ? OR target = ?";
+      ? projectRoot
+        ? "SELECT * FROM edges WHERE (source = ? OR target = ?) AND relation = ? AND project_root = ?"
+        : "SELECT * FROM edges WHERE (source = ? OR target = ?) AND relation = ?"
+      : projectRoot
+        ? "SELECT * FROM edges WHERE (source = ? OR target = ?) AND project_root = ?"
+        : "SELECT * FROM edges WHERE source = ? OR target = ?";
     const params = relationFilter
-      ? [nodeId, nodeId, relationFilter]
-      : [nodeId, nodeId];
+      ? projectRoot
+        ? [nodeId, nodeId, relationFilter, projectRoot]
+        : [nodeId, nodeId, relationFilter]
+      : projectRoot
+        ? [nodeId, nodeId, projectRoot]
+        : [nodeId, nodeId];
 
     const stmt = this.db.prepare(sql);
     stmt.bind(params);
@@ -233,23 +470,31 @@ export class GraphStore {
     return results;
   }
 
-  getGodNodes(topN = 10): Array<{ node: GraphNode; degree: number }> {
+  getGodNodes(topN = 10, projectRoot?: string): Array<{ node: GraphNode; degree: number }> {
     const results: Array<{ node: GraphNode; degree: number }> = [];
     // Exclude structural plumbing (file/import/module) AND concept nodes.
     // The `concept` kind is used by the skills-miner for both skills and
     // keyword nodes — a keyword like "landing page" may have hundreds of
     // triggered_by edges but isn't a "core abstraction" of the codebase.
     // Users want real code entities + decisions/patterns/mistakes here.
-    const stmt = this.db.prepare(
-      `SELECT n.*, COUNT(*) as degree
-       FROM nodes n
-       JOIN edges e ON e.source = n.id OR e.target = n.id
-       WHERE n.kind NOT IN ('file', 'import', 'module', 'concept')
-       GROUP BY n.id
-       ORDER BY degree DESC
-       LIMIT ?`
-    );
-    stmt.bind([topN]);
+    const sql = projectRoot
+      ? `SELECT n.*, COUNT(*) as degree
+         FROM nodes n
+         JOIN edges e ON e.source = n.id OR e.target = n.id
+         WHERE n.kind NOT IN ('file', 'import', 'module', 'concept') AND n.project_root = ?
+         GROUP BY n.id
+         ORDER BY degree DESC
+         LIMIT ?`
+      : `SELECT n.*, COUNT(*) as degree
+         FROM nodes n
+         JOIN edges e ON e.source = n.id OR e.target = n.id
+         WHERE n.kind NOT IN ('file', 'import', 'module', 'concept')
+         GROUP BY n.id
+         ORDER BY degree DESC
+         LIMIT ?`;
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([projectRoot, topN]);
+    else stmt.bind([topN]);
     while (stmt.step()) {
       const row = stmt.getAsObject();
       results.push({
@@ -261,12 +506,14 @@ export class GraphStore {
     return results;
   }
 
-  getNodesByFile(sourceFile: string, limit = 500): GraphNode[] {
+  getNodesByFile(sourceFile: string, limit = 500, projectRoot?: string): GraphNode[] {
     const results: GraphNode[] = [];
-    const stmt = this.db.prepare(
-      "SELECT * FROM nodes WHERE source_file = ? LIMIT ?"
-    );
-    stmt.bind([sourceFile, limit]);
+    const sql = projectRoot
+      ? "SELECT * FROM nodes WHERE source_file = ? AND project_root = ? LIMIT ?"
+      : "SELECT * FROM nodes WHERE source_file = ? LIMIT ?";
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([sourceFile, projectRoot, limit]);
+    else stmt.bind([sourceFile, limit]);
     while (stmt.step()) {
       results.push(this.rowToNode(stmt.getAsObject()));
     }
@@ -274,7 +521,7 @@ export class GraphStore {
     return results;
   }
 
-  getEdgesForNodes(nodeIds: string[]): GraphEdge[] {
+  getEdgesForNodes(nodeIds: string[], projectRoot?: string): GraphEdge[] {
     if (nodeIds.length === 0) return [];
     // Chunk to stay under SQLite's SQLITE_LIMIT_VARIABLE_NUMBER (999).
     // Each chunk binds chunk.length * 2 params (source IN + target IN).
@@ -284,9 +531,11 @@ export class GraphStore {
     for (let i = 0; i < nodeIds.length; i += CHUNK) {
       const chunk = nodeIds.slice(i, i + CHUNK);
       const placeholders = chunk.map(() => "?").join(",");
-      const sql = `SELECT * FROM edges WHERE source IN (${placeholders}) OR target IN (${placeholders})`;
+      let sql = `SELECT * FROM edges WHERE source IN (${placeholders}) OR target IN (${placeholders})`;
+      if (projectRoot) sql = `SELECT * FROM edges WHERE (source IN (${placeholders}) OR target IN (${placeholders})) AND project_root = ?`;
       const stmt = this.db.prepare(sql);
-      stmt.bind([...chunk, ...chunk]);
+      if (projectRoot) stmt.bind([...chunk, ...chunk, projectRoot]);
+      else stmt.bind([...chunk, ...chunk]);
       while (stmt.step()) {
         const edge = this.rowToEdge(stmt.getAsObject());
         const key = `${edge.source}|${edge.target}|${edge.relation}`;
@@ -300,9 +549,11 @@ export class GraphStore {
     return results;
   }
 
-  getAllNodes(): GraphNode[] {
+  getAllNodes(projectRoot?: string): GraphNode[] {
     const results: GraphNode[] = [];
-    const stmt = this.db.prepare("SELECT * FROM nodes");
+    const sql = projectRoot ? "SELECT * FROM nodes WHERE project_root = ?" : "SELECT * FROM nodes";
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([projectRoot]);
     while (stmt.step()) {
       results.push(this.rowToNode(stmt.getAsObject()));
     }
@@ -327,13 +578,22 @@ export class GraphStore {
     );
   }
 
-  getStats(): GraphStats {
-    const nodeCount = (this.db.exec("SELECT COUNT(*) FROM nodes")[0]?.values[0]?.[0] as number) ?? 0;
-    const edgeCount = (this.db.exec("SELECT COUNT(*) FROM edges")[0]?.values[0]?.[0] as number) ?? 0;
+  getStats(projectRoot?: string): GraphStats {
+    // Helper to encode project stat keys
+    const encodeProjectKey = (p: string, k: string) => `project:${Buffer.from(p).toString("base64")}:${k}`;
 
-    const confRows = this.db.exec(
-      "SELECT confidence, COUNT(*) as c FROM edges GROUP BY confidence"
-    );
+    const nodeCount = projectRoot
+      ? (this.db.exec("SELECT COUNT(*) FROM nodes WHERE project_root = ?", [projectRoot])[0]?.values[0]?.[0] as number) ?? 0
+      : (this.db.exec("SELECT COUNT(*) FROM nodes")[0]?.values[0]?.[0] as number) ?? 0;
+    const edgeCount = projectRoot
+      ? (this.db.exec("SELECT COUNT(*) FROM edges WHERE project_root = ?", [projectRoot])[0]?.values[0]?.[0] as number) ?? 0
+      : (this.db.exec("SELECT COUNT(*) FROM edges")[0]?.values[0]?.[0] as number) ?? 0;
+
+    const confSql = projectRoot
+      ? "SELECT confidence, COUNT(*) as c FROM edges WHERE project_root = ? GROUP BY confidence"
+      : "SELECT confidence, COUNT(*) as c FROM edges GROUP BY confidence";
+    const confRows = projectRoot ? this.db.exec(confSql, [projectRoot]) : this.db.exec(confSql);
+
     const total = edgeCount || 1;
     const confMap: Record<string, number> = {};
     if (confRows[0]) {
@@ -342,12 +602,12 @@ export class GraphStore {
       }
     }
 
-    const savedRow = this.db.exec(
-      "SELECT value FROM stats WHERE key = 'tokens_saved'"
-    );
-    const lastMinedRow = this.db.exec(
-      "SELECT value FROM stats WHERE key = 'last_mined'"
-    );
+    // Stats table: for project-scoped values we use namespaced keys
+    const savedKey = projectRoot ? encodeProjectKey(projectRoot, "tokens_saved") : "tokens_saved";
+    const lastMinedKey = projectRoot ? encodeProjectKey(projectRoot, "last_mined") : "last_mined";
+
+    const savedRow = this.db.exec("SELECT value FROM stats WHERE key = ?", [savedKey]);
+    const lastMinedRow = this.db.exec("SELECT value FROM stats WHERE key = ?", [lastMinedKey]);
 
     return {
       nodes: nodeCount,
@@ -409,14 +669,17 @@ export class GraphStore {
    * Get all cached provider results for a file. Returns only non-stale
    * entries (cached_at + ttl > now).
    */
-  getCachedContext(filePath: string): CachedContext[] {
+  getCachedContext(filePath: string, projectRoot?: string): CachedContext[] {
     const now = Date.now();
     const results: CachedContext[] = [];
-    const stmt = this.db.prepare(
-      `SELECT * FROM provider_cache
-       WHERE file_path = ? AND (cached_at + ttl * 1000) > ?`
-    );
-    stmt.bind([filePath, now]);
+    const sql = projectRoot
+      ? `SELECT * FROM provider_cache
+       WHERE file_path = ? AND project_root = ? AND (cached_at + ttl * 1000) > ?`
+      : `SELECT * FROM provider_cache
+       WHERE file_path = ? AND (cached_at + ttl * 1000) > ?`;
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([filePath, projectRoot, now]);
+    else stmt.bind([filePath, now]);
     while (stmt.step()) {
       results.push(this.rowToCachedContext(stmt.getAsObject()));
     }
@@ -430,14 +693,18 @@ export class GraphStore {
    */
   getCachedContextForProvider(
     provider: string,
-    filePath: string
+    filePath: string,
+    projectRoot?: string
   ): CachedContext | null {
     const now = Date.now();
-    const stmt = this.db.prepare(
-      `SELECT * FROM provider_cache
-       WHERE provider = ? AND file_path = ? AND (cached_at + ttl * 1000) > ?`
-    );
-    stmt.bind([provider, filePath, now]);
+    const sql = projectRoot
+      ? `SELECT * FROM provider_cache
+       WHERE provider = ? AND file_path = ? AND project_root = ? AND (cached_at + ttl * 1000) > ?`
+      : `SELECT * FROM provider_cache
+       WHERE provider = ? AND file_path = ? AND (cached_at + ttl * 1000) > ?`;
+    const stmt = this.db.prepare(sql);
+    if (projectRoot) stmt.bind([provider, filePath, projectRoot, now]);
+    else stmt.bind([provider, filePath, now]);
     if (stmt.step()) {
       const row = stmt.getAsObject();
       stmt.free();
@@ -455,14 +722,24 @@ export class GraphStore {
     filePath: string,
     content: string,
     ttl: number,
-    queryUsed = ""
+    queryUsed = "",
+    projectRoot?: string
   ): void {
-    this.db.run(
-      `INSERT OR REPLACE INTO provider_cache
-       (provider, file_path, content, query_used, cached_at, ttl)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [provider, filePath, content, queryUsed, Date.now(), ttl]
-    );
+    if (projectRoot) {
+      this.db.run(
+        `INSERT OR REPLACE INTO provider_cache
+         (provider, file_path, content, query_used, cached_at, ttl, project_root)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [provider, filePath, content, queryUsed, Date.now(), ttl, projectRoot]
+      );
+    } else {
+      this.db.run(
+        `INSERT OR REPLACE INTO provider_cache
+         (provider, file_path, content, query_used, cached_at, ttl, project_root)
+         VALUES (?, ?, ?, ?, ?, ?, '')`,
+        [provider, filePath, content, queryUsed, Date.now(), ttl]
+      );
+    }
   }
 
   /**
@@ -473,18 +750,28 @@ export class GraphStore {
     provider: string,
     entries: ReadonlyArray<{ filePath: string; content: string }>,
     ttl: number,
-    queryUsed = ""
+    queryUsed = "",
+    projectRoot?: string
   ): void {
     if (entries.length === 0) return;
     this.db.run("BEGIN TRANSACTION");
     try {
       for (const entry of entries) {
-        this.db.run(
-          `INSERT OR REPLACE INTO provider_cache
-           (provider, file_path, content, query_used, cached_at, ttl)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [provider, entry.filePath, entry.content, queryUsed, Date.now(), ttl]
-        );
+        if (projectRoot) {
+          this.db.run(
+            `INSERT OR REPLACE INTO provider_cache
+             (provider, file_path, content, query_used, cached_at, ttl, project_root)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [provider, entry.filePath, entry.content, queryUsed, Date.now(), ttl, projectRoot]
+          );
+        } else {
+          this.db.run(
+            `INSERT OR REPLACE INTO provider_cache
+             (provider, file_path, content, query_used, cached_at, ttl, project_root)
+             VALUES (?, ?, ?, ?, ?, ?, '')`,
+            [provider, entry.filePath, entry.content, queryUsed, Date.now(), ttl]
+          );
+        }
       }
       this.db.run("COMMIT");
       this.save();
@@ -497,12 +784,19 @@ export class GraphStore {
   /**
    * Remove all stale cache entries. Called at SessionStart before warmup.
    */
-  pruneStaleCache(): number {
+  pruneStaleCache(projectRoot?: string): number {
     const now = Date.now();
-    this.db.run(
-      "DELETE FROM provider_cache WHERE (cached_at + ttl * 1000) <= ?",
-      [now]
-    );
+    if (projectRoot) {
+      this.db.run(
+        "DELETE FROM provider_cache WHERE project_root = ? AND (cached_at + ttl * 1000) <= ?",
+        [projectRoot, now]
+      );
+    } else {
+      this.db.run(
+        "DELETE FROM provider_cache WHERE (cached_at + ttl * 1000) <= ?",
+        [now]
+      );
+    }
     const result = this.db.exec("SELECT changes()");
     return (result[0]?.values[0]?.[0] as number) ?? 0;
   }
@@ -511,24 +805,32 @@ export class GraphStore {
    * Remove all cache entries for a provider. Used when a provider is
    * disabled or its configuration changes.
    */
-  clearProviderCache(provider: string): void {
-    this.db.run("DELETE FROM provider_cache WHERE provider = ?", [provider]);
+  clearProviderCache(provider: string, projectRoot?: string): void {
+    if (projectRoot) this.db.run("DELETE FROM provider_cache WHERE provider = ? AND project_root = ?", [provider, projectRoot]);
+    else this.db.run("DELETE FROM provider_cache WHERE provider = ?", [provider]);
   }
 
   /**
    * Get count of cached entries per provider.
    */
-  getCacheStats(): Array<{ provider: string; count: number; stale: number }> {
+  getCacheStats(projectRoot?: string): Array<{ provider: string; count: number; stale: number }> {
     const now = Date.now();
     const results: Array<{ provider: string; count: number; stale: number }> = [];
     const stmt = this.db.prepare(
-      `SELECT provider,
+      projectRoot
+        ? `SELECT provider,
               COUNT(*) as total,
               SUM(CASE WHEN (cached_at + ttl * 1000) <= ? THEN 1 ELSE 0 END) as stale
-       FROM provider_cache
-       GROUP BY provider`
+         FROM provider_cache WHERE project_root = ?
+         GROUP BY provider`
+        : `SELECT provider,
+              COUNT(*) as total,
+              SUM(CASE WHEN (cached_at + ttl * 1000) <= ? THEN 1 ELSE 0 END) as stale
+         FROM provider_cache
+         GROUP BY provider`
     );
-    stmt.bind([now]);
+    if (projectRoot) stmt.bind([now, projectRoot]);
+    else stmt.bind([now]);
     while (stmt.step()) {
       const row = stmt.getAsObject();
       results.push({
@@ -581,6 +883,12 @@ export class GraphStore {
   private rowToNode(row: Record<string, unknown>): GraphNode {
     const validUntilRaw = row.valid_until;
     const invalidatedByRaw = row.invalidated_by_commit;
+    const meta = JSON.parse((row.metadata as string) || "{}");
+    // Project scoping fields exposed in metadata for convenience.
+    (meta as Record<string, unknown>).projectRoot = (row.project_root as string) ?? "";
+    (meta as Record<string, unknown>).projectBranch = (row.project_branch as string) ?? null;
+    (meta as Record<string, unknown>).memoryScope = (row.memory_scope as string) ?? null;
+
     return {
       id: row.id as string,
       label: row.label as string,
@@ -591,7 +899,7 @@ export class GraphStore {
       confidenceScore: (row.confidence_score as number) ?? 1.0,
       lastVerified: (row.last_verified as number) ?? 0,
       queryCount: (row.query_count as number) ?? 0,
-      metadata: JSON.parse((row.metadata as string) || "{}"),
+      metadata: meta,
       validUntil:
         validUntilRaw === null || validUntilRaw === undefined
           ? undefined
@@ -604,6 +912,9 @@ export class GraphStore {
   }
 
   private rowToEdge(row: Record<string, unknown>): GraphEdge {
+    const meta = JSON.parse((row.metadata as string) || "{}");
+    (meta as Record<string, unknown>).projectRoot = (row.project_root as string) ?? "";
+
     return {
       source: row.source as string,
       target: row.target as string,
@@ -613,7 +924,7 @@ export class GraphStore {
       sourceFile: (row.source_file as string) ?? "",
       sourceLocation: (row.source_location as string) ?? null,
       lastVerified: (row.last_verified as number) ?? 0,
-      metadata: JSON.parse((row.metadata as string) || "{}"),
+      metadata: meta,
     };
   }
 }

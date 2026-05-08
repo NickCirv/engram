@@ -227,7 +227,7 @@ export function hashPassword(p: string) { return "h_" + p; }
     };
     expect(wrapped.hookSpecificOutput.permissionDecision).toBe("deny");
     expect(wrapped.hookSpecificOutput.permissionDecisionReason).toContain(
-      "[engram] Structural summary for src/auth.ts"
+      "[engramx] Structural summary for src/auth.ts"
     );
   });
 

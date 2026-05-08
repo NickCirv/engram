@@ -65,7 +65,7 @@ export async function handleCwdChanged(
     const projectName = basename(resolve(projectRoot));
     const lines: string[] = [];
     lines.push(
-      `[engram] Project switched to ${projectName} (${graphStats.nodes} nodes, ${graphStats.edges} edges)`
+      `[engramx] Project switched to ${projectName} (${graphStats.nodes} nodes, ${graphStats.edges} edges)`
     );
     if (gods.length > 0) {
       lines.push("Core entities:");
