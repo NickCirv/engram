@@ -2,6 +2,15 @@
   <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v4.0 'Skill Pack')" width="100%">
 </p>
 
+<p align="center">
+  <strong>Engram makes your AI coding agent stop re-reading the same files — and stop repeating mistakes your repo already fixed.</strong><br>
+  <sub>One install. 8 IDEs. 89.1% measured token reduction. Bi-temporal mistakes auto-captured from git revert history. Local SQLite, zero cloud, Apache 2.0.</sub>
+</p>
+
+<p align="center">
+  <a href="#try-in-30-seconds-no-install"><strong>Try in 30 seconds (no install) ▶</strong></a>
+</p>
+
 <!-- ============================================================
      24-second product showcase (Hyperframes-rendered MP4 + WebM).
      Source: docs/demos/showcase.html · scenes drive both the
@@ -57,6 +66,39 @@
 
 ---
 
+## Try in 30 seconds (no install)
+
+Paste this into any terminal. It creates a throwaway repo, simulates a buggy commit you reverted, then runs engram against the public npm registry — no global install, no commitment.
+
+```bash
+mkdir -p /tmp/engram-demo && cd /tmp/engram-demo && \
+  git init -q && git commit --allow-empty -q -m "init" && \
+  echo "export const buggy = () => null;" > src.ts && \
+  git add -A && git commit -q -m "feat: add buggy helper returning null causing form crashes" && \
+  git revert --no-edit HEAD > /dev/null && \
+  npx --yes engramx@4.0.0 init . && \
+  npx --yes engramx@4.0.0 mistakes
+```
+
+You should see, within 30 seconds, the **bi-temporal pre-mortem** engram auto-captured from your revert:
+
+```
+⚠️  1 mistake(s) recorded:
+
+⚠ Mistake #1 — 2026-05-19
+  ┌─ then you believed: feat: add buggy helper returning null causing form crashes
+  ├─ found false:       2026-05-19
+  └─ truth now:         Reverted in <sha> (2026-05-19)
+     ref:        src.ts
+     applies to: git revert touching src
+```
+
+That's the rave moment — engram remembering what your AI agent forgot, surfaced *before* the next edit. Multiply this across your actual repo's revert history, and it works on every Claude Code session automatically.
+
+When you're ready: scroll to [Install](#install-in-30-seconds) for the global install path.
+
+---
+
 ## Why this exists, May 2026
 
 Three things broke at the same time. Cursor went usage-based and people started getting $1,400 surprise bills. Anthropic tightened Claude Code limits, then quietly tested removing it from the $20 Pro plan. Half the AI coding crowd migrated from one tool to the other, hit the new ceiling within a week, and started looking for any way to make a session last longer.
@@ -67,7 +109,9 @@ On a real 87-file repo, the measured reduction is **89.1%**. That's not a market
 
 Works in 8 IDEs and counting — Claude Code, Cursor, Cline, Continue.dev, Aider, Windsurf, Zed, OpenAI Codex CLI. One install, one graph, every tool benefits. Apache 2.0. Local SQLite. Nothing leaves your machine.
 
-> **v4.0 "Skill Pack" shipped 2026-05-18** — engram's memory becomes **active**. v3.x captured mistakes when asked; v4.0 surfaces past corrections *before* the agent makes the edit. Schema v9 adds four bi-temporal fields per mistake (`then_believed`, `found_false_at`, `truth_now`, `applies_to`). A new **git-revert miner** auto-populates them from your repo's revert history — fresh `engram init` produces a non-empty mistakes table within seconds, no manual seeding needed. `engram init` now **auto-installs** the Sentinel hook by default (opt out with `--no-hook`) and the mistake-guard runs in `permissive` mode by default (opt out with `ENGRAM_MISTAKE_GUARD=0`). Sibling repo **[engram-skill-pack](https://github.com/NickCirv/engram-skill-pack)** ships engram as Claude Code Skills via the Anthropic Marketplace — three active skills (`engram-mistakes`, `engram-query`, `engram-gods`), full five-skill surface in v0.3.0. **Mesh moves to v4.5** behind `ENGRAM_MESH_EXPERIMENTAL=1`; the May 18 strategic re-cut prioritised distribution-via-skills over federation. 1025 tests passing. See [CHANGELOG.md](CHANGELOG.md) for the full v4.0 diff.
+> **v4.0 "Skill Pack" shipped 2026-05-18 — in 30 seconds:** Bi-temporal mistakes auto-fire before your agent repeats them. Fresh installs auto-capture mistakes from git revert history. Hook auto-installs on `engram init`. Skill-pack sibling repo ships engram to the Claude Code Marketplace in one command.
+>
+> v3.x captured mistakes when asked; v4.0 surfaces past corrections *before* the agent makes the edit. Schema v9 adds four bi-temporal fields per mistake (`then_believed`, `found_false_at`, `truth_now`, `applies_to`). A new **git-revert miner** auto-populates them from your repo's revert history — fresh `engram init` produces a non-empty mistakes table within seconds, no manual seeding needed. `engram init` now **auto-installs** the Sentinel hook by default (opt out with `--no-hook`) and the mistake-guard runs in `permissive` mode by default (opt out with `ENGRAM_MISTAKE_GUARD=0`). Sibling repo **[engram-skill-pack](https://github.com/NickCirv/engram-skill-pack)** ships engram as Claude Code Skills via the Anthropic Marketplace — three active skills (`engram-mistakes`, `engram-query`, `engram-gods`), full five-skill surface in v0.3.0. **Mesh moves to v4.5** behind `ENGRAM_MESH_EXPERIMENTAL=1`; the May 18 strategic re-cut prioritised distribution-via-skills over federation. 1025 tests passing. See [CHANGELOG.md](CHANGELOG.md) for the full v4.0 diff.
 
 <details>
 <summary><strong>Earlier release notes (v3.4 "Universal Spine", May 2)</strong></summary>
