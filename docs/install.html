@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>Install · engramx v3.4 "Universal Spine" — the context spine for every AI coding tool</title>
-<meta name="description" content="One install. Works in Claude Code, Cursor, Cline, Continue, Aider, Codex, Windsurf, Zed. Your AI coding agent stops re-reading the same files. 89.1% measured token reduction on a real codebase. Local SQLite, zero cloud, Apache 2.0. The only context tool with a reproducible benchmark across 8 IDEs.">
+<title>Install · engramx v4.0 "Skill Pack" — bi-temporal mistakes for every AI coding tool</title>
+<meta name="description" content="One install. Works in Claude Code, Cursor, Cline, Continue, Aider, Codex, Windsurf, Zed. Bi-temporal mistakes auto-fire before your agent repeats them. Auto-captured from git revert history. Auto-installed on engram init. 89.1% measured token reduction. Local SQLite, zero cloud, Apache 2.0.">
 <link rel="canonical" href="https://github.com/NickCirv/engram/blob/main/docs/install.html">
 
-<meta property="og:title" content="engramx v3.4 — the context spine for every AI coding tool. 89% measured token reduction. 8 IDEs. One install.">
-<meta property="og:description" content="npm install -g engramx → engram setup. Works in Claude Code, Cursor, Cline, Continue, Aider, Codex, Windsurf, Zed. 89% measured savings. Local SQLite, zero cloud. Apache 2.0.">
+<meta property="og:title" content="engramx v4.0 — bi-temporal mistakes for every AI coding tool. Catches your agent before it repeats a fix the repo already reverted.">
+<meta property="og:description" content="npm install -g engramx → engram init. Auto-installs the Sentinel hook. Auto-captures bi-temporal mistakes from git revert. 89.1% measured token reduction. Local SQLite, zero cloud. Apache 2.0.">
 <meta property="og:image" content="https://raw.githubusercontent.com/NickCirv/engram/main/assets/banner-v3.png">
 <meta name="twitter:card" content="summary_large_image">
 
@@ -867,7 +867,7 @@
   <div class="container">
     <div class="hero-grid">
       <div>
-        <span class="hero-pill">● v3.4 "Universal Spine" · shipped 2026-05-02 · 8 IDEs · 910 tests</span>
+        <span class="hero-pill">● v4.0 "Skill Pack" · shipped 2026-05-18 · bi-temporal mistakes · 1025 tests</span>
 
         <h1 class="hero-headline reveal">
           your AI agent<br>
@@ -944,60 +944,66 @@
   </div>
 </section>
 
-<!-- ================== WHAT'S COMING IN v4.0 ================== -->
+<!-- ================== WHAT SHIPPED IN v4.0 ================== -->
 <section class="block" id="coming-next" style="border-top: 1px solid var(--border);">
   <div class="container">
     <div class="section-head">
       <div>
-        <div class="section-eyebrow">// v4.0 · in flight</div>
-        <h2 class="section-title">Mesh + Spine: federation lands May 25.</h2>
+        <div class="section-eyebrow">// v4.0 · shipped 2026-05-18</div>
+        <h2 class="section-title">Skill Pack: engram's memory becomes active.</h2>
       </div>
-      <div class="section-meta">Phase 1 foundation already merged · 1007 tests passing · target ship: 2026-05-25</div>
+      <div class="section-meta">1025 tests passing · auto-install on init · permissive by default</div>
     </div>
 
     <p style="color: var(--text-secondary); max-width: 720px; margin-bottom: 2rem;">
-      v3.4 made engram the <em>universal</em> context spine across 8 IDEs. v4.0 makes it the
-      <em>federated</em> spine. Engram instances on different machines exchange mistakes, ADRs, and
-      patterns through an opt-in mesh. PII-stripped at the wire layer. mTLS plus ed25519 identity.
-      Local-first stays the default. Federation is opt-in only.
+      v3.x captured mistakes when asked. v4.0 surfaces past corrections <em>before</em> the agent
+      makes the edit. Schema v9 encodes four bi-temporal fields per mistake. A new git-revert
+      miner auto-populates them. The Sentinel hook installs by default and fires permissively
+      out of the box. Same engram, same graph, same 89.1% reduction — now plus the catch-it-before-it-recurs
+      layer.
     </p>
 
     <div class="v3-grid">
       <article class="v3-card">
-        <div class="v3-card-tag">mesh</div>
-        <h3 class="v3-card-title"><span class="accent">◆</span> Federation protocol</h3>
+        <div class="v3-card-tag">bi-temporal</div>
+        <h3 class="v3-card-title"><span class="accent">◆</span> Bi-temporal mistakes</h3>
         <p class="v3-card-body">
-          ed25519 identity, JCS-canonical signing, 14-category PII gate, 64KB envelope cap, replay
-          protection via ULID + 24h cache. Behavioral trust scoring auto-downgrades on
-          signature mismatch or PII-leak attempt.
+          Schema v9 adds <code>then_believed</code>, <code>found_false_at</code>, <code>truth_now</code>,
+          and <code>applies_to</code> to every mistake. The PreToolUse hook injects this structured
+          block into Claude's context window before risky edits. The agent reads <em>what you used
+          to believe</em> vs <em>what's now true</em> and adapts.
         </p>
       </article>
 
       <article class="v3-card">
-        <div class="v3-card-tag">decisions</div>
-        <h3 class="v3-card-title"><span class="accent">◇</span> ADR miner</h3>
+        <div class="v3-card-tag">auto-capture</div>
+        <h3 class="v3-card-title"><span class="accent">◇</span> git-revert miner</h3>
         <p class="v3-card-body">
-          Architecture Decision Records become queryable like code. Engram surfaces a relevant
-          ADR above mistakes when its keywords match. Federate them through the mesh and a fix
-          in one team's repo immunizes every other repo on the network.
+          Fresh <code>engram init</code> on any git-active repo produces a non-empty mistakes table
+          within seconds. The miner walks revert pairs, extracts the original belief from the
+          reverted commit's subject, and writes a bi-temporal mistake node. No manual <code>engram
+          learn</code> seeding required.
         </p>
       </article>
 
       <article class="v3-card">
-        <div class="v3-card-tag">cost lens v2</div>
-        <h3 class="v3-card-title"><span class="accent">$</span> Live token-savings dashboard</h3>
+        <div class="v3-card-tag">marketplace</div>
+        <h3 class="v3-card-title"><span class="accent">★</span> engram-skill-pack</h3>
         <p class="v3-card-body">
-          <code>engram cost --watch</code> for terminal live-tail. <code>~/.engram/cost-config.json</code>
-          for custom rate overrides. Telegram pipe via Jarvis when <code>JARVIS_TELEGRAM_TOKEN</code>
-          is set. Weekly digest auto-posts to your team channel.
+          Sibling repo ships engram as Claude Code Skills. Three active skills today
+          (<code>engram-mistakes</code>, <code>engram-query</code>, <code>engram-gods</code>),
+          full five-skill surface in v0.3.0. <code>npx @anthropic-ai/claude-code add
+          nickcirv/engram-skill-pack</code> — one command to install.
         </p>
       </article>
     </div>
 
     <p style="color: var(--text-secondary); margin-top: 2rem; font-size: 0.95rem;">
-      Track v4.0 progress on <a href="https://github.com/NickCirv/engram/discussions" style="color: var(--accent);">GitHub Discussions</a>
-      or subscribe at <a href="https://engram.substack.com" style="color: var(--accent);">engram.substack.com</a>
-      for the launch deep-dive when it ships.
+      Mesh moves to v4.5 behind <code>ENGRAM_MESH_EXPERIMENTAL=1</code> — the May 18 strategic
+      re-cut prioritised distribution-via-skills over federation. Read the full diff in
+      <a href="https://github.com/NickCirv/engram/blob/main/CHANGELOG.md" style="color: var(--accent);">CHANGELOG.md</a>
+      or watch <a href="https://github.com/NickCirv/engram/discussions" style="color: var(--accent);">GitHub Discussions</a>
+      for the v4.5 mesh GA timeline.
     </p>
   </div>
 </section>

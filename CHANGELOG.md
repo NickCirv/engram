@@ -6,19 +6,87 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
-### Added — v4.0 "Mesh + Spine" Phase 1 foundation (in progress, target ship: 2026-05-25)
+## [4.0.0] — 2026-05-18 — "Skill Pack"
 
-Federation foundation. Loopback transport + cross-machine TLS land in subsequent v4.0 phases. This commit ships the identity, signing, audit, and PII-stripping layers — everything that makes the wire safe before the wire exists.
+Engram's memory becomes **active**. v3.x captured mistakes and answered queries when asked; v4.0 surfaces past corrections **before** the agent makes the edit, captures new ones automatically from git history, and ships a sibling marketplace pack so Claude Code users install engram in one command.
 
-- **`src/mesh/types.ts`** — Envelope, MessageType, TrustScore, AuditEntry. Five message types defined: `peer.hello`, `peer.audit`, `mistake.shared`, `pattern.shared`, `decision.shared`. Wire constants: protocol v1, 64KB envelope cap, 5-min clock tolerance, 24h replay cache TTL. `computeTrust()` implements the `0.4*success + 0.2*uptime + 0.2*threat + 0.2*integrity` aggregate, clamped to [0,1].
-- **`src/mesh/jcs.ts`** — RFC 8785 canonical JSON serialization. ~150 LoC pure JS, no native dep. Produces deterministic byte sequences for ed25519 signing. Throws on non-finite numbers, circular references, functions, symbols, bigint. `canonicalizeEnvelopeForSigning()` strips `sig` before serializing.
-- **`src/mesh/identity.ts`** — ed25519 keypair generation, persistence, sign/verify. Uses Node's built-in `crypto` module (Node 12+ has stable ed25519). Storage at `~/.engram/mesh/`: `private.key` (DER, 0600), `public.key` (DER, 0644), `fingerprint` (base64url SHA-256). `initIdentity()` is idempotent. `loadIdentity()` throws if uninitialized. Cross-platform (private key mode check skipped on Windows).
-- **`src/mesh/pii-gate.ts`** — 14-category PII stripper. Categories: email, AWS access keys, JWT, Bearer tokens, ETH/BTC addresses, SSN, phone (US + E.164 international), IPv4 (incl. CIDR), filesystem paths, hostnames, high-entropy tokens (Shannon ≥ 4.0), Luhn-validated credit cards. `stripPiiDeep()` recurses through arrays/objects. Tested against fixture corpus at `tests/fixtures/pii-zoo.json`.
-- **`src/mesh/audit.ts`** — append-only JSONL audit log at `~/.engram/mesh/audit.jsonl`. Same atomicity contract as `intelligence/hook-log.ts`: never throws, 10MB rotation cap, swallow-on-error.
-- **CLI: `engram mesh init`, `engram mesh status`, `engram mesh audit`** — three commands wired into `src/cli.ts`. Verified end-to-end against an isolated `HOME` directory.
-- **+97 tests** across `tests/mesh/{types,jcs,identity,pii-gate,audit}.test.ts`. Hermetic — use `mkdtempSync` for filesystem state, no real `~/.engram/` interaction.
+The headline change is the **bi-temporal mistakes** model — every mistake now carries `then_believed`, `found_false_at`, `truth_now`, and `applies_to` fields. The PreToolUse hook injects this structured block into Claude's context window before risky edits, and the `git-revert` miner auto-populates the fields from your repo's revert history. Fresh `engram init` on any git-active repo produces a non-empty mistakes table within seconds — no manual `engram learn` seeding required.
 
-PRD: `~/Desktop/Projects/Engram/01-prds/05-v4-mesh-spine-PRD.md`. RFC for the wire format: `~/Desktop/Projects/Engram/02-architecture/rfcs/RFC-0001-mesh-wire-format.md` (decision: JSON over WebSocket, defer Protobuf to RFC-0002 if v4.1 telemetry justifies migration).
+**Mesh moves to v4.5.** The Phase 1 foundation (identity, JCS, PII gate, audit) merged on May 2 stays compiled but is gated behind `ENGRAM_MESH_EXPERIMENTAL=1`. The May 18 empire-engine data scored `engram-skill-pack` at maximum Layer-8 synergy (100/100); mesh produced zero corresponding demand signal in the same window. Distribution-via-skills ranked higher than federation. Mesh GA lights up later when the install base supports team-tier features.
+
+### Added — bi-temporal mistakes (the rave moment)
+
+Schema v9 migration (additive, idempotent). Four new nullable columns on the `nodes` table:
+
+- `then_believed TEXT` — the belief at the original `lastVerified` (e.g. the reverted commit's subject)
+- `found_false_at INTEGER` — unix-ms when the belief was found false
+- `truth_now TEXT` — the current best answer / fix / replacement
+- `applies_to TEXT` — pattern label this mistake recurs as
+
+Migration runs in <500ms on a 100k-node graph. v3.x mistakes back-fill all four as NULL and continue to render via the legacy single-line layout — zero regression. Reversible via `engram db rollback --to 8`.
+
+Structured bi-temporal output format across three surfaces:
+
+- **CLI** (`engramx mistakes`) — new `src/cli/format-mistake.ts` renderer module. Uses chalk + Unicode box-drawing characters (`┌├└─`) for tree layout, color-coded by section. Falls back to the legacy `[file, Nd ago] label` line for v3.x mistakes.
+- **PreToolUse hook** (`src/intercept/handlers/mistake-guard.ts::formatWarning`) — plain text version of the same layout for injection into Claude's `additionalContext`. The `appliesTo` pattern becomes the warning title; file ref appears in a `file:` continuation line.
+- **Edit-write landmine block** (`src/intercept/handlers/edit-write.ts::formatLandmineWarning`) — also rendered bi-temporal when v9 fields are populated. Footer rewritten to credit all miner sources, not just CLAUDE.md.
+
+`MistakeEntry`, `GraphNode`, and the SQLite read/write paths all extended to carry the four bi-temporal fields end-to-end.
+
+### Added — git-revert auto-capture miner
+
+`src/miners/git-revert-miner.ts` (~250 LOC). Walks the last 200 commits, detects revert pairs via `^revert ` subject prefix + `This reverts commit <sha>` body marker, fetches reverted commit metadata via `git show`, and emits one bi-temporal mistake node per pair. Idempotent — stable IDs of shape `revert_<revertShort>_<origShort>`. Wired into the init pipeline alongside ast-miner, git-miner, and session-miner.
+
+9 hermetic miner tests covering: empty/non-git dir, repo with no reverts, single revert (full v9 fields), two independent reverts, idempotent re-mining, manual `Revert` without SHA marker, build-dir-only revert skipped, author timestamp correctness, metadata audit fields. Tests use `mkdtempSync` git repos with disabled gpg signing.
+
+### Added — auto-install hook on `engram init`
+
+`engram init` now auto-installs the 6 Sentinel hook events (PreToolUse / PostToolUse / SessionStart / UserPromptSubmit / PreCompact / CwdChanged) into the project's `.claude/settings.local.json`. Per-project scope means installing engram in one repo never affects another. Opt out with `engram init --no-hook`. The previous `--with-hook` opt-in flag is removed.
+
+`currentGuardMode()` default flipped `off` → `permissive`. Pre-v4.0 the hook would be installed but dormant until users set `ENGRAM_MISTAKE_GUARD=1`. v4.0 makes the guard active by default so the bi-temporal pre-mortem fires automatically. Opt out via `ENGRAM_MISTAKE_GUARD=0` or empty string. Strict deny mode still opt-in via `ENGRAM_MISTAKE_GUARD=2`. Unrecognized values fall through to permissive (fail-open).
+
+### Added — `engram upgrade` command
+
+New top-level subcommand for the v3.x → v4.0 migration path. Idempotent — running twice reports "Already on schema v9 — nothing to do." Detects current version, runs pending migrations, prints "What's new in v4.0" highlights. Wraps the existing `engram db migrate` plumbing in a friendlier surface.
+
+### Changed — mistake-guard hardening
+
+- **Structured stderr telemetry** on both silent catch-alls in `mistake-guard.ts`. Previously the hook could fail-open without any diagnostic; now stderr-logs the error + project + target kind. Controlled by `ENGRAM_MISTAKE_GUARD_QUIET=1` for users who don't want noise.
+- **Bash pattern min lengths lifted** `>2/>3` → `>4/>5`. Reduces false-positives on short identifiers (`test`, `src`, `db`, `rm`) colliding with everyday commands.
+- **Invocation-layer integration tests** — 8 new tests in `tests/intercept/mistake-guard-invocation.test.ts` that route real PreToolUse payloads through `dispatchHook()` and verify the full wiring contract end-to-end. Closes MUST-FIX #2 from the v4.0 mistake-guard reliability audit.
+
+### Fixed — production reliability
+
+**`isInsideProject()` symlink-aware fallback** for non-existent files (`src/intercept/context.ts`). When `realpathSync(filePath)` throws (file doesn't exist yet — common for the Write tool creating new files, or after `git revert` deleted the original), the previous fallback `resolve(filePath)` did NOT resolve symlinks. Result on macOS: `realRoot = /private/var/folders/...` but `realFile = /var/folders/...` → prefix mismatch → outside-project → hook silently no-ops on every Write to a tempdir. New fallback realpaths the parent directory (which exists for new files) and reattaches the basename. Caught by the Phase 1H e2e audit; affects production Claude Code sessions on any system with symlinked TMPDIR.
+
+### Mesh — feature-flagged preview only
+
+All mesh CLI commands (`engram mesh init`, `engram mesh status`, `engram mesh audit`) and the underlying Phase 1 foundation code (identity, JCS, PII gate, audit log) stay compiled but only register when `ENGRAM_MESH_EXPERIMENTAL=1` is set in env. Mesh GA target moved to v4.5 per the May 18 strategic re-cut.
+
+The Phase 1 mesh code that did ship in this release (originally tagged for v4.0 launch on May 2):
+
+- **`src/mesh/types.ts`** — Envelope, MessageType, TrustScore, AuditEntry. Five message types: `peer.hello`, `peer.audit`, `mistake.shared`, `pattern.shared`, `decision.shared`. Wire constants: protocol v1, 64KB envelope cap, 5-min clock tolerance, 24h replay cache TTL.
+- **`src/mesh/jcs.ts`** — RFC 8785 canonical JSON serialization. ~150 LoC pure JS, no native dep.
+- **`src/mesh/identity.ts`** — ed25519 keypair generation, persistence, sign/verify via Node's built-in `crypto`. Storage at `~/.engram/mesh/`.
+- **`src/mesh/pii-gate.ts`** — 14-category PII stripper. Tested against `tests/fixtures/pii-zoo.json`.
+- **`src/mesh/audit.ts`** — append-only JSONL audit log. Never throws.
+- **97 mesh tests** stay green even with the feature flag off.
+
+### Distribution
+
+**engram-skill-pack** sibling repo launched at [github.com/NickCirv/engram-skill-pack](https://github.com/NickCirv/engram-skill-pack). v0.2.0 ships three active skills (`engram-mistakes`, `engram-query`, `engram-gods`) as Anthropic Claude Code Marketplace artifacts. Five-skill full surface lands in v0.3.0 (`engram-gen` + `engram-learn`). Pack has `engramx >= 4.0.0` as optional peer dependency.
+
+### Tests
+
+1025/1025 tests pass (up from v3.4.0's 910). +97 from Phase 1 mesh foundation, +9 from git-revert miner, +8 from invocation-layer mistake-guard, +1 from explicit env-var opt-out coverage. Zero regressions from v3.4.0 across the 5 v4.0 commits.
+
+### Process
+
+This release walks the 8-phase release ritual at `~/.claude/skills/engram-release/SKILL.md`. Every phase backtested, triple-audited, stress-tested for edge cases (malformed JSON in settings, missing files, race conditions, symlinked tempdirs, idempotent re-runs). Execution plan: `~/Desktop/Projects/engram-docs/01-prds/06-v4-execution-plan-2026-05-18.md`. Phase 0 audit (which re-cut scope from "Mesh + Spine GA" to "Skill Pack"): `08-phase0-audit-2026-05-18.md`. Product spec: `07-v4-product-engineering-spec.md`.
+
+### Why
+
+claude-mem won the "Claude Code memory" category in the empire-engine intel pipeline (76,433 velocity) with functional/lossy literal-context capture. engram's structural-not-functional moat (AST graph + bi-temporal mistakes) was technically better but distribution-disadvantaged — the audience hunted for memory in the Skills marketplace, and engram wasn't there. v4.0 fixes the format mismatch + activates the proactive surfacing that makes the structural moat undeniable in 30 seconds of demo. The next instance of a known pattern gets caught before it ships.
 
 ## [3.4.0] — 2026-05-02 — "Universal Spine"
 
