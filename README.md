@@ -68,9 +68,17 @@
 
 ## Try in 30 seconds (no install)
 
-▶ **Watch the demo:** [`docs/demos/v4-skill-pack.cast`](docs/demos/v4-skill-pack.cast) — asciicast of the exact flow below. Render in any terminal with `asciinema play <file>`, or upload to [asciinema.org](https://asciinema.org) for a shareable web embed.
+<p align="center">
+  <a href="https://asciinema.org/a/GjjvPXVyArnivAog">
+    <img src="https://asciinema.org/a/GjjvPXVyArnivAog.svg" alt="engram v4.0 demo — bi-temporal mistakes auto-captured from git revert (30 seconds)" width="100%">
+  </a>
+</p>
 
-Paste this into any terminal. It creates a throwaway repo, simulates a buggy commit you reverted, then runs engram against the public npm registry — no global install, no commitment.
+<p align="center">
+  <sub>▶ <a href="https://asciinema.org/a/GjjvPXVyArnivAog"><strong>Play the live recording</strong></a> · or get the raw cast at <a href="docs/demos/v4-skill-pack.cast"><code>docs/demos/v4-skill-pack.cast</code></a> (<code>asciinema play</code>) · or generate it yourself with <a href="docs/demos/v4-skill-pack-demo.sh"><code>v4-skill-pack-demo.sh</code></a></sub>
+</p>
+
+Or paste this into your terminal — same flow, no global install, no commitment. Creates a throwaway repo with a reverted bug, then runs engram against the public npm registry:
 
 ```bash
 mkdir -p /tmp/engram-demo && cd /tmp/engram-demo && \
