@@ -490,6 +490,15 @@ export interface MistakeEntry {
   confidenceScore: number;
   sourceFile: string;
   lastVerified: number;
+  /**
+   * v4.0 bi-temporal fields (schema v9). All optional for back-compat with
+   * v3.x mistakes captured before the v9 columns existed. When all four are
+   * undefined, the CLI/provider render the legacy single-line layout.
+   */
+  thenBelieved?: string;
+  foundFalseAt?: number;
+  truthNow?: string;
+  appliesTo?: string;
 }
 
 /**
@@ -533,6 +542,10 @@ export async function mistakes(
       confidenceScore: m.confidenceScore,
       sourceFile: m.sourceFile,
       lastVerified: m.lastVerified,
+      thenBelieved: m.thenBelieved,
+      foundFalseAt: m.foundFalseAt,
+      truthNow: m.truthNow,
+      appliesTo: m.appliesTo,
     }));
   } finally {
     store.close();

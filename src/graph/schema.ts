@@ -27,6 +27,30 @@ export interface GraphNode {
    * `undefined` if never invalidated.
    */
   readonly invalidatedByCommit?: string;
+  /**
+   * v4.0 bi-temporal mistake fields. Together with `lastVerified` (when
+   * the mistake was last seen relevant) and `validUntil` (when the
+   * underlying source was refactored away), these encode the four-axis
+   * bi-temporal model the v4.0 mistakes output renders.
+   *
+   *   thenBelieved  — the belief at the original valid_time (e.g. the
+   *                   original commit message, or the agent's stated
+   *                   intent before it was corrected)
+   *   foundFalseAt  — unix-ms when the belief was found false (e.g. the
+   *                   revert commit timestamp, or the correction turn
+   *                   in a session transcript)
+   *   truthNow      — the current best answer / fix / replacement
+   *   appliesTo     — pattern label describing the situation in which
+   *                   this mistake recurs (used by the mistake-guard
+   *                   hook for relevance matching)
+   *
+   * All four are optional for back-compat. v3.x mistakes have all four
+   * undefined and render via the legacy display path.
+   */
+  readonly thenBelieved?: string;
+  readonly foundFalseAt?: number;
+  readonly truthNow?: string;
+  readonly appliesTo?: string;
 }
 
 export type NodeKind =

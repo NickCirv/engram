@@ -569,23 +569,11 @@ program
         limit: Number(opts.limit),
         sinceDays: opts.since ? Number(opts.since) : undefined,
       });
-      if (result.length === 0) {
-        console.log(chalk.yellow("No mistakes recorded."));
-        return;
-      }
-      console.log(
-        chalk.bold(`\n⚠️  ${result.length} mistake(s) recorded:\n`)
-      );
-      for (const m of result) {
-        const ago = Math.max(
-          1,
-          Math.round((Date.now() - m.lastVerified) / 86400000)
-        );
-        console.log(
-          `  ${chalk.dim(`[${m.sourceFile}, ${ago}d ago]`)} ${m.label}`
-        );
-      }
-      console.log();
+      // v4.0: bi-temporal layout when mistakes have the v9 fields,
+      // legacy single-line layout otherwise. Formatter handles both
+      // and the empty-set "no mistakes recorded" header.
+      const { renderMistakeList } = await import("./cli/format-mistake.js");
+      console.log(renderMistakeList(result));
     }
   );
 
@@ -604,6 +592,58 @@ program
       console.log(`  ${chalk.dim(`[${pq.reductionRelevant}x relevant / ${pq.reductionFull}x full]`)} ${pq.question}`);
     }
     console.log();
+  });
+
+// ── upgrade (v4.0) ──────────────────────────────────────────────────────────
+// Friendlier user-facing wrapper around `engram db migrate`. Detects the
+// installed engramx version + current schema version, runs pending
+// migrations idempotently, and prints v4.0 highlights so users know what
+// changed. Safe to run on v3.x installs (migrates v8 → v9 additively) and
+// on already-current v4.0 installs (no-op with "already up to date").
+program
+  .command("upgrade")
+  .description("Smooth upgrade path for v3.x users — runs schema migrations and shows what's new")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (opts: { project: string }) => {
+    const { getStore } = await import("./core.js");
+    const { runMigrations, getSchemaVersion, CURRENT_SCHEMA_VERSION } = await import(
+      "./db/migrate.js"
+    );
+    const projectPath = pathResolve(opts.project);
+    const store = await getStore(projectPath);
+    try {
+      type DbHandle = Parameters<typeof getSchemaVersion>[0] &
+        Parameters<typeof runMigrations>[0];
+      const db = (store as unknown as { db: DbHandle }).db;
+      const dbPath = join(projectPath, ".engram", "graph.db");
+      const before = getSchemaVersion(db);
+      const result = runMigrations(db, dbPath);
+      store.save();
+
+      console.log(chalk.bold("\nengram upgrade\n"));
+
+      if (result.migrationsRun === 0 && before === CURRENT_SCHEMA_VERSION) {
+        console.log(chalk.green(`  ✓ Already on schema v${CURRENT_SCHEMA_VERSION} — nothing to do.`));
+      } else {
+        console.log(
+          chalk.green(
+            `  ✓ Schema migrated v${result.fromVersion} → v${result.toVersion} (${result.migrationsRun} migration${result.migrationsRun === 1 ? "" : "s"})`,
+          ),
+        );
+        if (result.backedUp) {
+          console.log(chalk.dim(`  ✓ Pre-migration backup saved at ${dbPath}.bak-v${result.fromVersion}`));
+        }
+      }
+
+      console.log(chalk.bold("\n  What's new in v4.0\n"));
+      console.log(`    ${chalk.cyan("•")} Bi-temporal mistakes output — see ${chalk.bold("engramx mistakes")}`);
+      console.log(`    ${chalk.cyan("•")} 4 new schema fields: ${chalk.dim("then_believed, found_false_at, truth_now, applies_to")}`);
+      console.log(`    ${chalk.cyan("•")} Mistake-guard hook telemetry — failures now logged to stderr`);
+      console.log(`    ${chalk.cyan("•")} Mesh foundation behind ${chalk.dim("ENGRAM_MESH_EXPERIMENTAL=1")} (preview for v4.5)`);
+      console.log(chalk.dim(`\n  Try: engramx mistakes --since 30d\n`));
+    } finally {
+      store.close();
+    }
   });
 
 // ── mesh (v4.0) ─────────────────────────────────────────────────────────────
