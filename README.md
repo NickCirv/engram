@@ -68,6 +68,8 @@
 
 ## Try in 30 seconds (no install)
 
+▶ **Watch the demo:** [`docs/demos/v4-skill-pack.cast`](docs/demos/v4-skill-pack.cast) — asciicast of the exact flow below. Render in any terminal with `asciinema play <file>`, or upload to [asciinema.org](https://asciinema.org) for a shareable web embed.
+
 Paste this into any terminal. It creates a throwaway repo, simulates a buggy commit you reverted, then runs engram against the public npm registry — no global install, no commitment.
 
 ```bash
