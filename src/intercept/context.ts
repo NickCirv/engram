@@ -23,7 +23,7 @@
  *     project graph.
  */
 import { existsSync, realpathSync, statSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 
 /** Directory name that marks an engram-initialized project. */
 const ENGRAM_DIR = ".engram";
@@ -335,9 +335,20 @@ export function isInsideProject(
     try {
       realFile = realpathSync(filePath);
     } catch {
-      // File doesn't exist yet (new file being written). Use the
-      // normalized path as a best-effort approximation.
-      realFile = resolve(filePath);
+      // File doesn't exist yet (new file being written, or just deleted).
+      // Realpath the PARENT directory so we still benefit from symlink
+      // resolution (e.g. macOS `/tmp` → `/private/tmp`). Then re-attach
+      // the basename. Without this, a brand-new Write on a symlinked
+      // tempdir compares the unresolved `/var/...` form against the
+      // resolved `/private/var/...` root and incorrectly reports
+      // outside-project.
+      try {
+        const parentReal = realpathSync(dirname(filePath));
+        realFile = join(parentReal, basename(filePath));
+      } catch {
+        // Even the parent doesn't exist. Last resort: plain resolve.
+        realFile = resolve(filePath);
+      }
     }
     // Ensure the prefix match is on a directory boundary.
     const rootWithSep = realRoot.endsWith(sep) ? realRoot : realRoot + sep;

@@ -52,10 +52,27 @@ export interface EditWriteHookPayload {
  */
 const MAX_LANDMINES_IN_WARNING = 5;
 
+/** Format a unix-ms timestamp as YYYY-MM-DD (UTC) for the bi-temporal layout. */
+function formatLandmineDate(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "unknown";
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    d.getUTCDate(),
+  ).padStart(2, "0")}`;
+}
+
 /**
  * Format a list of mistakes as an agent-readable warning block suitable
  * for the `additionalContext` field of an allow response. Kept compact
  * so the injection doesn't dwarf the actual tool result.
+ *
+ * v4.0: when a mistake has the schema-v9 bi-temporal fields populated
+ * (thenBelieved + foundFalseAt OR truthNow), the entry renders as a
+ * structured "then you believed / found false / truth now" block. v3.x
+ * mistakes without those fields fall back to the single-line legacy
+ * format. The footer is generic (multi-source) — git-revert miner,
+ * session miner, AST miner, and explicit `engram learn` can all
+ * contribute mistakes here.
  */
 function formatLandmineWarning(
   projectRelativeFile: string,
@@ -63,19 +80,44 @@ function formatLandmineWarning(
     readonly label: string;
     readonly sourceFile: string;
     readonly confidence: string;
+    readonly thenBelieved?: string;
+    readonly foundFalseAt?: number;
+    readonly truthNow?: string;
+    readonly appliesTo?: string;
   }[]
 ): string {
   const header = `[engram landmines] ${mistakeList.length} past mistake${
     mistakeList.length === 1 ? "" : "s"
   } recorded for ${projectRelativeFile}:`;
+
+  const isBiTemporal = (m: { thenBelieved?: string; foundFalseAt?: number; truthNow?: string }) =>
+    typeof m.thenBelieved === "string" &&
+    m.thenBelieved.length > 0 &&
+    (typeof m.foundFalseAt === "number" || typeof m.truthNow === "string");
+
   const items = mistakeList.map((m) => {
     const conf = m.confidence === "EXTRACTED" ? "" : ` [${m.confidence.toLowerCase()}]`;
-    return `  - ${m.label}${conf}`;
+    if (!isBiTemporal(m)) {
+      return `  - ${m.label}${conf}`;
+    }
+    const title = m.appliesTo ?? m.label;
+    const lines = [`  - ${title}${conf}`];
+    lines.push(`     then you believed: ${m.thenBelieved}`);
+    if (typeof m.foundFalseAt === "number") {
+      lines.push(`     found false:       ${formatLandmineDate(m.foundFalseAt)}`);
+    }
+    if (typeof m.truthNow === "string" && m.truthNow.length > 0) {
+      lines.push(`     truth now:         ${m.truthNow}`);
+    }
+    return lines.join("\n");
   });
+
+  const anyBiTemporal = mistakeList.some(isBiTemporal);
+  const separator = anyBiTemporal ? "\n\n" : "\n";
   const footer =
     "Review these before editing to avoid re-introducing a known failure mode. " +
-    "engram recorded these from past session notes (bug:/fix: lines in your CLAUDE.md).";
-  return [header, ...items, "", footer].join("\n");
+    "Sources: git-revert pairs, AST mining, agent self-corrections, and explicit `engram learn`.";
+  return [header, items.join(separator), "", footer].join("\n");
 }
 
 /**
