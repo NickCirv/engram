@@ -80,10 +80,10 @@ program
     "Skip unchanged files (mtime-based). Dramatically faster on re-index of large repos."
   )
   .option(
-    "--with-hook",
-    "Also install the Sentinel hook into Claude Code settings.local.json (idempotent)"
+    "--no-hook",
+    "Skip auto-installing the Sentinel hook into .claude/settings.local.json (default: install)"
   )
-  .action(async (projectPath: string, opts: { withSkills?: string | boolean; fromCcs?: boolean; incremental?: boolean; withHook?: boolean }) => {
+  .action(async (projectPath: string, opts: { withSkills?: string | boolean; fromCcs?: boolean; incremental?: boolean; hook?: boolean }) => {
     console.log(chalk.dim(opts.incremental ? "🔍 Scanning changed files..." : "🔍 Scanning codebase..."));
     const result = await init(projectPath, {
       withSkills: opts.withSkills,
@@ -118,81 +118,75 @@ program
     console.log(chalk.green("\n✅ Ready. Your AI now has persistent memory."));
     console.log(chalk.dim("   Graph stored in .engram/graph.db"));
 
-    // Check if Sentinel hooks are already installed — if not, nudge the user.
-    const resolvedProject = pathResolve(projectPath);
-    const localSettings = join(resolvedProject, ".claude", "settings.local.json");
-    const projectSettings = join(resolvedProject, ".claude", "settings.json");
-    const hasHooks =
-      (existsSync(localSettings) &&
-        readFileSync(localSettings, "utf-8").includes("engram intercept")) ||
-      (existsSync(projectSettings) &&
-        readFileSync(projectSettings, "utf-8").includes("engram intercept"));
-
-    if (!hasHooks) {
-      console.log(
-        chalk.yellow("\n💡 Next step: ") +
-          chalk.white("engram install-hook") +
-          chalk.dim(
-            " — enables automatic Read interception (82% token savings)"
-          )
-      );
-      console.log(
-        chalk.dim(
-          "   Also recommended: " +
-            chalk.white("engram hooks install") +
-            " — auto-rebuild graph on git commit"
-        )
-      );
-    }
-
-    if (opts.withHook) {
-      // --with-hook shorthand: run install-hook for local scope after init.
-      // Idempotent — skips cleanly if already installed.
+    // v4.0: auto-install the Sentinel hook by default. Writes to the
+    // PROJECT-scoped `.claude/settings.local.json` (per-project, not global),
+    // so installing engram in one repo never affects another. Idempotent —
+    // skips cleanly if already installed. Opt out with `--no-hook`.
+    //
+    // The hook entries this installs power both:
+    //   - PreToolUse mistake-guard (surfaces bi-temporal mistakes before
+    //     Claude edits files — the v4.0 rave moment)
+    //   - Read/Edit interception (82% token savings via context provider)
+    if (opts.hook !== false) {
       const localSettingsPath = join(
         pathResolve(projectPath),
         ".claude",
         "settings.local.json"
       );
       let settings: ClaudeCodeSettings = {};
+      let settingsParseError = false;
       if (existsSync(localSettingsPath)) {
         try {
           const raw = readFileSync(localSettingsPath, "utf-8");
           settings = raw.trim() ? (JSON.parse(raw) as ClaudeCodeSettings) : {};
         } catch {
+          settingsParseError = true;
           console.log(
             chalk.yellow(
-              "\n   ⚠ --with-hook: settings.local.json is invalid JSON, skipping hook install."
+              "\n⚠ Sentinel hook auto-install skipped — .claude/settings.local.json is invalid JSON."
             )
           );
-          settings = {};
-        }
-      }
-      const hookResult = installEngramHooks(settings);
-      if (hookResult.added.length > 0 || hookResult.statusLineAdded) {
-        try {
-          mkdirSync(dirname(localSettingsPath), { recursive: true });
-          writeFileSync(
-            localSettingsPath,
-            JSON.stringify(hookResult.updated, null, 2) + "\n"
-          );
           console.log(
-            chalk.green(
-              `\n   ✅ --with-hook: installed ${hookResult.added.length} hook event${hookResult.added.length === 1 ? "" : "s"} into .claude/settings.local.json`
-            )
-          );
-        } catch (err) {
-          console.log(
-            chalk.yellow(
-              `\n   ⚠ --with-hook: write failed (${(err as Error).message})`
+            chalk.dim(
+              "   Fix the JSON and run `engram install-hook` manually, or delete the file to start fresh."
             )
           );
         }
-      } else {
-        console.log(
-          chalk.dim(
-            "\n   --with-hook: Sentinel hook already installed, nothing to do."
-          )
-        );
+      }
+      if (!settingsParseError) {
+        const hookResult = installEngramHooks(settings);
+        if (hookResult.added.length > 0 || hookResult.statusLineAdded) {
+          try {
+            mkdirSync(dirname(localSettingsPath), { recursive: true });
+            writeFileSync(
+              localSettingsPath,
+              JSON.stringify(hookResult.updated, null, 2) + "\n"
+            );
+            const eventWord = hookResult.added.length === 1 ? "event" : "events";
+            console.log(
+              chalk.cyan(
+                `\n🔗 Installed ${chalk.bold(String(hookResult.added.length))} Sentinel hook ${eventWord} in .claude/settings.local.json`
+              )
+            );
+            console.log(
+              chalk.dim(
+                `   → To remove: ${chalk.white("engram uninstall-hook")}   |   To skip on init: ${chalk.white("--no-hook")}`
+              )
+            );
+          } catch (err) {
+            console.log(
+              chalk.yellow(
+                `\n⚠ Sentinel hook auto-install write failed: ${(err as Error).message}`
+              )
+            );
+            console.log(
+              chalk.dim(
+                "   Re-try with `engram install-hook` after fixing the underlying issue."
+              )
+            );
+          }
+        }
+        // else: already installed — stay silent on re-init for clean repeat-init UX
       }
     }
 

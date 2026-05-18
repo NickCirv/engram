@@ -48,9 +48,14 @@ describe("currentGuardMode", () => {
     delete process.env.ENGRAM_MISTAKE_GUARD;
   });
 
-  it("returns 'off' when env var is unset", () => {
+  // v4.0: default mode flipped from "off" → "permissive". The hook is now
+  // auto-installed on `engram init`, so the guard needs to fire by default
+  // for the rave moment (engram surfacing past mistakes before the agent
+  // repeats them). Opt out via ENGRAM_MISTAKE_GUARD=0 (or empty string).
+  // Strict deny mode stays opt-in via ENGRAM_MISTAKE_GUARD=2.
+  it("returns 'permissive' when env var is unset (v4.0 default)", () => {
     delete process.env.ENGRAM_MISTAKE_GUARD;
-    expect(currentGuardMode()).toBe("off");
+    expect(currentGuardMode()).toBe("permissive");
   });
 
   it("returns 'permissive' when env var is '1'", () => {
@@ -63,13 +68,21 @@ describe("currentGuardMode", () => {
     expect(currentGuardMode()).toBe("strict");
   });
 
-  it("returns 'off' for unrecognized values", () => {
-    process.env.ENGRAM_MISTAKE_GUARD = "yes";
-    expect(currentGuardMode()).toBe("off");
-    process.env.ENGRAM_MISTAKE_GUARD = "true";
-    expect(currentGuardMode()).toBe("off");
+  it("returns 'off' for explicit opt-out values ('0' or empty string)", () => {
     process.env.ENGRAM_MISTAKE_GUARD = "0";
     expect(currentGuardMode()).toBe("off");
+    process.env.ENGRAM_MISTAKE_GUARD = "";
+    expect(currentGuardMode()).toBe("off");
+  });
+
+  it("returns 'permissive' for any unrecognized truthy value (fail-open)", () => {
+    // v4.0: unrecognized values fall through to permissive (the safe default
+    // for v4.0's "active by default" posture). v3.x used to return 'off' for
+    // unknown values, which silently disabled the guard if users mistyped.
+    process.env.ENGRAM_MISTAKE_GUARD = "yes";
+    expect(currentGuardMode()).toBe("permissive");
+    process.env.ENGRAM_MISTAKE_GUARD = "true";
+    expect(currentGuardMode()).toBe("permissive");
   });
 });
 
@@ -362,8 +375,9 @@ describe("applyMistakeGuard — integration", () => {
     };
   }
 
-  it("mode=off → returns raw result unchanged (even with matching mistake)", async () => {
-    delete process.env.ENGRAM_MISTAKE_GUARD;
+  it("mode=off (explicit opt-out via ENGRAM_MISTAKE_GUARD=0) → returns raw result unchanged (even with matching mistake)", async () => {
+    // v4.0: default mode is now 'permissive' — explicit opt-out required.
+    process.env.ENGRAM_MISTAKE_GUARD = "0";
     const raw = null; // passthrough
     const out = await applyMistakeGuard(raw, makePayload("src/auth.ts"), "edit-write");
     expect(out).toBe(null);

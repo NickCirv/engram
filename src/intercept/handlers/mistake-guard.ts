@@ -38,10 +38,18 @@ import type { HandlerResult } from "../safety.js";
 export type GuardMode = "off" | "permissive" | "strict";
 
 export function currentGuardMode(): GuardMode {
+  // v4.0: default mode flipped from "off" → "permissive". Pre-v4.0 the hook
+  // installer dropped the entry but the guard slept unless the user opted in
+  // via ENGRAM_MISTAKE_GUARD=1. Now that init auto-installs the hook, the
+  // guard needs to be active by default for the rave moment to fire — engram
+  // surfacing past mistakes before the agent repeats them. Opt out by setting
+  // ENGRAM_MISTAKE_GUARD=0 (or empty string). Strict deny mode stays opt-in
+  // via ENGRAM_MISTAKE_GUARD=2.
   const raw = process.env.ENGRAM_MISTAKE_GUARD;
-  if (raw === "1") return "permissive";
+  if (raw === "0" || raw === "") return "off";
   if (raw === "2") return "strict";
-  return "off";
+  // Anything else (unset, "1", or any value) → permissive
+  return "permissive";
 }
 
 /**
