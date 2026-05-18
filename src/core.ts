@@ -10,6 +10,7 @@ import { queryGraph, shortestPath, renderFileStructure } from "./graph/query.js"
 import { toPosixPath } from "./graph/path-utils.js";
 import { extractDirectory } from "./miners/ast-miner.js";
 import { mineGitHistory } from "./miners/git-miner.js";
+import { mineGitReverts } from "./miners/git-revert-miner.js";
 import { mineSessionHistory, learnFromSession } from "./miners/session-miner.js";
 import { mineSkills } from "./miners/skills-miner.js";
 import type { GraphStats } from "./graph/schema.js";
@@ -100,6 +101,7 @@ export async function init(
         onProgress: options.onProgress,
       });
     const gitResult = mineGitHistory(root);
+    const gitRevertResult = mineGitReverts(root);
     const sessionResult = mineSessionHistory(root);
 
     let skillCount = 0;
@@ -119,12 +121,14 @@ export async function init(
     const allNodes = [
       ...nodes,
       ...gitResult.nodes,
+      ...gitRevertResult.nodes,
       ...sessionResult.nodes,
       ...skillNodes,
     ];
     const allEdges = [
       ...edges,
       ...gitResult.edges,
+      ...gitRevertResult.edges,
       ...sessionResult.edges,
       ...skillEdges,
     ];
