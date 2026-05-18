@@ -70,6 +70,15 @@ export interface MistakeMatch {
   readonly label: string;
   readonly sourceFile: string;
   readonly ageMs: number;
+  /**
+   * v4.0 bi-temporal fields. Populated from schema-v9 columns. All optional
+   * for back-compat — v3.x mistakes render via the legacy single-line path
+   * in formatWarning.
+   */
+  readonly thenBelieved?: string;
+  readonly foundFalseAt?: number;
+  readonly truthNow?: string;
+  readonly appliesTo?: string;
 }
 
 /**
@@ -122,6 +131,10 @@ export async function findMatchingMistakesAsync(
             label: m.label,
             sourceFile: m.sourceFile,
             ageMs: now - m.lastVerified,
+            thenBelieved: m.thenBelieved,
+            foundFalseAt: m.foundFalseAt,
+            truthNow: m.truthNow,
+            appliesTo: m.appliesTo,
           });
         }
       } else {
@@ -142,17 +155,29 @@ export async function findMatchingMistakesAsync(
           const patternStr = typeof pattern === "string" ? pattern.toLowerCase() : "";
           const fileStr = m.sourceFile.toLowerCase();
 
-          if (patternStr && patternStr.length > 2 && command.includes(patternStr)) {
+          // v4.0 audit fix #6: lengthen Bash min match lengths to reduce
+          // false-positives on short identifiers (was >2 and >3 — too eager
+          // for names like 'rm' / 'db' / 'test' / 'src' colliding with npm,
+          // git diff bases, etc.). Doc: 08-phase0-audit-2026-05-18.md §C.
+          if (patternStr && patternStr.length > 4 && command.includes(patternStr)) {
             matches.push({
               label: m.label,
               sourceFile: m.sourceFile,
               ageMs: now - m.lastVerified,
+              thenBelieved: m.thenBelieved,
+              foundFalseAt: m.foundFalseAt,
+              truthNow: m.truthNow,
+              appliesTo: m.appliesTo,
             });
-          } else if (fileStr && fileStr.length > 3 && command.includes(fileStr)) {
+          } else if (fileStr && fileStr.length > 5 && command.includes(fileStr)) {
             matches.push({
               label: m.label,
               sourceFile: m.sourceFile,
               ageMs: now - m.lastVerified,
+              thenBelieved: m.thenBelieved,
+              foundFalseAt: m.foundFalseAt,
+              truthNow: m.truthNow,
+              appliesTo: m.appliesTo,
             });
           }
         }
@@ -162,7 +187,17 @@ export async function findMatchingMistakesAsync(
     } finally {
       store.close();
     }
-  } catch {
+  } catch (err) {
+    // v4.0 audit fix #1: structured telemetry on hook fail-open. Previously
+    // silent. Now stderr-logged so flaky deployments can be diagnosed.
+    // ENGRAM_MISTAKE_GUARD_QUIET=1 suppresses for users who don't want noise.
+    if (process.env.ENGRAM_MISTAKE_GUARD_QUIET !== "1") {
+      const msg = err instanceof Error ? err.message : String(err);
+      const kind = target?.kind ?? "unknown";
+      console.error(
+        `[engram:mistake-guard] lookup failed (kind=${kind}, project=${projectRoot}): ${msg}`,
+      );
+    }
     return [];
   }
 }
@@ -177,20 +212,82 @@ function formatAge(ms: number): string {
   return `${Math.floor(days / 30)}mo ago`;
 }
 
-/** Format a warning block from a set of matched mistakes. */
+/** Format a unix-ms timestamp as YYYY-MM-DD (UTC) for the bi-temporal layout. */
+function formatDateBiTemporal(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "unknown";
+  const d = new Date(ms);
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Does this match have enough v9 data to render the bi-temporal layout?
+ * Requires thenBelieved AND (foundFalseAt OR truthNow). Matches without
+ * sufficient fields render via the legacy single-line path.
+ */
+function hasBiTemporal(m: MistakeMatch): boolean {
+  return (
+    typeof m.thenBelieved === "string" &&
+    m.thenBelieved.length > 0 &&
+    (typeof m.foundFalseAt === "number" || typeof m.truthNow === "string")
+  );
+}
+
+/**
+ * Render a single bi-temporal match block. Plain text — no chalk — because
+ * the output goes into Claude's context window via the hook's
+ * additionalContext field, where ANSI codes would be noise.
+ */
+function renderBiTemporalMatch(m: MistakeMatch): string {
+  const header = `  ⚠ ${m.appliesTo ?? m.label}`;
+  const thenLine = `     ┌─ then you believed: ${m.thenBelieved}`;
+  const foundFalseDate =
+    typeof m.foundFalseAt === "number" ? formatDateBiTemporal(m.foundFalseAt) : "(not recorded)";
+  const foundLine = `     ├─ found false:       ${foundFalseDate}`;
+  const truthLine = `     └─ truth now:         ${m.truthNow ?? "(not recorded)"}`;
+  const refLine = `        file: ${m.sourceFile}`;
+  return [header, thenLine, foundLine, truthLine, refLine].join("\n");
+}
+
+/**
+ * Render a single legacy-layout match line.
+ */
+function renderLegacyMatch(m: MistakeMatch): string {
+  return `  ⚠ ${m.label} (flagged ${formatAge(m.ageMs)}, file: ${m.sourceFile})`;
+}
+
+/**
+ * Format a warning block from a set of matched mistakes.
+ *
+ * v4.0: when a match has the bi-temporal v9 fields populated, render the
+ * structured 4-field block (this is the rave moment — what Claude sees
+ * PreToolUse before making a recurring mistake). v3.x mistakes without the
+ * fields render via the legacy single-line layout. Output is plain text —
+ * the hook injects it into Claude's context, not a terminal.
+ */
 export function formatWarning(matches: readonly MistakeMatch[]): string {
   if (matches.length === 0) return "";
-  const lines = matches
-    .slice(0, 5)
-    .map((m) => `  ⚠ ${m.label} (flagged ${formatAge(m.ageMs)}, file: ${m.sourceFile})`);
-  const more = matches.length > 5 ? `\n  … and ${matches.length - 5} more` : "";
-  return [
-    "⛔ engramx pre-mortem — this target has recurred as a mistake before:",
-    ...lines,
-    more,
-  ]
+
+  const shown = matches.slice(0, 5);
+  const blocks = shown.map((m) =>
+    hasBiTemporal(m) ? renderBiTemporalMatch(m) : renderLegacyMatch(m)
+  );
+
+  // Detect mixed layouts — if any block is multi-line, separate all blocks
+  // with blank lines for legibility. Pure-legacy lists stay compact.
+  const anyBiTemporal = blocks.some((b) => b.includes("\n"));
+  const separator = anyBiTemporal ? "\n\n" : "\n";
+
+  const header =
+    "⛔ engramx pre-mortem — you've made this mistake before:";
+  const more =
+    matches.length > 5 ? `\n  … and ${matches.length - 5} more` : "";
+
+  return [header, blocks.join(separator), more]
     .filter((s) => s.length > 0)
-    .join("\n");
+    .join(anyBiTemporal ? "\n\n" : "\n");
 }
 
 /**
@@ -262,9 +359,14 @@ export async function applyMistakeGuard(
         additionalContext: warning,
       },
     };
-  } catch {
+  } catch (err) {
     // Any error → return raw result unchanged. Guard must never break
-    // the primary handler.
+    // the primary handler. v4.0 audit fix #1: stderr-log the failure so
+    // it isn't silent (was the #1 reliability gap in the audit).
+    if (process.env.ENGRAM_MISTAKE_GUARD_QUIET !== "1") {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[engram:mistake-guard] applyMistakeGuard failed: ${msg}`);
+    }
     return rawResult;
   }
 }

@@ -106,8 +106,8 @@ export class GraphStore {
 
   upsertNode(node: GraphNode): void {
     this.db.run(
-      `INSERT OR REPLACE INTO nodes (id, label, kind, source_file, source_location, confidence, confidence_score, last_verified, query_count, metadata, valid_until, invalidated_by_commit)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO nodes (id, label, kind, source_file, source_location, confidence, confidence_score, last_verified, query_count, metadata, valid_until, invalidated_by_commit, then_believed, found_false_at, truth_now, applies_to)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         node.id,
         node.label,
@@ -121,6 +121,10 @@ export class GraphStore {
         JSON.stringify(node.metadata),
         node.validUntil ?? null,
         node.invalidatedByCommit ?? null,
+        node.thenBelieved ?? null,
+        node.foundFalseAt ?? null,
+        node.truthNow ?? null,
+        node.appliesTo ?? null,
       ]
     );
   }
@@ -581,6 +585,11 @@ export class GraphStore {
   private rowToNode(row: Record<string, unknown>): GraphNode {
     const validUntilRaw = row.valid_until;
     const invalidatedByRaw = row.invalidated_by_commit;
+    const thenBelievedRaw = row.then_believed;
+    const foundFalseAtRaw = row.found_false_at;
+    const truthNowRaw = row.truth_now;
+    const appliesToRaw = row.applies_to;
+    const nullish = (v: unknown) => v === null || v === undefined;
     return {
       id: row.id as string,
       label: row.label as string,
@@ -592,14 +601,12 @@ export class GraphStore {
       lastVerified: (row.last_verified as number) ?? 0,
       queryCount: (row.query_count as number) ?? 0,
       metadata: JSON.parse((row.metadata as string) || "{}"),
-      validUntil:
-        validUntilRaw === null || validUntilRaw === undefined
-          ? undefined
-          : (validUntilRaw as number),
-      invalidatedByCommit:
-        invalidatedByRaw === null || invalidatedByRaw === undefined
-          ? undefined
-          : (invalidatedByRaw as string),
+      validUntil: nullish(validUntilRaw) ? undefined : (validUntilRaw as number),
+      invalidatedByCommit: nullish(invalidatedByRaw) ? undefined : (invalidatedByRaw as string),
+      thenBelieved: nullish(thenBelievedRaw) ? undefined : (thenBelievedRaw as string),
+      foundFalseAt: nullish(foundFalseAtRaw) ? undefined : (foundFalseAtRaw as number),
+      truthNow: nullish(truthNowRaw) ? undefined : (truthNowRaw as string),
+      appliesTo: nullish(appliesToRaw) ? undefined : (appliesToRaw as string),
     };
   }
 

@@ -15,7 +15,7 @@ export interface MigrationResult {
 }
 
 /** Current schema version — bump this when adding new migrations. */
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 export interface RollbackResult {
   readonly fromVersion: number;
@@ -34,6 +34,11 @@ export interface RollbackResult {
  * automatic. Forward migrations are append-only and idempotent.
  */
 const DOWN_MIGRATIONS: Record<number, string> = {
+  // v4.0: bi-temporal mistake fields (then_believed, found_false_at,
+  // truth_now, applies_to). SQLite pre-3.35 cannot DROP COLUMN cleanly;
+  // leaving the columns in place is safe and we don't depend on their
+  // absence. No index was created in v9, so no DDL needed for rollback.
+  9: `SELECT 1;`,
   // v3.0: bi-temporal mistake validity. SQLite only added DROP COLUMN in
   // 3.35 (2021); older sql.js builds may not support it. We don't depend
   // on the columns being absent — leaving them in place is safe. The index
@@ -183,6 +188,23 @@ CREATE INDEX IF NOT EXISTS idx_query_cache_file ON query_cache(file_path);`,
         ON nodes(kind, valid_until)
         WHERE kind = 'mistake' AND valid_until IS NOT NULL;
     `);
+  },
+
+  // v4.0.0: Bi-temporal mistake fields. Additive — existing v3.x mistakes
+  // get NULL for all four columns and continue to render via the legacy
+  // display path. No new index — these fields are typically read by id,
+  // not range-queried. Function-based to PRAGMA-check column existence
+  // (ALTER TABLE ADD COLUMN isn't idempotent in SQLite).
+  //
+  //   then_believed   TEXT     the original belief (e.g. commit message)
+  //   found_false_at  INTEGER  unix-ms when belief was found false
+  //   truth_now       TEXT     current truth / replacement / fix
+  //   applies_to      TEXT     pattern label this mistake applies to
+  9: (db: ExecDb) => {
+    addColumnIfMissing(db, "nodes", "then_believed", "then_believed TEXT");
+    addColumnIfMissing(db, "nodes", "found_false_at", "found_false_at INTEGER");
+    addColumnIfMissing(db, "nodes", "truth_now", "truth_now TEXT");
+    addColumnIfMissing(db, "nodes", "applies_to", "applies_to TEXT");
   },
 };
 
