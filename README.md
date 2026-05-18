@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v3.4 'Universal Spine')" width="100%">
+  <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v4.0 'Skill Pack')" width="100%">
 </p>
 
 <!-- ============================================================
@@ -49,7 +49,7 @@
   <a href="https://open-vsx.org/extension/nickcirv/engram-vscode"><img src="https://img.shields.io/open-vsx/v/nickcirv/engram-vscode?color=blue&label=OpenVSX" alt="OpenVSX engram-vscode"></a>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node">
-  <img src="https://img.shields.io/badge/tests-1007%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-1025%20passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/token%20savings-89.1%25%20measured-orange" alt="89.1% measured savings">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
   <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
@@ -67,9 +67,14 @@ On a real 87-file repo, the measured reduction is **89.1%**. That's not a market
 
 Works in 8 IDEs and counting — Claude Code, Cursor, Cline, Continue.dev, Aider, Windsurf, Zed, OpenAI Codex CLI. One install, one graph, every tool benefits. Apache 2.0. Local SQLite. Nothing leaves your machine.
 
-> **v4.0 "Mesh + Spine" in flight** (target ship 2026-05-25) — federation protocol that lets engram instances on different machines exchange mistakes and ADRs without sharing source code. ed25519 identity, JCS canonical signing, 14-category PII gate, mTLS cross-machine, behavioral trust scoring. Phase 1 foundation already merged (PR [#28](https://github.com/NickCirv/engram/pull/28)). Subscribe at [engram.substack.com](https://engram.substack.com) or watch [Discussions](https://github.com/NickCirv/engram/discussions) for the launch. Full spec: [`05-v4-mesh-spine-PRD.md`](https://github.com/NickCirv/engram).
+> **v4.0 "Skill Pack" shipped 2026-05-18** — engram's memory becomes **active**. v3.x captured mistakes when asked; v4.0 surfaces past corrections *before* the agent makes the edit. Schema v9 adds four bi-temporal fields per mistake (`then_believed`, `found_false_at`, `truth_now`, `applies_to`). A new **git-revert miner** auto-populates them from your repo's revert history — fresh `engram init` produces a non-empty mistakes table within seconds, no manual seeding needed. `engram init` now **auto-installs** the Sentinel hook by default (opt out with `--no-hook`) and the mistake-guard runs in `permissive` mode by default (opt out with `ENGRAM_MISTAKE_GUARD=0`). Sibling repo **[engram-skill-pack](https://github.com/NickCirv/engram-skill-pack)** ships engram as Claude Code Skills via the Anthropic Marketplace — three active skills (`engram-mistakes`, `engram-query`, `engram-gods`), full five-skill surface in v0.3.0. **Mesh moves to v4.5** behind `ENGRAM_MESH_EXPERIMENTAL=1`; the May 18 strategic re-cut prioritised distribution-via-skills over federation. 1025 tests passing. See [CHANGELOG.md](CHANGELOG.md) for the full v4.0 diff.
 
-> **v3.4 "Universal Spine" shipped 2026-05-02** — multi-IDE detector covers 8 tools, Anthropic Claude Code plugin submitted to the official directory ([in review](https://claude.ai/settings/plugins)), VS Code / Cursor extension live as [`nickcirv.engram-vscode`](https://open-vsx.org/extension/nickcirv/engram-vscode) on OpenVSX, [`engramx-continue`](https://www.npmjs.com/package/engramx-continue) on npm, Cline integration documented. Cost Lens telemetry from v3.3.0 feeds a weekly Markdown digest at `~/.engram/cost-report-YYYY-Www.md`. 1007 tests, CI green on Ubuntu + Windows × Node 20 + 22. See [CHANGELOG.md](CHANGELOG.md) for the v3.3 + v3.4 diff.
+<details>
+<summary><strong>Earlier release notes (v3.4 "Universal Spine", May 2)</strong></summary>
+
+**v3.4 "Universal Spine" shipped 2026-05-02** — multi-IDE detector covers 8 tools, Anthropic Claude Code plugin submitted to the official directory ([in review](https://claude.ai/settings/plugins)), VS Code / Cursor extension live as [`nickcirv.engram-vscode`](https://open-vsx.org/extension/nickcirv/engram-vscode) on OpenVSX, [`engramx-continue`](https://www.npmjs.com/package/engramx-continue) on npm, Cline integration documented. Cost Lens telemetry from v3.3.0 feeds a weekly Markdown digest at `~/.engram/cost-report-YYYY-Www.md`. 1007 tests, CI green on Ubuntu + Windows × Node 20 + 22.
+
+</details>
 
 <details>
 <summary><strong>Earlier release notes (v3.0 "Spine", April 24)</strong></summary>
