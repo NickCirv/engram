@@ -90,7 +90,7 @@ function collectSourceFiles(root: string, cap: number): string[] {
     if (out.length >= cap) return;
     let entries: ReturnType<typeof readdirSync>;
     try {
-      entries = readdirSync(dir, { withFileTypes: true });
+      entries = readdirSync(dir, { withFileTypes: true, encoding: "utf-8" });
     } catch {
       return;
     }

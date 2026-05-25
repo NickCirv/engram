@@ -612,7 +612,7 @@ export function extractDirectory(
 
     let entries: Dirent[];
     try {
-      entries = readdirSync(dir, { withFileTypes: true });
+      entries = readdirSync(dir, { withFileTypes: true, encoding: "utf-8" });
     } catch {
       return;
     }

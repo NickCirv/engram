@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { extractFile, extractDirectory, SUPPORTED_EXTENSIONS } from "../src/miners/ast-miner.js";
 import { join } from "node:path";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import * as os from "node:os";
 
 const FIXTURES = join(import.meta.dirname, "fixtures");
 
@@ -136,6 +138,83 @@ describe("AST Miner", () => {
       const { nodes, edges } = extractFile("/tmp/test.md", "/tmp");
       expect(nodes).toEqual([]);
       expect(edges).toEqual([]);
+    });
+  });
+
+describe("depth limits", () => {
+    function mkdtemp(prefix: string): string {
+      return mkdtempSync(join(os.tmpdir(), prefix));
+    }
+
+    function cleanup(dir: string): void {
+      rmSync(dir, { recursive: true, force: true });
+    }
+
+    it("does not throw on directory nested 101 levels deep", () => {
+      // Build a path 101 levels deep within a temp root
+      const root = mkdtemp("engram-deep-");
+      let current = root;
+
+      for (let i = 1; i <= 101; i++) {
+        current = join(current, `level${i}`);
+      }
+      mkdirSync(current, { recursive: true });
+      writeFileSync(join(current, "deep.ts"), "export function deep() {}\n");
+
+      // extractDirectory should not throw — MAX_DEPTH guard prevents stack overflow
+      expect(() => extractDirectory(root)).not.toThrow();
+
+      cleanup(root);
+    });
+
+    it("extracts files at exactly MAX_DEPTH (100)", () => {
+      const root = mkdtemp("engram-exact-");
+      let current = root;
+
+      for (let i = 1; i <= 100; i++) {
+        current = join(current, `d${i}`);
+      }
+      mkdirSync(current, { recursive: true });
+      writeFileSync(join(current, "exact.ts"), "export function exact() {}\n");
+
+      const result = extractDirectory(root);
+
+      // File at depth 100 IS reachable (depth 0..100 inclusive)
+      expect(result.fileCount).toBeGreaterThanOrEqual(1);
+      expect(result.nodes.some((n) => n.label === "exact()")).toBe(true);
+
+      cleanup(root);
+    });
+
+    it("stops extraction beyond MAX_DEPTH (100)", () => {
+      const root = mkdtemp("engram-beyond-");
+      let current = root;
+
+      for (let i = 1; i <= 101; i++) {
+        current = join(current, `d${i}`);
+      }
+      mkdirSync(current, { recursive: true });
+      writeFileSync(join(current, "beyond.ts"), "export function beyond() {}\n");
+
+      const result = extractDirectory(root);
+
+      // File at depth 101 should NOT be extracted
+      expect(result.fileCount).toBe(0);
+      expect(result.nodes.some((n) => n.label === "beyond()")).toBe(false);
+
+      cleanup(root);
+    });
+
+    it("returns mtimes map for incremental indexing", () => {
+      const root = mkdtemp("engram-mtime-");
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src", "app.ts"), "export function app() {}\n");
+
+      const result = extractDirectory(root);
+      expect(result.mtimes.size).toBeGreaterThan(0);
+      expect(result.skippedCount).toBe(0);
+
+      cleanup(root);
     });
   });
 });

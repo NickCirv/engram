@@ -223,10 +223,7 @@ function discoverSkillFiles(skillsDir: string): string[] {
   // `.localeCompare`, `.startsWith`, and path join calls.
   let entries;
   try {
-    entries = readdirSync(skillsDir, {
-      withFileTypes: true,
-      encoding: "utf-8",
-    });
+    const entries = readdirSync(dir, { withFileTypes: true, encoding: "utf-8" });
   } catch {
     return [];
   }
