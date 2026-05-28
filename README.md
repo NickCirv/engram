@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Engram makes your AI coding agent stop re-reading the same files — and stop repeating mistakes your repo already fixed.</strong><br>
-  <sub>One install. 8 IDEs. 89.1% measured token reduction. Bi-temporal mistakes auto-captured from git revert history. Local SQLite, zero cloud, Apache 2.0.</sub>
+  <sub>One install. 8 IDEs. <strong>53–89% per-file structural reduction</strong> (codebase-dependent). Bi-temporal mistakes auto-captured from git revert history. Cache-aware agent-loop savings landing in <strong>v4.1</strong>. Local SQLite, zero cloud, Apache 2.0.</sub>
 </p>
 
 <p align="center">
@@ -59,7 +59,7 @@
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node">
   <img src="https://img.shields.io/badge/tests-1025%20passing-brightgreen" alt="Tests">
-  <img src="https://img.shields.io/badge/token%20savings-89.1%25%20measured-orange" alt="89.1% measured savings">
+  <img src="https://img.shields.io/badge/per--file%20reduction-53--89%25-orange" alt="53-89% per-file structural reduction">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
   <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
 </p>
