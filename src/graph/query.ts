@@ -190,7 +190,12 @@ export function queryGraph(
   }
 
   // Render as text with token budget
-  const text = renderSubgraph(resultNodes, collectedEdges, tokenBudget);
+  const text = renderSubgraph(
+    resultNodes,
+    collectedEdges,
+    tokenBudget,
+    startNodes.map((n) => n.id)
+  );
   const estimatedTokens = Math.ceil(text.length / CHARS_PER_TOKEN);
 
   return { nodes: resultNodes, edges: collectedEdges, text, estimatedTokens };
@@ -272,7 +277,8 @@ export function shortestPath(
 function renderSubgraph(
   nodes: GraphNode[],
   edges: GraphEdge[],
-  tokenBudget: number
+  tokenBudget: number,
+  seedIds: readonly string[] = []
 ): string {
   const charBudget = tokenBudget * CHARS_PER_TOKEN;
   const lines: string[] = [];
@@ -312,9 +318,14 @@ function renderSubgraph(
   // importance flows from who-references-you, recursively — not a flat edge
   // count. Ties broken by degree for determinism. (Personalization seed is
   // wired in Fix #3.3; unbiased here.)
+  const personalization =
+    seedIds.length > 0
+      ? new Map(seedIds.map((id) => [id, 1] as const))
+      : undefined;
   const scores = pageRank(
     visible.map((n) => n.id),
-    edges
+    edges,
+    { personalization }
   );
   const degreeMap = new Map<string, number>();
   for (const e of edges) {
