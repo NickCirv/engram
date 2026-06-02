@@ -12,6 +12,7 @@ import { extractDirectory } from "./miners/ast-miner.js";
 import { mineGitHistory } from "./miners/git-miner.js";
 import { mineGitReverts } from "./miners/git-revert-miner.js";
 import { mineBugFixCommits } from "./miners/git-bugfix-miner.js";
+import { buildReferenceEdges } from "./miners/reference-miner.js";
 import { mineSessionHistory, learnFromSession } from "./miners/session-miner.js";
 import { mineSkills } from "./miners/skills-miner.js";
 import type { GraphStats } from "./graph/schema.js";
@@ -130,8 +131,21 @@ export async function init(
       ...sessionResult.nodes,
       ...skillNodes,
     ];
+    // Fix #3 Phase 3.1 — cross-file reference graph. Full init only (the scout
+    // gated it; incremental runs keep the prior edges). Failure is non-fatal:
+    // a missing reference graph just means PageRank falls back to degree.
+    let referenceEdges: typeof edges = [];
+    if (!options.incremental) {
+      try {
+        referenceEdges = await buildReferenceEdges(root, nodes);
+      } catch {
+        referenceEdges = [];
+      }
+    }
+
     const allEdges = [
       ...edges,
+      ...referenceEdges,
       ...gitResult.edges,
       ...gitRevertResult.edges,
       ...sessionResult.edges,
