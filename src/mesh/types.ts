@@ -9,7 +9,7 @@
  * Local-first stays the default. Federation is opt-in only — the wire types
  * here are inert until `engram mesh init` runs.
  *
- * RFC-0001: ~/Desktop/Projects/Engram/02-architecture/rfcs/RFC-0001-mesh-wire-format.md
+ * RFC-0001: mesh wire format (see the project's internal architecture docs).
  */
 
 /** Current protocol version on the wire. Bump only on breaking changes. */

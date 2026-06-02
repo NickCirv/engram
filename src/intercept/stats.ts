@@ -31,7 +31,7 @@ export interface HookStatsSummary {
   readonly byDecision: Readonly<Record<string, number>>;
   /** Number of PreToolUse:Read entries with decision=deny. */
   readonly readDenyCount: number;
-  /** Rough token savings estimate from Read denies. */
+  /** Rough context-token reduction estimate (tokens not sent) from Read denies. */
   readonly estimatedTokensSaved: number;
   /** Earliest entry timestamp, or null if log is empty. */
   readonly firstEntry: string | null;

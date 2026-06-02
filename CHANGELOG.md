@@ -82,7 +82,7 @@ The Phase 1 mesh code that did ship in this release (originally tagged for v4.0 
 
 ### Process
 
-This release walks the 8-phase release ritual at `~/.claude/skills/engram-release/SKILL.md`. Every phase backtested, triple-audited, stress-tested for edge cases (malformed JSON in settings, missing files, race conditions, symlinked tempdirs, idempotent re-runs). Execution plan: `~/Desktop/Projects/engram-docs/01-prds/06-v4-execution-plan-2026-05-18.md`. Phase 0 audit (which re-cut scope from "Mesh + Spine GA" to "Skill Pack"): `08-phase0-audit-2026-05-18.md`. Product spec: `07-v4-product-engineering-spec.md`.
+This release walks an 8-phase release ritual. Every phase backtested, triple-audited, stress-tested for edge cases (malformed JSON in settings, missing files, race conditions, symlinked tempdirs, idempotent re-runs). Execution plan, Phase 0 audit (which re-cut scope from "Mesh + Spine GA" to "Skill Pack"), and product spec are tracked in the project's internal planning docs.
 
 ### Why
 
@@ -90,7 +90,7 @@ claude-mem won the "Claude Code memory" category in the empire-engine intel pipe
 
 ## [3.4.0] — 2026-05-02 — "Universal Spine"
 
-The release that turns engram from a Claude Code tool into a universal context spine across every major AI coding tool. Same engram, same graph, same 89.1% reduction — now plugged into 8 IDEs out of the box.
+The release that turns engram from a Claude Code tool into a universal context spine across every major AI coding tool. Same engram, same graph, same 89.1% per-file structural reduction — now plugged into 8 IDEs out of the box.
 
 ### Added
 
@@ -116,7 +116,7 @@ This is the first release that walks the new 8-phase release ritual codified at 
 
 ### Why
 
-Three things broke at the same time in 2026. Cursor went usage-based and people started getting $1,400 surprise bills. Anthropic tightened Claude Code limits, then quietly tested removing the product from the $20 Pro plan. AI coding fragmented into 8 IDEs with no common context layer. v3.4 puts engram into all of them — one install, one graph, every tool benefits. Audit at `~/Desktop/Projects/Engram/00-strategy/2026-05-02-strategic-audit-v34-pivot.md`.
+Three things broke at the same time in 2026. Cursor went usage-based and people started getting $1,400 surprise bills. Anthropic tightened Claude Code limits, then quietly tested removing the product from the $20 Pro plan. AI coding fragmented into 8 IDEs with no common context layer. v3.4 puts engram into all of them — one install, one graph, every tool benefits. (Strategic-pivot audit tracked in internal strategy docs.)
 
 ## [3.3.0] — 2026-05-02 — "Cost Lens"
 
@@ -185,7 +185,7 @@ If you ran `npm uninstall -g engramx` before this patch shipped and Claude Code 
 ## [3.0.0] — 2026-04-24 — "Spine"
 
 The biggest engramx release since v1.0. One meticulous release, not a
-staircase — per the decision log at `~/Desktop/Projects/Engram/00-strategy/decisions/`
+staircase — per the project's internal decision log.
 (single-release-vs-staircase + engramx-canonical-brand).
 
 Headline: engramx becomes the **extensible context spine**. Any MCP
@@ -193,8 +193,8 @@ server plugs in via a 10-line plugin file; every provider's output is
 budget-weighted, mistake-boosted, and streamed progressively via SSE;
 the mistakes moat grows two new capabilities (bi-temporal validity +
 pre-mortem warnings); `engram gen` emits both `CLAUDE.md` AND `AGENTS.md`
-by default. **Real-world benchmark: 89.1% measured savings** on engramx's
-own 87-file sample (committed report in `bench/results/`).
+by default. **Real-world benchmark: 89.1% per-file structural reduction** on engramx's
+own 87-file sample (structural token reduction, not agent-loop cost; committed report in `bench/results/`).
 
 Contributor credit: [@mechtar-ru](https://github.com/mechtar-ru) for PR #6
 (OOM fixes on large codebases — cherry-picked with preserved authorship).
@@ -228,7 +228,7 @@ Contributor credit: [@mechtar-ru](https://github.com/mechtar-ru) for PR #6
 |---|---|
 | Baseline tokens (raw Read of every file) | 163,122 |
 | engramx tokens (rich packets) | 17,722 |
-| Aggregate savings | **89.1%** |
+| Aggregate per-file structural reduction | **89.1%** |
 | Median per-file savings | 84.2% |
 | Files where engramx saved tokens | 85 of 87 |
 | Best case (`src/cli.ts`) | 98.4% (18,820 → 306) |
@@ -240,7 +240,7 @@ Reproducible by anyone, on any project: `npx tsx bench/real-world.ts --project .
 - `autogen()` return type: `{ file: string }` → `{ files: string[] }` (single caller in `cli.ts` updated). Consumers of the programmatic API who called `result.file` must read `result.files[0]` instead (or use `--target` to keep single-file semantics).
 - `PROVIDER_PRIORITY` gains `anthropic:memory` at index 3 — downstream test that hard-coded the array order was updated.
 - `MIGRATIONS` (src/db/migrate.ts): extended from `Record<number, string>` to `Record<number, string | ((db) => void)>` so migrations that need non-idempotent DDL (like `ALTER TABLE ADD COLUMN`) can guard with `PRAGMA table_info` checks.
-- README badge updates: tests 640 → 876, providers 8 → 9, savings 88.1% → 90.8%.
+- README badge updates: tests 640 → 876, providers 8 → 9, per-file structural reduction 88.1% → 89% (reconciled; structural metric, not agent-loop cost).
 
 ### Migration
 

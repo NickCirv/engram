@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Engram makes your AI coding agent stop re-reading the same files — and stop repeating mistakes your repo already fixed.</strong><br>
-  <sub>One install. 8 IDEs. <strong>53–89% per-file structural reduction</strong> (codebase-dependent). Bi-temporal mistakes auto-captured from git revert history. Cache-aware agent-loop savings landing in <strong>v4.1</strong>. Local SQLite, zero cloud, Apache 2.0.</sub>
+  <sub>One install. 8 IDEs. <strong>53–89% per-file structural reduction</strong> (codebase-dependent — context-packet size vs reading whole files, not a bill-savings figure). Bi-temporal mistakes auto-captured from git revert history. Local SQLite, zero cloud, Apache 2.0.</sub>
 </p>
 
 <p align="center">
@@ -115,7 +115,7 @@ Three things broke at the same time. Cursor went usage-based and people started 
 
 Engramx is what makes the session last longer. It indexes your codebase into a local SQLite knowledge graph once. Then it intercepts file reads at the agent boundary and replaces them with a structural summary the agent already has the working memory for. Same edit, same diff, same code shipped — fewer tokens consumed in the round trip.
 
-On a real 87-file repo, the measured reduction is **89.1%**. That's not a marketing number. The benchmark is committed to this repo as `bench/real-world.ts` and runs against any project you point it at. Independent migration guides ([dev.to/56kode](https://dev.to/56_kode/why-were-moving-from-cursor-to-claude-code-and-why-you-should-too-9kh), [SpectrumAI Lab](https://spectrumailab.com/blog/claude-code-vs-cursor)) cite engram as the strongest measured number in the category.
+On engramx's own 87-file repo, the **per-file structural context reduction is 89.1%** (codebase-dependent — `bench/real-world.ts` reproduces it on any project you point it at). This is a *structural* token-reduction measured on this codebase, not an agent-loop cost-savings figure, and it varies by repo. Independent migration guides ([dev.to/56kode](https://dev.to/56_kode/why-were-moving-from-cursor-to-claude-code-and-why-you-should-too-9kh), [SpectrumAI Lab](https://spectrumailab.com/blog/claude-code-vs-cursor)) cite engram for the strongest measured structural reduction in the category.
 
 Works in 8 IDEs and counting — Claude Code, Cursor, Cline, Continue.dev, Aider, Windsurf, Zed, OpenAI Codex CLI. One install, one graph, every tool benefits. Apache 2.0. Local SQLite. Nothing leaves your machine.
 
@@ -179,9 +179,11 @@ Your AI coding agent keeps re-reading the same files. Every `Read`, every `Edit`
 
 **EngramX is the spine.** It intercepts every file read at the tool boundary, answers from a pre-assembled context packet held in **three layers of cache** — a knowledge graph the agent has already "paid" to build, a per-provider SQLite cache of external lookups, and an in-memory LRU of recent queries — and hands the agent a single ~500-token response instead of a raw file.
 
-The agent gets what it needs. You stop paying for context you've already paid for. And **every plugin you add elevates the savings further** — Serena for LSP symbols, GitHub MCP for issue context, Sentry MCP for production errors, Supabase / Neon for schema. Each one closes another context leak the agent would otherwise burn tokens researching.
+The agent gets what it needs, structured. And **every plugin you add extends what engram can surface** — Serena for LSP symbols, GitHub MCP for issue context, Sentry MCP for production errors, Supabase / Neon for schema. Each one closes a context gap the agent would otherwise spend turns researching. (More providers = more capability; whether they net fewer tokens on a given task depends on the task — measure it on yours.)
 
-**Measured savings on a reproducible benchmark: 89.1%.** Not estimated. 85 of 87 real source files saved tokens. Best case 98.4% (18,820 tokens → 306).
+**Per-file structural reduction on a reproducible benchmark: 89.1%** (engramx's own codebase; structural token reduction, not agent-loop cost). 85 of 87 real source files saw reduced per-file token cost. Best case 98.4% (18,820 tokens → 306). Your per-repo numbers vary.
+
+> **What this number is (and isn't):** 89.1% is a *per-file structural context reduction* measured on engramx's own repo with all 9 providers active — it measures how much smaller engram's context packet is than reading the full files raw. It is **not** an agent-loop cost-savings figure and will differ on your codebase. Your actual dollar saving depends on your prompt-caching setup and workload — run the benchmark on your own repo (see [Benchmark](#benchmark)) to get your structural number.
 
 ### One command to everything
 
@@ -206,11 +208,11 @@ Long answer:
 1. You ask your AI assistant (Claude Code, Cursor, Codex, whatever) to help with a file.
 2. The assistant tries to read that file. Normally it reads the whole thing, pays for every byte in tokens, and throws most of it away.
 3. EngramX catches the read, answers with a cached summary (the 50–200 lines the agent actually needs, plus context from your git history, past mistakes, library docs, and anything else useful), and lets the agent work from that.
-4. Your monthly AI bill drops. Multi-hour sessions stop hitting rate limits. The agent stops re-introducing bugs you already fixed — because EngramX remembers what broke.
+4. The agent works from a compact structural view instead of re-reading whole files. Multi-hour sessions stop hitting context limits, and the agent stops re-introducing bugs you already fixed — because EngramX remembers what broke. (Token-cost impact depends on your workload — engram-counter measures your real number.)
 
 It runs on your laptop. It doesn't send your code anywhere. It's Apache 2.0. There's no account, no login, no cloud. You install it once and forget it's there.
 
-**Want even bigger savings?** Install a plugin. Each one closes a different context leak — see [Plugins multiply the savings](#plugins-multiply-the-savings) below. Drop a 10-line `.mjs` file in `~/.engram/plugins/` and the next session uses it.
+**Want engram to understand more?** Install a plugin. Each one adds a context source — see [Plugins extend what engram understands](#plugins-extend-what-engram-understands) below. Drop a 10-line `.mjs` file in `~/.engram/plugins/` and the next session uses it.
 
 **Want out?** Clean uninstall is one command:
 
@@ -224,7 +226,7 @@ If you installed 3.0.0 and ran `npm uninstall` before the 3.0.1 patch shipped, y
 
 ## Proof, not promises
 
-Everything above is measured, not estimated. `bench/real-world.ts` runs the full resolver against real files in this repo and compares the rich-packet token cost to the raw-file-read cost. Reproducible in one command on any project.
+Everything above is a measured *per-file structural* reduction on engramx's own files — not estimated, but also not an agent-loop cost figure (your per-repo numbers vary). `bench/real-world.ts` runs the full resolver against real files in this repo and compares the rich-packet token cost to the raw-file-read cost. Reproducible in one command on any project.
 
 Latest run (2026-04-24, 87 source files — full report at [`bench/results/real-world-2026-04-24.md`](bench/results/real-world-2026-04-24.md)):
 
@@ -232,8 +234,8 @@ Latest run (2026-04-24, 87 source files — full report at [`bench/results/real-
 |---|---|
 | Baseline tokens (87 files read raw) | **163,122** |
 | engramx tokens (rich packets) | **17,722** |
-| Aggregate savings | **89.1%** |
-| Median per-file savings | 84.2% |
+| Aggregate per-file structural reduction | **89.1%** |
+| Median per-file structural reduction | 84.2% |
 | Files where engramx saved tokens | 85 of 87 |
 | Best case (`src/cli.ts`) | 98.4% (18,820 → 306) |
 
@@ -316,13 +318,15 @@ engramx ships with two benchmarks — use whichever fits your workflow.
 
 ### Real-world bench (new in v3.0, preferred)
 
-`npx tsx bench/real-world.ts --project . --files 50` runs the full resolver against real files in any project and outputs exact token numbers. See the [Proof](#proof-not-promises) section above for the reproducible 89.1% result on engramx itself.
+`npx tsx bench/real-world.ts --project . --files 50` runs the full resolver against real files in any project and outputs exact token numbers. **Don't trust our number — run it on _your_ code and get _your_ structural reduction.** The output states its own baseline (full files, read raw and uncached) so the number can't be quoted misleadingly: it's a structural context-packet reduction, not a bill saving — your real cost depends on your prompt-caching setup. See the [Proof](#proof-not-promises) section above for the reproducible 89.1% per-file structural result on engramx's own repo.
 
 ### Structured task bench (CI regression)
 
 Measured across 10 structured coding tasks against a baseline of reading the relevant files directly. No synthetic data. No cherry-picked queries.
 
-| Task | Baseline (tokens) | engram (tokens) | Savings |
+_Per-task **structural** token reduction (engramx's own repo; not agent-loop cost):_
+
+| Task | Baseline (tokens) | engram (tokens) | Structural reduction |
 |------|:-----------------:|:---------------:|:-------:|
 | task-01-find-caller | 4,500 | 650 | 85.6% |
 | task-02-parent-class | 2,800 | 400 | 85.7% |
@@ -340,9 +344,9 @@ Run it yourself: `npx tsx bench/runner.ts` (structured fixtures) or `npx tsx ben
 
 ---
 
-## Plugins multiply the savings
+## Plugins extend what engram understands
 
-The 89.1% number is engramx with its 9 built-in providers. Every MCP server you plug in closes another context gap the agent would otherwise burn tokens researching. And because every provider is budget-capped and the resolver is budget-weighted + mistakes-boost reranked, more plugins = more *relevant* context without packet bloat.
+The 89.1% per-file structural number is engramx with all 9 built-in providers on its own codebase. Every MCP server you plug in closes another context gap the agent would otherwise burn tokens researching. And because every provider is budget-capped and the resolver is budget-weighted + mistakes-boost reranked, more plugins = more *relevant* context without packet bloat.
 
 | Plugin | Closes this gap | Install |
 |---|---|---|
@@ -375,7 +379,7 @@ engram sits between your AI agent and the filesystem. When the agent reads a fil
 | `obsidian` | Project notes, architecture docs | — | <5ms cached |
 | `engram:lsp` | Live diagnostics captured as mistake nodes | — | on-event |
 
-External providers cache into SQLite at SessionStart. Per-read resolution is a cache lookup, not a live call. If a provider is unavailable it is skipped silently — you always get at least the structural summary. **Plus: any MCP server becomes a provider via a 10-line plugin file** — see [Plugins multiply the savings](#plugins-multiply-the-savings) above.
+External providers cache into SQLite at SessionStart. Per-read resolution is a cache lookup, not a live call. If a provider is unavailable it is skipped silently — you always get at least the structural summary. **Plus: any MCP server becomes a provider via a 10-line plugin file** — see [Plugins extend what engram understands](#plugins-extend-what-engram-understands) above.
 
 **The 9 hook handlers:**
 
@@ -510,7 +514,7 @@ The "context spine" slot — local-first, code-aware, works in any MCP runtime, 
 | Works in any MCP runtime | ✅ | IDE-locked | Aider only | VS Code only | VS Code only | ✅ | Claude Code only | ✅ |
 | Local-first (nothing leaves machine) | ✅ | cloud-synced | ✅ | ✅ | ✅ | optional | ✅ | ✅ |
 | Code-aware AST graph | ✅ | proprietary | ✅ | — | — | — | — | ✅ |
-| Reproducible benchmark | ✅ **89.1%** | — | — | — | — | — | — | claims 88% |
+| Reproducible structural benchmark | ✅ **89.1% (per-file, own repo)** | — | — | — | — | — | — | claims 88% |
 | Bi-temporal mistake memory | ✅ | — | — | — | — | — | partial | — |
 | `AGENTS.md` + `CLAUDE.md` dual-emit | ✅ | — | — | — | — | — | — | — |
 | Single npm install | ✅ | full IDE | pip | VS Code ext | VS Code ext | pip / npm | claude plugin | Go binary |
@@ -758,7 +762,7 @@ src/
 │   ├── obsidian.ts        Obsidian vault
 │   └── lsp.ts             LSP diagnostic capture
 └── intelligence/
-    └── token-tracker.ts   Cumulative token savings measurement
+    └── token-tracker.ts   Cumulative context-token reduction measurement
 ```
 
 **Supported languages (AST):** TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, Ruby, PHP.

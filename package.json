@@ -2,7 +2,7 @@
   "name": "engramx",
   "version": "4.0.0",
   "mcpName": "io.github.NickCirv/engram",
-  "description": "The context spine for AI coding agents. 9 built-in providers + mcpConfig plugin contract (wrap any MCP server in 10 lines), generic MCP-client aggregator (stdio), pre-mortem mistake-guard, bi-temporal mistake memory, Anthropic Auto-Memory bridge, SSE streaming context packets, dual-emit AGENTS.md+CLAUDE.md. 90.8% measured real-world token savings (reproducible bench included). Local SQLite, zero cloud.",
+  "description": "The context spine for AI coding agents. 9 built-in providers + mcpConfig plugin contract (wrap any MCP server in 10 lines), generic MCP-client aggregator (stdio), pre-mortem mistake-guard, bi-temporal mistake memory, Anthropic Auto-Memory bridge, SSE streaming context packets, dual-emit AGENTS.md+CLAUDE.md. Up to ~89% per-file structural context reduction (codebase-dependent; reproducible bench included). Local SQLite, zero cloud.",
   "repository": {
     "type": "git",
     "url": "https://github.com/NickCirv/engram.git"

@@ -1,6 +1,7 @@
 /**
- * Token Tracker — measures and persists token savings across sessions.
- * The viral screenshot generator. Hard numbers, not marketing claims.
+ * Token Tracker — measures and persists context-token reduction (tokens not
+ * sent to the model, via Read denies) across sessions. Structural reduction,
+ * not a bill saving. Hard numbers, not marketing claims.
  */
 import type { GraphStore } from "../graph/store.js";
 

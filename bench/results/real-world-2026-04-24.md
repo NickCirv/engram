@@ -1,6 +1,6 @@
 # EngramBench Real-World — 2026-04-24
 
-**Project:** `/Users/nicholas/engram`
+**Project:** `engramx` (own repo)
 **Files sampled:** 87
 
 ## Aggregate

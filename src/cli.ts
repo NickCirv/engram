@@ -108,10 +108,13 @@ program
     const bench = await benchmark(projectPath);
     if (bench.naiveFullCorpus > 0 && bench.reductionVsRelevant > 1) {
       console.log(
-        chalk.cyan(`\n📊 Token savings: ${chalk.bold(bench.reductionVsRelevant + "x")} fewer tokens vs relevant files (${bench.reductionVsFull}x vs full corpus)`)
+        chalk.cyan(`\n📊 Context reduction: ${chalk.bold(bench.reductionVsRelevant + "x")} smaller packet vs relevant files (${bench.reductionVsFull}x vs full corpus)`)
       );
       console.log(
         chalk.dim(`   Full corpus: ~${formatThousands(bench.naiveFullCorpus)} tokens | Graph query: ~${formatThousands(bench.avgQueryTokens)} tokens`)
+      );
+      console.log(
+        chalk.dim(`   Structural context-packet reduction (vs reading files raw, uncached) — not a bill saving; your cost depends on prompt caching + workload.`)
       );
     }
 
@@ -126,7 +129,7 @@ program
     // The hook entries this installs power both:
     //   - PreToolUse mistake-guard (surfaces bi-temporal mistakes before
     //     Claude edits files — the v4.0 rave moment)
-    //   - Read/Edit interception (82% token savings via context provider)
+    //   - Read/Edit interception (smaller context packet via context provider)
     if (opts.hook !== false) {
       const localSettingsPath = join(
         pathResolve(projectPath),
@@ -354,7 +357,7 @@ program
 program
   .command("dashboard")
   .alias("hud")
-  .description("Live terminal dashboard showing hook activity and token savings")
+  .description("Live terminal dashboard showing hook activity and context reduction")
   .argument("[path]", "Project directory", ".")
   .action(async (projectPath: string) => {
     const resolvedPath = pathResolve(projectPath);
@@ -509,7 +512,7 @@ program
 
 program
   .command("stats")
-  .description("Show knowledge graph statistics and token savings")
+  .description("Show knowledge graph statistics and context reduction")
   .option("-p, --project <path>", "Project directory", ".")
   .action(async (opts: { project: string }) => {
     const s = await stats(opts.project);
@@ -528,11 +531,12 @@ program
     }
 
     if (bench.naiveFullCorpus > 0) {
-      console.log(`\n  ${chalk.cyan("Token savings:")}`);
+      console.log(`\n  ${chalk.cyan("Context reduction:")} ${chalk.dim("(structural packet size, not a bill saving)")}`);
       console.log(`    Full corpus:   ~${formatThousands(bench.naiveFullCorpus)} tokens`);
       console.log(`    Avg query:     ~${formatThousands(bench.avgQueryTokens)} tokens`);
-      console.log(`    vs relevant:   ${chalk.bold.cyan(bench.reductionVsRelevant + "x")} fewer tokens`);
-      console.log(`    vs full:       ${chalk.bold.cyan(bench.reductionVsFull + "x")} fewer tokens`);
+      console.log(`    vs relevant:   ${chalk.bold.cyan(bench.reductionVsRelevant + "x")} smaller packet`);
+      console.log(`    vs full:       ${chalk.bold.cyan(bench.reductionVsFull + "x")} smaller packet`);
+      console.log(chalk.dim(`    Baseline = reading files raw, uncached; cost saving depends on your caching + workload.`));
     }
     console.log();
   });

@@ -1,5 +1,5 @@
 /**
- * EngramBench Real-World — measured token savings on engramx's own codebase.
+ * EngramBench Real-World — structural context-token reduction on a real codebase.
  *
  * Where `runner.ts` uses YAML-estimated costs (useful for CI regression
  * tracking), this runner PRODUCES ACTUAL NUMBERS by running the full
@@ -241,14 +241,24 @@ async function main(): Promise<void> {
   })();
 
   console.log(
-    `Files where engramx saved tokens:    ${wins} of ${perFile.length}`
+    `Files with a smaller packet:         ${wins} of ${perFile.length}`
   );
-  console.log(`Median per-file savings:             ${median.toFixed(1)}%`);
+  console.log(`Median per-file reduction:           ${median.toFixed(1)}%`);
   console.log(
     `Best:                                ${best?.savingsPct.toFixed(1)}% (${best?.path})`
   );
   console.log(
     `Worst:                               ${worst?.savingsPct.toFixed(1)}% (${worst?.path})`
+  );
+  console.log();
+  console.log(
+    "Note: baseline = reading each file raw and uncached. This is a STRUCTURAL"
+  );
+  console.log(
+    "context-packet reduction, NOT a bill saving — your real cost depends on"
+  );
+  console.log(
+    "prompt caching + workload. The number above is computed on YOUR files."
   );
   console.log();
 
@@ -283,16 +293,18 @@ async function main(): Promise<void> {
     "",
     `| Metric | Value |`,
     `|---|---|`,
-    `| Baseline tokens (all files, raw Read) | **${totalBaseline.toLocaleString()}** |`,
+    `| Baseline tokens (all files, raw Read, uncached) | **${totalBaseline.toLocaleString()}** |`,
     `| engramx tokens (rich packets) | **${totalEngram.toLocaleString()}** |`,
-    `| Aggregate savings | **${aggregateSavings.toFixed(1)}%** |`,
-    `| Median per-file savings | ${median.toFixed(1)}% |`,
-    `| Files where engramx saved tokens | ${wins} of ${perFile.length} |`,
+    `| Aggregate per-file structural reduction | **${aggregateSavings.toFixed(1)}%** |`,
+    `| Median per-file reduction | ${median.toFixed(1)}% |`,
+    `| Files where the packet was smaller | ${wins} of ${perFile.length} |`,
     "",
-    `## Top 10 savings`,
+    `> **Baseline = reading each file raw and uncached.** This is a structural context-packet reduction, **not** a bill saving — your real cost depends on prompt caching + workload. Numbers above are computed on \`${PROJECT}\`.`,
     "",
-    `| File | Baseline | Engram | Savings | Providers |`,
-    `|------|---------:|-------:|--------:|----------:|`,
+    `## Top 10 structural reductions`,
+    "",
+    `| File | Baseline | Engram | Reduction | Providers |`,
+    `|------|---------:|-------:|----------:|----------:|`,
     ...perFile
       .slice(0, 10)
       .map(
@@ -317,7 +329,7 @@ async function main(): Promise<void> {
   const verdict = aggregateSavings >= 80 ? "PASS" : "FAIL";
   const target = 80;
   console.log(
-    `Target (>= ${target}% aggregate savings): ${verdict === "PASS" ? "✅" : "❌"} ${verdict}`
+    `Target (>= ${target}% aggregate structural reduction): ${verdict === "PASS" ? "✅" : "❌"} ${verdict}`
   );
 
   process.exit(verdict === "PASS" ? 0 : 1);

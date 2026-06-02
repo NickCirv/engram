@@ -68,7 +68,7 @@ const TOOLS: McpTool[] = [
   },
   {
     name: "graph_stats",
-    description: "Return summary: node/edge counts, confidence breakdown, token savings.",
+    description: "Return summary: node/edge counts, confidence breakdown, context reduction.",
     inputSchema: { type: "object", properties: {} },
   },
   {
