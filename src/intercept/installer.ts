@@ -26,6 +26,7 @@ export const ENGRAM_HOOK_EVENTS = [
   "UserPromptSubmit",
   "PreCompact",
   "CwdChanged",
+  "Stop",
 ] as const;
 
 export type EngramHookEvent = (typeof ENGRAM_HOOK_EVENTS)[number];
@@ -137,6 +138,11 @@ export function buildEngramHookEntries(
     },
     CwdChanged: {
       // No matcher — CwdChanged has no tool name.
+      hooks: [baseCmd],
+    },
+    Stop: {
+      // No matcher — Stop has no tool name. Fires every turn; the handler
+      // debounces to one user-visible summary per session.
       hooks: [baseCmd],
     },
   };

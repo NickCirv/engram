@@ -52,6 +52,7 @@ import {
   handleCwdChanged,
   type CwdChangedHookPayload,
 } from "./handlers/cwd-changed.js";
+import { handleStop, type StopHookPayload } from "./handlers/stop.js";
 import { findProjectRoot, isValidCwd } from "./context.js";
 import { logHookEvent } from "../intelligence/hook-log.js";
 import { composeCostFields } from "../cost/instrument.js";
@@ -145,6 +146,11 @@ export async function dispatchHook(
     case "CwdChanged":
       return runHandler(() =>
         handleCwdChanged(payload as unknown as CwdChangedHookPayload)
+      );
+
+    case "Stop":
+      return runHandler(() =>
+        handleStop(payload as unknown as StopHookPayload)
       );
 
     default:
