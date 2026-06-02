@@ -13,6 +13,7 @@ import { mineGitHistory } from "./miners/git-miner.js";
 import { mineGitReverts } from "./miners/git-revert-miner.js";
 import { mineBugFixCommits } from "./miners/git-bugfix-miner.js";
 import { buildReferenceEdges } from "./miners/reference-miner.js";
+import { findCallers, findCallees, findImpact } from "./graph/traversal.js";
 import { mineSessionHistory, learnFromSession } from "./miners/session-miner.js";
 import { mineSkills } from "./miners/skills-miner.js";
 import type { GraphStats } from "./graph/schema.js";
@@ -243,6 +244,37 @@ export async function stats(projectRoot: string): Promise<GraphStats> {
   const store = await getStore(projectRoot);
   try {
     return store.getStats();
+  } finally {
+    store.close();
+  }
+}
+
+/** Fix #3.5 — traversal over the `calls` reference graph. */
+export async function callers(projectRoot: string, name: string): Promise<string[]> {
+  const store = await getStore(projectRoot);
+  try {
+    return findCallers(store.getAllNodes(), store.getAllEdges(), name);
+  } finally {
+    store.close();
+  }
+}
+
+export async function callees(
+  projectRoot: string,
+  name: string
+): Promise<Array<{ name: string; file: string }>> {
+  const store = await getStore(projectRoot);
+  try {
+    return findCallees(store.getAllNodes(), store.getAllEdges(), name);
+  } finally {
+    store.close();
+  }
+}
+
+export async function impact(projectRoot: string, name: string): Promise<string[]> {
+  const store = await getStore(projectRoot);
+  try {
+    return findImpact(store.getAllNodes(), store.getAllEdges(), name);
   } finally {
     store.close();
   }

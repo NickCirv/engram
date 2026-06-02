@@ -18,6 +18,9 @@ import {
   query,
   path,
   godNodes,
+  callers,
+  callees,
+  impact,
   stats,
   benchmark,
   learn,
@@ -515,6 +518,48 @@ program
         `  ${chalk.dim(String(i + 1) + ".")} ${chalk.bold(g.label)} ${chalk.dim(`[${g.kind}]`)} — ${g.degree} edges ${chalk.dim(g.sourceFile)}`
       );
     }
+  });
+
+program
+  .command("callers <symbol>")
+  .description("List files that call a symbol (over the reference graph)")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (symbol: string, opts: { project: string }) => {
+    const files = await callers(opts.project, symbol);
+    if (files.length === 0) {
+      console.log(chalk.yellow(`No callers found for "${symbol}". (Run \`engram init\` to build the reference graph.)`));
+      return;
+    }
+    console.log(chalk.bold(`Callers of ${chalk.cyan(symbol)} (${files.length}):\n`));
+    for (const f of files) console.log(`  ${f}`);
+  });
+
+program
+  .command("callees <symbol>")
+  .description("List definitions that a symbol's file calls")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (symbol: string, opts: { project: string }) => {
+    const out = await callees(opts.project, symbol);
+    if (out.length === 0) {
+      console.log(chalk.yellow(`No callees found for "${symbol}".`));
+      return;
+    }
+    console.log(chalk.bold(`Callees of ${chalk.cyan(symbol)} (${out.length}):\n`));
+    for (const c of out) console.log(`  ${c.name} ${chalk.dim(c.file)}`);
+  });
+
+program
+  .command("impact <symbol>")
+  .description("Show files transitively affected if you change a symbol")
+  .option("-p, --project <path>", "Project directory", ".")
+  .action(async (symbol: string, opts: { project: string }) => {
+    const files = await impact(opts.project, symbol);
+    if (files.length === 0) {
+      console.log(chalk.yellow(`No downstream impact found for "${symbol}".`));
+      return;
+    }
+    console.log(chalk.bold(`Changing ${chalk.cyan(symbol)} may affect ${files.length} file(s):\n`));
+    for (const f of files) console.log(`  ${f}`);
   });
 
 program
