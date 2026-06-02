@@ -28,7 +28,12 @@ import {
   isContentUnsafeForIntercept,
   resolveInterceptContext,
 } from "../context.js";
-import { isHookDisabled, PASSTHROUGH, type HandlerResult } from "../safety.js";
+import {
+  isHookDisabled,
+  PASSTHROUGH,
+  MISTAKE_GUARD_MIN_CONFIDENCE,
+  type HandlerResult,
+} from "../safety.js";
 import { buildAllowWithContextResponse } from "../formatter.js";
 
 /**
@@ -168,6 +173,9 @@ export async function handleEditOrWrite(
     found = await mistakes(ctx.projectRoot, {
       sourceFile: relPath,
       limit: MAX_LANDMINES_IN_WARNING,
+      // Proactive warning: only high-confidence mistakes (reverts) nag.
+      // Inferred bug-fix/session mistakes stay browsable via `engram mistakes`.
+      minConfidence: MISTAKE_GUARD_MIN_CONFIDENCE,
     });
   } catch {
     // getStore or store.getAllNodes could throw on a corrupt DB. Fail

@@ -29,7 +29,7 @@ import { relative } from "node:path";
 import { getStore } from "../../core.js";
 import { findProjectRoot } from "../context.js";
 import { buildDenyResponse } from "../formatter.js";
-import type { HandlerResult } from "../safety.js";
+import { MISTAKE_GUARD_MIN_CONFIDENCE, type HandlerResult } from "../safety.js";
 
 /**
  * Guard modes. Read from the environment at call time (not module load)
@@ -135,6 +135,7 @@ export async function findMatchingMistakesAsync(
           seenIds.add(m.id);
           if (m.kind !== "mistake") continue;
           if (m.validUntil !== undefined && m.validUntil <= now) continue;
+          if (m.confidenceScore < MISTAKE_GUARD_MIN_CONFIDENCE) continue;
           matches.push({
             label: m.label,
             sourceFile: m.sourceFile,
@@ -152,7 +153,8 @@ export async function findMatchingMistakesAsync(
         const allMistakes = store
           .getAllNodes()
           .filter((n) => n.kind === "mistake")
-          .filter((n) => n.validUntil === undefined || n.validUntil > now);
+          .filter((n) => n.validUntil === undefined || n.validUntil > now)
+          .filter((n) => n.confidenceScore >= MISTAKE_GUARD_MIN_CONFIDENCE);
 
         if (allMistakes.length === 0) return [];
 

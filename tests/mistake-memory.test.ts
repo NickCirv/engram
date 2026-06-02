@@ -173,7 +173,9 @@ describe("mistake memory — mistakes() public API", () => {
     const result = await mistakes(tmpDir);
     expect(result.length).toBeGreaterThanOrEqual(3);
     expect(result.every((m) => m.label.length > 0)).toBe(true);
-    expect(result.every((m) => m.confidence === "INFERRED")).toBe(true);
+    // Explicit `learn()` is high-intent teaching → promoted to EXTRACTED
+    // (nag-worthy), unlike auto-inferred miners which stay INFERRED/0.6.
+    expect(result.every((m) => m.confidence === "EXTRACTED")).toBe(true);
   });
 
   it("respects the limit option", async () => {

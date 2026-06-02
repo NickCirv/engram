@@ -11,6 +11,7 @@ import { toPosixPath } from "./graph/path-utils.js";
 import { extractDirectory } from "./miners/ast-miner.js";
 import { mineGitHistory } from "./miners/git-miner.js";
 import { mineGitReverts } from "./miners/git-revert-miner.js";
+import { mineBugFixCommits } from "./miners/git-bugfix-miner.js";
 import { mineSessionHistory, learnFromSession } from "./miners/session-miner.js";
 import { mineSkills } from "./miners/skills-miner.js";
 import type { GraphStats } from "./graph/schema.js";
@@ -37,6 +38,8 @@ export interface InitResult {
   skillCount?: number;
   skippedFiles?: number;
   incremental?: boolean;
+  /** Count of mistake-kind nodes mined (reverts + bug-fixes + sessions). */
+  mistakeCount?: number;
 }
 
 export interface InitOptions {
@@ -102,6 +105,7 @@ export async function init(
       });
     const gitResult = mineGitHistory(root);
     const gitRevertResult = mineGitReverts(root);
+    const bugFixResult = mineBugFixCommits(root);
     const sessionResult = mineSessionHistory(root);
 
     let skillCount = 0;
@@ -122,6 +126,7 @@ export async function init(
       ...nodes,
       ...gitResult.nodes,
       ...gitRevertResult.nodes,
+      ...bugFixResult.nodes,
       ...sessionResult.nodes,
       ...skillNodes,
     ];
@@ -167,6 +172,7 @@ export async function init(
       skillCount,
       skippedFiles: skippedCount,
       incremental: options.incremental ?? false,
+      mistakeCount: allNodes.filter((n) => n.kind === "mistake").length,
     };
   } finally {
     try {
@@ -478,13 +484,21 @@ export async function learn(
 ): Promise<{ nodesAdded: number }> {
   const { nodes, edges } = learnFromSession(text, sourceLabel);
   if (nodes.length === 0 && edges.length === 0) return { nodesAdded: 0 };
+  // Explicit `engram learn` is high-intent teaching, so its mistakes are
+  // nag-worthy (>= the proactive-guard floor). Auto-inferred miners
+  // (session-scan, bug-fix commits) stay at 0.6 and only browse, never nag.
+  const promoted = nodes.map((n) =>
+    n.kind === "mistake"
+      ? { ...n, confidenceScore: Math.max(n.confidenceScore, 0.85), confidence: "EXTRACTED" as const }
+      : n
+  );
   const store = await getStore(projectRoot);
   try {
-    store.bulkUpsert(nodes, edges);
+    store.bulkUpsert(promoted, edges);
   } finally {
     store.close();
   }
-  return { nodesAdded: nodes.length };
+  return { nodesAdded: promoted.length };
 }
 
 export interface MistakeEntry {
@@ -520,6 +534,13 @@ export async function mistakes(
     limit?: number;
     sinceDays?: number;
     sourceFile?: string;
+    /**
+     * Minimum confidenceScore to include. Proactive nag-paths (the
+     * Edit/Write landmine, the explicit guard) pass a floor so only
+     * high-confidence mistakes (reverts) warn; `engram mistakes` and the
+     * init count omit it to show the full history.
+     */
+    minConfidence?: number;
   } = {}
 ): Promise<MistakeEntry[]> {
   const store = await getStore(projectRoot);
@@ -529,6 +550,11 @@ export async function mistakes(
     if (options.sourceFile !== undefined) {
       const target = options.sourceFile;
       items = items.filter((m) => m.sourceFile === target);
+    }
+
+    if (options.minConfidence !== undefined) {
+      const floor = options.minConfidence;
+      items = items.filter((m) => m.confidenceScore >= floor);
     }
 
     if (options.sinceDays !== undefined) {

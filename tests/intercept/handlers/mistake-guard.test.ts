@@ -25,15 +25,19 @@ function makeMistake(opts: {
   label: string;
   validUntil?: number;
   commandPattern?: string;
+  confidenceScore?: number;
 }): GraphNode {
+  // Default to a nag-worthy (revert-grade) confidence so the guard surfaces
+  // it. Pass a low confidenceScore to exercise the proactive-warning floor.
+  const score = opts.confidenceScore ?? 0.9;
   return {
     id: opts.id,
     label: opts.label,
     kind: "mistake",
     sourceFile: opts.sourceFile,
     sourceLocation: null,
-    confidence: "INFERRED",
-    confidenceScore: 0.6,
+    confidence: score >= 0.8 ? "EXTRACTED" : "INFERRED",
+    confidenceScore: score,
     lastVerified: Date.now() - 1000 * 60 * 60 * 24, // 1 day ago
     queryCount: 0,
     metadata: opts.commandPattern
@@ -176,6 +180,38 @@ describe("findMatchingMistakesAsync — Edit/Write (file target)", () => {
     );
     expect(matches).toHaveLength(1);
     expect(matches[0].label).toBe("Race condition in auth");
+  });
+
+  it("does NOT surface a low-confidence mistake (proactive-guard floor — Fix #2)", async () => {
+    await seed([
+      makeMistake({
+        id: "lowconf",
+        sourceFile: "src/auth.ts",
+        label: "inferred bug-fix landmine",
+        confidenceScore: 0.6, // below MISTAKE_GUARD_MIN_CONFIDENCE
+      }),
+    ]);
+    const matches = await findMatchingMistakesAsync(
+      { kind: "file", filePath: "src/auth.ts" },
+      tmpDir
+    );
+    expect(matches).toHaveLength(0); // browsable via `engram mistakes`, but never nags
+  });
+
+  it("DOES surface a high-confidence mistake (revert-grade)", async () => {
+    await seed([
+      makeMistake({
+        id: "hiconf",
+        sourceFile: "src/auth.ts",
+        label: "reverted change",
+        confidenceScore: 0.9,
+      }),
+    ]);
+    const matches = await findMatchingMistakesAsync(
+      { kind: "file", filePath: "src/auth.ts" },
+      tmpDir
+    );
+    expect(matches).toHaveLength(1);
   });
 
   it("returns empty for a file with no matching mistakes", async () => {

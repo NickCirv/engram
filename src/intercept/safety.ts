@@ -39,6 +39,15 @@ export type HandlerResult = Record<string, unknown> | Passthrough;
 export const DEFAULT_HANDLER_TIMEOUT_MS = 2000;
 
 /**
+ * Minimum confidenceScore for a mistake to PROACTIVELY warn (Edit/Write
+ * landmine + the explicit guard). High-confidence mistakes (e.g. git reverts
+ * at 0.9) warn; INFERRED mistakes (bug-fix-commit + session mined at ~0.6)
+ * stay browsable via `engram mistakes` and the init count but never nag —
+ * keeps the proactive surface high-precision so users don't disable it.
+ */
+export const MISTAKE_GUARD_MIN_CONFIDENCE = 0.8;
+
+/**
  * Wrap a handler promise in a timeout. If the promise does not resolve
  * within `ms` milliseconds, resolves to PASSTHROUGH instead. The underlying
  * promise is NOT cancelled (Node has no native cancellation), but its

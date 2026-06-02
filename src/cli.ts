@@ -96,6 +96,13 @@ program
     console.log(
       `   ${chalk.bold(String(result.nodes))} nodes, ${chalk.bold(String(result.edges))} edges from ${chalk.bold(String(result.fileCount))} files (${formatThousands(result.totalLines)} lines)`
     );
+    if (result.mistakeCount && result.mistakeCount > 0) {
+      console.log(
+        chalk.yellow(
+          `   ⚠ ${chalk.bold(String(result.mistakeCount))} past mistake${result.mistakeCount === 1 ? "" : "s"} recovered from git history`
+        ) + chalk.dim(" — see `engram mistakes`")
+      );
+    }
     if (result.incremental && result.skippedFiles && result.skippedFiles > 0) {
       console.log(chalk.dim(`   ${result.skippedFiles} unchanged files skipped (incremental mode)`));
     }
