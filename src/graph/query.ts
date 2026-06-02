@@ -5,6 +5,7 @@
 import type { GraphStore } from "./store.js";
 import type { GraphEdge, GraphNode } from "./schema.js";
 import { sliceGraphemeSafe, truncateGraphemeSafe } from "./render-utils.js";
+import { pageRank } from "./pagerank.js";
 
 // v0.2: mistake priority boost. When a query matches a mistake node, it
 // gets a higher score so the landmines surface before normal results.
@@ -307,15 +308,24 @@ function renderSubgraph(
     lines.push("");
   }
 
-  // Sort visible nodes by degree (most connected first)
+  // Sort visible nodes by personalized PageRank over the subgraph (Fix #3.2):
+  // importance flows from who-references-you, recursively — not a flat edge
+  // count. Ties broken by degree for determinism. (Personalization seed is
+  // wired in Fix #3.3; unbiased here.)
+  const scores = pageRank(
+    visible.map((n) => n.id),
+    edges
+  );
   const degreeMap = new Map<string, number>();
   for (const e of edges) {
     degreeMap.set(e.source, (degreeMap.get(e.source) ?? 0) + 1);
     degreeMap.set(e.target, (degreeMap.get(e.target) ?? 0) + 1);
   }
-  const sorted = [...visible].sort(
-    (a, b) => (degreeMap.get(b.id) ?? 0) - (degreeMap.get(a.id) ?? 0)
-  );
+  const sorted = [...visible].sort((a, b) => {
+    const d = (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0);
+    if (d !== 0) return d;
+    return (degreeMap.get(b.id) ?? 0) - (degreeMap.get(a.id) ?? 0);
+  });
 
   for (const n of sorted) {
     lines.push(
