@@ -165,7 +165,7 @@ async function main(): Promise<void> {
   // Size-guarded: engram never costs more than the raw read (the Read hook
   // passes a file through when its packet would be larger), so the EFFECTIVE
   // cost is min(packet, file). This is what engram actually delivers in a
-  // real session — the honest saving, never negative on small files.
+  // real session — the honest reduction, never negative on small files.
   let totalEffectiveEngram = 0;
 
   for (const abs of files) {
@@ -209,7 +209,7 @@ async function main(): Promise<void> {
     totalBaseline > 0 ? ((totalBaseline - totalEngram) / totalBaseline) * 100 : 0;
   // The honest, shipped-behaviour number: engram only intercepts when its
   // packet is smaller, so on a real session it never adds tokens.
-  const effectiveSavings =
+  const effectiveReduction =
     totalBaseline > 0
       ? ((totalBaseline - totalEffectiveEngram) / totalBaseline) * 100
       : 0;
@@ -239,10 +239,10 @@ async function main(): Promise<void> {
   );
   console.log();
   console.log(
-    `EFFECTIVE saving (what engram actually delivers — it only intercepts files`
+    `EFFECTIVE reduction (what engram actually delivers — it only intercepts`
   );
   console.log(
-    `it shrinks; the rest read normally and engram adds nothing): ${effectiveSavings.toFixed(
+    `files it shrinks; the rest read normally and engram adds nothing): ${effectiveReduction.toFixed(
       1
     )}%`
   );
@@ -303,7 +303,7 @@ async function main(): Promise<void> {
       totalBaselineTokens: totalBaseline,
       totalEngramTokens: totalEngram,
       savingsPct: Number(aggregateSavings.toFixed(2)),
-      effectiveSavingsPct: Number(effectiveSavings.toFixed(2)),
+      effectiveReductionPct: Number(effectiveReduction.toFixed(2)),
       effectiveEngramTokens: totalEffectiveEngram,
       interceptedFiles,
       wins,
@@ -325,8 +325,8 @@ async function main(): Promise<void> {
     `|---|---|`,
     `| Baseline tokens (all files, raw Read, uncached) | **${totalBaseline.toLocaleString()}** |`,
     `| engramx tokens (rich packets) | **${totalEngram.toLocaleString()}** |`,
-    `| Raw per-file structural reduction | ${aggregateSavings.toFixed(1)}% |`,
-    `| **Effective saving (size-guarded — what engram actually delivers)** | **${effectiveSavings.toFixed(1)}%** |`,
+    `| Aggregate per-file structural reduction (raw) | ${aggregateSavings.toFixed(1)}% |`,
+    `| **Effective structural reduction (size-guarded — what engram delivers)** | **${effectiveReduction.toFixed(1)}%** |`,
     `| Files engram intercepts (packet smaller) | ${interceptedFiles} of ${perFile.length} |`,
     `| Median per-file reduction | ${median.toFixed(1)}% |`,
     `| Files where the packet was smaller | ${wins} of ${perFile.length} |`,
