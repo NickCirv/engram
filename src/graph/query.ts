@@ -397,9 +397,13 @@ function renderSubgraph(
   if (output.length > charBudget) {
     // Surrogate-safe slice — avoids leaving a lone high surrogate at the
     // cut boundary, which would corrupt JSON serialization downstream.
+    // Reserve room for the truncation marker so the TOTAL output still
+    // respects charBudget (otherwise a tiny budget overshoots by the marker
+    // length and a truncated small budget can exceed an untruncated large one).
+    const marker = `\n... (truncated to ~${tokenBudget} token budget)`;
     output =
-      sliceGraphemeSafe(output, charBudget) +
-      `\n... (truncated to ~${tokenBudget} token budget)`;
+      sliceGraphemeSafe(output, Math.max(0, charBudget - marker.length)) +
+      marker;
   }
   return output;
 }
@@ -607,9 +611,9 @@ export function renderFileStructure(
   let text = lines.join("\n");
   const charBudget = tokenBudget * CHARS_PER_TOKEN;
   if (text.length > charBudget) {
-    text =
-      sliceGraphemeSafe(text, charBudget) +
-      "\n... (truncated to fit summary budget)";
+    // Reserve room for the marker so the total respects charBudget.
+    const marker = "\n... (truncated to fit summary budget)";
+    text = sliceGraphemeSafe(text, Math.max(0, charBudget - marker.length)) + marker;
   }
 
   return {

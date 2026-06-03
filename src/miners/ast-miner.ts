@@ -449,9 +449,18 @@ function getPatterns(lang: string): LangPatterns {
       return {
         classes: [/^\s*(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/],
         functions: [
-          /^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)/,
-          /^\s*(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?\(/,
-          /^\s*(?:public|private|protected)\s+(?:async\s+)?(\w+)\s*\(/,
+          // function foo / export function foo / export default function foo / generators
+          /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\*?\s+(\w+)/,
+          // const/let/var foo = arrow|function-expr, incl. a TS type annotation
+          // (`const foo: T = (...)`) and single-param arrows (`const foo = x =>`).
+          // Anchored on the assignment + an arrow/function RHS to avoid matching
+          // plain value consts (`const x = bar()`, `const n = 1`).
+          /^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[^=;]+?)?=\s*(?:async\s+)?(?:function\b|\(|[\w$]+\s*=>)/,
+          // class methods with a modifier (extends public/private/protected with
+          // static/readonly/async/get/set so modifier-bearing methods are caught).
+          /^\s*(?:public|private|protected|static|readonly|async|get|set)\s+(?:async\s+)?(\w+)\s*\(/,
+          // CommonJS: exports.foo = ... / module.exports.foo = ...
+          /^\s*(?:module\.)?exports\.(\w+)\s*=/,
         ],
         imports: [
           /^\s*import\s+.*from\s+['"]([^'"]+)['"]/,
