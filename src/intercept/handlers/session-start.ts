@@ -26,6 +26,7 @@ import { basename, dirname, join, resolve } from "node:path";
 const execFileAsync = promisify(execFile);
 import { godNodes, mistakes, stats } from "../../core.js";
 import { findProjectRoot, isValidCwd } from "../context.js";
+import { clearServedReads } from "../served-reads.js";
 import { isHookDisabled, PASSTHROUGH, type HandlerResult } from "../safety.js";
 import { buildSessionContextResponse } from "../formatter.js";
 import { warmAllProviders } from "../../providers/resolver.js";
@@ -34,6 +35,8 @@ export interface SessionStartHookPayload {
   readonly hook_event_name: "SessionStart" | string;
   readonly cwd: string;
   readonly source?: "startup" | "resume" | "clear" | "compact" | string;
+  /** Claude Code session id — used to reset same-session read dedup (ADR-0003). */
+  readonly session_id?: string;
 }
 
 /** Max god nodes in the brief — more than this gets noisy. */
@@ -245,6 +248,17 @@ export async function handleSessionStart(
   // have a specific file to walk up from — we use cwd directly.
   const projectRoot = findProjectRoot(cwd);
   if (projectRoot === null) return PASSTHROUGH;
+
+  // ADR-0003: a fresh / cleared / compacted SessionStart means the prior
+  // context — and the read-dedup pointers into it — is gone. Reset this
+  // session's served-read set so the first read of a previously-seen file
+  // re-serves the content instead of pointing at what's no longer there.
+  // (resume returned above; its conversation context is restored, so its
+  // served-set stays valid.) This closes the /clear + session-reuse hole that
+  // PreCompact alone does not cover.
+  if (typeof payload.session_id === "string") {
+    clearServedReads(projectRoot, payload.session_id);
+  }
 
   // Kill switch.
   if (isHookDisabled(projectRoot)) return PASSTHROUGH;

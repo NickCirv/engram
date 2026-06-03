@@ -23,6 +23,7 @@ import {
 } from "../context.js";
 import { isHookDisabled, PASSTHROUGH, type HandlerResult } from "../safety.js";
 import { buildDenyResponse } from "../formatter.js";
+import { dedupOrRecord } from "../served-reads.js";
 import { resolveRichPacket } from "../../providers/resolver.js";
 import type { NodeContext } from "../../providers/types.js";
 
@@ -38,6 +39,8 @@ export interface ReadHookPayload {
     readonly limit?: number;
   };
   readonly cwd: string;
+  /** Claude Code session id — used for same-session read dedup (ADR-0003). */
+  readonly session_id?: string;
 }
 
 /**
@@ -50,6 +53,22 @@ export interface ReadHookPayload {
  * v0.3.1 will tune this from real hook-stats data.
  */
 export const READ_CONFIDENCE_THRESHOLD = 0.7;
+
+/**
+ * The pointer engram returns for a same-session repeat read of an unchanged
+ * file (ADR-0003). Honest by construction: it only fires on a byte-identical
+ * file whose content is still in the (un-compacted) context window, and it
+ * tells the agent exactly how to override if it believes otherwise.
+ */
+function buildDedupPointer(relPath: string): string {
+  return (
+    `[engram] You already read \`${relPath}\` earlier in this session and it ` +
+    `has not changed since — its contents are already in your context above, ` +
+    `no need to re-read it. (If you believe it changed, read it again: engram ` +
+    `only dedupes byte-identical files within one session and resets on context ` +
+    `compaction.)`
+  );
+}
 
 /**
  * Handle a PreToolUse:Read hook payload. Returns either:
@@ -107,6 +126,24 @@ export async function handleRead(
 
   // (6) Kill switch check — respects `.engram/hook-disabled` flag.
   if (isHookDisabled(ctx.projectRoot)) return PASSTHROUGH;
+
+  // (6b) Same-session read dedup (ADR-0003). If the agent already read this
+  // exact file this session and it hasn't changed (and no PreCompact has reset
+  // the session), point back to the content it already has instead of
+  // re-serving the packet or letting a full re-read through. Recording happens
+  // as a side effect, so the NEXT identical read can dedup. Sits BEFORE the
+  // graph query so it also covers passthrough (not-in-graph) re-reads — ~88% of
+  // real repeats. Opt out with ENGRAM_READ_DEDUP=0.
+  if (
+    process.env.ENGRAM_READ_DEDUP !== "0" &&
+    typeof payload.session_id === "string" &&
+    dedupOrRecord(ctx.projectRoot, payload.session_id, ctx.absPath)
+  ) {
+    const rel = relative(ctx.projectRoot, ctx.absPath)
+      .split(/[\\/]/)
+      .join("/");
+    return buildDenyResponse(buildDedupPointer(rel));
+  }
 
   // (7) Query the graph for file context.
   const fileCtx = await getFileContext(ctx.projectRoot, ctx.absPath);

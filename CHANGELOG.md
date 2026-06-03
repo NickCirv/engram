@@ -7,6 +7,17 @@ All notable changes to engram are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Same-session read dedup (ADR-0003).** Within a session, the Read handler
+  records every full read; a subsequent read of the **same, byte-unchanged**
+  file returns a small pointer ("you already read this unchanged file earlier;
+  it's in your context above") instead of re-serving the packet or letting a
+  full re-read through. Phase-0 measured 38–46% of real reads are same-session
+  repeats, ~88% of them full-file passthrough re-reads — so this targets a large,
+  real slice of the read budget. **Recall-safe by construction:** only fires on
+  a byte-identical file (mtime+size), only on full reads (a partial offset/limit
+  read always passes through), and the **PreCompact hook clears the session's
+  served-set** so dedup never points at content that context compaction evicted.
+  A 400-byte floor skips tiny files. On by default; `ENGRAM_READ_DEDUP=0` opts out.
 - **Grep interception (research-loop elimination — ADR-0001).** A new
   `PreToolUse:Grep` handler answers symbol-usage searches from the `calls`
   reference graph instead of letting a raw match dump flood the context window.

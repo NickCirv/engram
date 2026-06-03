@@ -18,10 +18,13 @@ import { godNodes, mistakes, stats } from "../../core.js";
 import { findProjectRoot, isValidCwd } from "../context.js";
 import { isHookDisabled, PASSTHROUGH, type HandlerResult } from "../safety.js";
 import { buildSessionContextResponse } from "../formatter.js";
+import { clearServedReads } from "../served-reads.js";
 
 export interface PreCompactHookPayload {
   readonly hook_event_name: "PreCompact" | string;
   readonly cwd: string;
+  /** Claude Code session id — used to reset same-session read dedup (ADR-0003). */
+  readonly session_id?: string;
 }
 
 /** Compact survival payload — fewer nodes than SessionStart, just essentials. */
@@ -88,6 +91,14 @@ export async function handlePreCompact(
 
   const projectRoot = findProjectRoot(cwd);
   if (projectRoot === null) return PASSTHROUGH;
+
+  // ADR-0003: compaction evicts the content a read-dedup pointer refers to, so
+  // reset this session's served-read set — post-compaction reads must re-serve.
+  // Done before the kill-switch check: the reset is a correctness operation,
+  // independent of whether we inject the survival brief.
+  if (typeof payload.session_id === "string") {
+    clearServedReads(projectRoot, payload.session_id);
+  }
 
   if (isHookDisabled(projectRoot)) return PASSTHROUGH;
 
