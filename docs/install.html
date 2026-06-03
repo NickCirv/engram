@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <title>Install · engramx v4.0 "Skill Pack" — bi-temporal mistakes for every AI coding tool</title>
-<meta name="description" content="One install. Works in Claude Code, Cursor, Cline, Continue, Aider, Codex, Windsurf, Zed. Bi-temporal mistakes auto-fire before your agent repeats them. Auto-captured from git revert history. Auto-installed on engram init. 89.1% measured token reduction. Local SQLite, zero cloud, Apache 2.0.">
+<meta name="description" content="One install. Works in Claude Code, Cursor, Cline, Continue, Aider, Codex, Windsurf, Zed. Bi-temporal mistakes auto-fire before your agent repeats them. Auto-captured from git revert history. Auto-installed on engram init. Up to ~89% fewer context tokens (structural, codebase-dependent — not a bill saving). Local SQLite, zero cloud, Apache 2.0.">
 <link rel="canonical" href="https://github.com/NickCirv/engram/blob/main/docs/install.html">
 
 <meta property="og:title" content="engramx v4.0 — bi-temporal mistakes for every AI coding tool. Catches your agent before it repeats a fix the repo already reverted.">
-<meta property="og:description" content="npm install -g engramx → engram init. Auto-installs the Sentinel hook. Auto-captures bi-temporal mistakes from git revert. 89.1% measured token reduction. Local SQLite, zero cloud. Apache 2.0.">
+<meta property="og:description" content="npm install -g engramx → engram init. Auto-installs the Sentinel hook. Auto-captures bi-temporal mistakes from git revert. Up to ~89% fewer context tokens (structural, codebase-dependent — not a bill saving). Local SQLite, zero cloud. Apache 2.0.">
 <meta property="og:image" content="https://raw.githubusercontent.com/NickCirv/engram/main/assets/banner-v3.png">
 <meta name="twitter:card" content="summary_large_image">
 
@@ -1016,7 +1016,7 @@
         <div class="section-eyebrow">// v3.0 · what's new</div>
         <h2 class="section-title">Six upgrades that make v3.0 land.</h2>
       </div>
-      <div class="section-meta">11 of 12 scope items · 876 tests · 89.1% real-world savings</div>
+      <div class="section-meta">11 of 12 scope items · 1074 tests · up to ~89% structural reduction (own repo)</div>
     </div>
 
     <div class="v3-grid">
@@ -1366,12 +1366,11 @@
           <tr>
             <td class="label">Cumulative token cost</td>
             <td class="col-other">163,122 tokens (baseline)</td>
-            <td class="col-engram">17,722 tokens <strong>(89.1% saved)</strong></td>
+            <td class="col-engram">17,722 tokens <strong>(89.1% fewer — structural, engramx's own repo)</strong></td>
           </tr>
           <tr>
-            <td class="label">Cost per typical session ($3/M)</td>
-            <td class="col-other">$0.49</td>
-            <td class="col-engram">$0.05</td>
+            <td class="label">Real $ impact</td>
+            <td class="col-other" colspan="2" style="text-align:left">Fewer context tokens is <strong>not</strong> a proportional bill cut — Anthropic prompt caching already discounts repeated reads, so engram's net cost effect ≈ 0. The win is smaller, more-relevant context (and fewer repeated mistakes), not a cheaper bill.</td>
           </tr>
           <tr>
             <td class="label">Repeat-mistake rate</td>
@@ -1736,7 +1735,7 @@
     <div class="bento">
       <div class="bento-cell">
         <span class="label">overview</span>
-        <h3>Tokens saved · cost saved · graph health</h3>
+        <h3>Context tokens saved (structural) · graph health</h3>
         <p>Real metrics from real sessions. Not vanity numbers — measured at the hook.</p>
       </div>
       <div class="bento-cell">

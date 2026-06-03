@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Engram makes your AI coding agent stop re-reading the same files — and stop repeating mistakes your repo already fixed.</strong><br>
-  <sub>One install. 8 IDEs. <strong>53–89% per-file structural reduction</strong> (codebase-dependent — context-packet size vs reading whole files, not a bill-savings figure). Bi-temporal mistakes auto-captured from git revert history. Local SQLite, zero cloud, Apache 2.0.</sub>
+  <sub>One install. 8 IDEs. <strong>Up to ~89% fewer context tokens</strong> vs reading whole files — typically 50–90%, strongest on large-file codebases (Python/Go), lower on many-small-file repos. Structural packet size, not a bill saving; run <code>engram bench</code> on yours. Bi-temporal mistakes auto-captured from git revert history. Local SQLite, zero cloud, Apache 2.0.</sub>
 </p>
 
 <p align="center">
@@ -275,7 +275,7 @@ engram ui
   <img src="assets/screenshots/01-overview.png" alt="engram dashboard — Overview tab" width="100%">
 </p>
 
-The **Overview** tab: real metrics from your sessions — tokens saved, cost saved at $3/M rate, session-level hit rate, cache performance, graph health.
+The **Overview** tab: real metrics from your sessions — context tokens kept out of context (structural), session-level hit rate, cache performance, graph health.
 
 <p align="center">
   <img src="assets/screenshots/03-activity.png" alt="engram dashboard — Activity tab" width="100%">
