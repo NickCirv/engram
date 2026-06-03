@@ -77,11 +77,39 @@ describe("engram intercept — end-to-end subprocess tests", () => {
     authFile = join(projectRoot, "src", "auth.ts");
     writeFileSync(
       authFile,
-      `export class AuthService { validate() { return true; } }
-export class SessionStore { create() { return "s"; } }
-export function createAuthService() { return new AuthService(); }
-export function verifyToken(t: string) { return !!t; }
-export function hashPassword(p: string) { return "h_" + p; }
+      `// Realistically sized so engram's summary is smaller than the file
+// (the Read hook now passes tiny files through — they don't benefit).
+export class AuthService {
+  validate(token: string): boolean {
+    if (!token) return false;
+    return token.startsWith("tok_") && token.length > 6;
+  }
+  issue(userId: string): string {
+    return "tok_" + userId + "_" + userId.length.toString(36);
+  }
+  rotate(oldToken: string, userId: string): string {
+    if (!this.validate(oldToken)) throw new Error("invalid");
+    return this.issue(userId);
+  }
+}
+export class SessionStore {
+  private sessions = new Map<string, number>();
+  create(userId: string): string {
+    const id = "sess_" + userId;
+    this.sessions.set(id, Date.now());
+    return id;
+  }
+  isActive(id: string): boolean { return this.sessions.has(id); }
+}
+export function createAuthService(): AuthService { return new AuthService(); }
+export function verifyToken(t: string): boolean {
+  return typeof t === "string" && t.startsWith("tok_");
+}
+export function hashPassword(p: string): string {
+  let h = 0;
+  for (let i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) | 0;
+  return "h_" + (h >>> 0).toString(16);
+}
 `
     );
     await init(projectRoot);
