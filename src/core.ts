@@ -132,30 +132,19 @@ export async function init(
       ...sessionResult.nodes,
       ...skillNodes,
     ];
-    // Fix #3 Phase 3.1 — cross-file reference graph. Built on FULL init only.
-    // KNOWN LIMITATION: incremental re-index drops a changed file's `calls`
-    // edges (removeNodesForFile cascades) without rebuilding them, so the
-    // reference graph slowly goes stale between full inits — run `engram init`
-    // (full) to refresh ranking. Correct incremental maintenance needs
-    // dependent re-resolution (every file that calls a changed file) and is a
-    // tracked follow-up. Failure here is non-fatal: PageRank falls back to degree.
-    let referenceEdges: typeof edges = [];
-    if (!options.incremental) {
-      try {
-        referenceEdges = await buildReferenceEdges(root, nodes);
-      } catch {
-        referenceEdges = [];
-      }
-    }
-
     const allEdges = [
       ...edges,
-      ...referenceEdges,
       ...gitResult.edges,
       ...gitRevertResult.edges,
       ...sessionResult.edges,
       ...skillEdges,
     ];
+    // Fix #3 — cross-file reference (`calls`) edges are (re)built AFTER the node
+    // upsert below, over the FULL current graph, so it's correct for BOTH full
+    // and incremental init. The authoritative final edge count is captured from
+    // the store after the rebuild (the array length alone would mix changed-file
+    // edges with the full calls set on incremental runs).
+    let totalEdgeCount = allEdges.length;
 
     const store = await getStore(root);
     try {
@@ -178,13 +167,35 @@ export async function init(
       store.setStat("project_root", root);
       // Persist mtimes for next incremental run
       store.setStat("file_mtimes", JSON.stringify([...mtimes.entries()]));
+
+      // Fix #3 — (re)build the cross-file reference graph over the FULL current
+      // graph. Runs for BOTH full and incremental init: the node upsert above is
+      // complete, so store.getAllNodes() is the authoritative current set. This
+      // keeps `calls` edges (and PageRank ranking) correct as files change,
+      // instead of drifting on incremental re-index. Clears stale calls edges
+      // first so re-runs never duplicate. Non-fatal — ranking falls back to
+      // degree on failure. Perf: re-parses files each init; a mtime-keyed refs
+      // cache is the tracked optimization for very large repos.
+      try {
+        const refEdges = await buildReferenceEdges(root, store.getAllNodes());
+        store.removeEdgesByRelation("calls");
+        store.bulkUpsert([], refEdges);
+        totalEdgeCount = store.getStats().edges; // authoritative post-rebuild count
+      } catch (err) {
+        // Non-fatal: ranking falls back to degree. But surface it (the repo's
+        // "no silent fail-open" rule) so a parser/grammar regression isn't
+        // invisible — a degraded ranking on every init would otherwise be silent.
+        if (process.env.ENGRAM_DEBUG) {
+          console.error("engram: reference-graph rebuild skipped:", err);
+        }
+      }
     } finally {
       store.close();
     }
 
     return {
       nodes: allNodes.length,
-      edges: allEdges.length,
+      edges: totalEdgeCount,
       fileCount,
       totalLines,
       timeMs: Date.now() - start,

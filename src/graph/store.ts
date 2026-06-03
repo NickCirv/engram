@@ -400,6 +400,16 @@ export class GraphStore {
     this.db.run("DELETE FROM nodes WHERE source_file = ?", [sourceFile]);
   }
 
+  /**
+   * Delete all edges of a given relation. Used to rebuild the `calls`
+   * reference graph from scratch on each init so re-runs never duplicate.
+   * Does NOT call save() — the immediately-following bulkUpsert/close persist;
+   * avoids an extra full-DB serialization on the hot init path.
+   */
+  removeEdgesByRelation(relation: string): void {
+    this.db.run("DELETE FROM edges WHERE relation = ?", [relation]);
+  }
+
   clearAll(): void {
     this.db.run("DELETE FROM nodes");
     this.db.run("DELETE FROM edges");
