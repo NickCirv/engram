@@ -22,7 +22,7 @@ All notable changes to engram are documented here. Format based on
   `PreToolUse:Grep` handler answers symbol-usage searches from the `calls`
   reference graph instead of letting a raw match dump flood the context window.
   When the agent greps a bare identifier that's a known symbol with references,
-  engram denies the grep and returns the ranked list of files that reference it,
+  engram denies the grep and returns the list of files that reference it,
   plus the exact `rg -n "<pattern>"` escalation command. **Recall-safe by
   construction:** regex/text/multi-word/stopword patterns and unknown symbols
   pass straight through (grep out-recalls the structural graph there), and the

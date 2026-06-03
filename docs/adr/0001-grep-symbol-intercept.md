@@ -11,13 +11,13 @@ still runs every `Grep` raw, and a symbol search across a large repo floods the 
 match lines (often 2–20k tokens). The W1.9 benchmark shows engram already wins exactly on the
 explore-heavy workloads (troubleshooting +24.9%, code-understanding +23.3%) and is neutral/negative on
 linear edits — i.e. the value is in *exploration elimination*, which this gap leaves on the table. The
-`calls` reference graph + `findCallers/findCallees/findImpact` (PageRank-ranked) already exist but are
+`calls` reference graph + `findCallers/findCallees/findImpact` (pure traversal, alphabetically sorted) already exist but are
 CLI-only — never wired into the hook.
 
 ## Decision
 
 Add a `PreToolUse:Grep` handler that intercepts **only** a bare-identifier pattern that matches a known
-symbol with references in the `calls` graph, denies the grep, and returns engram's ranked caller list.
+symbol with references in the `calls` graph, denies the grep, and returns engram's caller list (the files that reference it).
 For anything else — regex/metacharacter patterns, multi-word/text searches, stopword identifiers, or a
 symbol the graph doesn't know — it returns PASSTHROUGH so the real grep runs.
 
@@ -27,7 +27,7 @@ wholesale would blind the agent — a correctness regression. We mitigate by (a)
 the pattern is a known symbol with ≥1 caller (high precision), and (b) **always emitting the exact
 `rg -n "<pattern>"` escalation command** in the deny reason, so the agent can recover full textual
 matches in one step if it needs them. The token win comes from the common case ("where is this symbol
-used") being answered from a ranked file list (~tens–hundreds of tokens) instead of a raw match dump,
+used") being answered from a caller-file list (~tens–hundreds of tokens) instead of a raw match dump,
 while correctness is preserved by the escalation path. The discarded alternative — augment-don't-deny
 (let grep run AND add engram's note) — preserves recall perfectly but saves zero tokens (grep still
 runs + we add tokens), which defeats the purpose. If the precision gate proves too narrow or too broad

@@ -63,7 +63,7 @@ export const READ_CONFIDENCE_THRESHOLD = 0.7;
 function buildDedupPointer(relPath: string): string {
   return (
     `[engram] You already read \`${relPath}\` earlier in this session and it ` +
-    `has not changed since — its contents are already in your context above, ` +
+    `has not changed since — what you saw then is still in your context above, ` +
     `no need to re-read it. (If you believe it changed, read it again: engram ` +
     `only dedupes byte-identical files within one session and resets on context ` +
     `compaction.)`

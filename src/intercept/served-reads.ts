@@ -136,8 +136,9 @@ export function dedupOrRecord(
     }
 
     // First read (or changed, or tiny, or stale): record and continue. `at` is
-    // refreshed only on a real (re-)serve, so dedup-eligibility ages from when
-    // the content last entered context, not from the last pointer.
+    // set here, on a record — never on a dedup hit (which returns above without
+    // touching it) — so dedup-eligibility ages from when this version of the
+    // content last entered context, not from the last pointer.
     map[key] = { mtimeMs: st.mtimeMs, size: st.size, at: now };
     capEntries(map);
     try {

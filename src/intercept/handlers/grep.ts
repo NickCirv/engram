@@ -16,8 +16,8 @@
  * real grep runs. Default to doing nothing; act only when provably helpful.
  *
  * Returns:
- *   - A deny response whose reason is engram's ranked caller list, when the
- *     pattern is a known symbol with references.
+ *   - A deny response whose reason is engram's caller list (the files that
+ *     reference the symbol), when the pattern is a known symbol with references.
  *   - PASSTHROUGH (null) otherwise — caller writes nothing, exits 0, the real
  *     Grep runs unchanged.
  * Never throws. Every error path resolves to PASSTHROUGH via wrapSafely.
@@ -106,7 +106,7 @@ function buildGrepAnswer(pattern: string, callerFiles: string[]): string {
   const list = callerFiles.map((f) => `  - ${f}`).join("\n");
   return [
     `[engram] "${pattern}" is referenced by ${callerFiles.length} file(s) ` +
-      `in the reference graph (structural \`calls\` edges, ranked):`,
+      `in the reference graph (structural \`calls\` edges):`,
     list,
     "",
     "This is engram's structural answer — resolved function/class references " +
