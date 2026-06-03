@@ -31,6 +31,7 @@ import {
   type EditWriteHookPayload,
 } from "./handlers/edit-write.js";
 import { handleBash, type BashHookPayload } from "./handlers/bash.js";
+import { handleGrep, type GrepHookPayload } from "./handlers/grep.js";
 import { applyMistakeGuard } from "./handlers/mistake-guard.js";
 import {
   handleSessionStart,
@@ -199,6 +200,12 @@ async function dispatchPreToolUse(
         handleBash(handlerPayload as unknown as BashHookPayload)
       );
       result = await applyMistakeGuard(result, handlerPayload, "bash");
+      break;
+
+    case "Grep":
+      result = await runHandler(() =>
+        handleGrep(handlerPayload as unknown as GrepHookPayload)
+      );
       break;
 
     default:

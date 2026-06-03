@@ -6,6 +6,20 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+### Added
+- **Grep interception (research-loop elimination — ADR-0001).** A new
+  `PreToolUse:Grep` handler answers symbol-usage searches from the `calls`
+  reference graph instead of letting a raw match dump flood the context window.
+  When the agent greps a bare identifier that's a known symbol with references,
+  engram denies the grep and returns the ranked list of files that reference it,
+  plus the exact `rg -n "<pattern>"` escalation command. **Recall-safe by
+  construction:** regex/text/multi-word/stopword patterns and unknown symbols
+  pass straight through (grep out-recalls the structural graph there), and the
+  escalation command means the agent can always recover full textual matches in
+  one step. This delivers the original Context Spine goal of collapsing the
+  grep→read investigation loop, not just the per-file Read. On by default;
+  `ENGRAM_GREP_INTERCEPT=0` opts out.
+
 ## [4.1.0] — 2026-06-03 — "Compass"
 
 ### Added
