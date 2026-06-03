@@ -162,6 +162,11 @@ async function main(): Promise<void> {
   const perFile: FileResult[] = [];
   let totalBaseline = 0;
   let totalEngram = 0;
+  // Size-guarded: engram never costs more than the raw read (the Read hook
+  // passes a file through when its packet would be larger), so the EFFECTIVE
+  // cost is min(packet, file). This is what engram actually delivers in a
+  // real session — the honest saving, never negative on small files.
+  let totalEffectiveEngram = 0;
 
   for (const abs of files) {
     const rel = relative(PROJECT, abs).split(/[\\/]/).join("/");
@@ -197,10 +202,20 @@ async function main(): Promise<void> {
     });
     totalBaseline += baselineTokens;
     totalEngram += engramTokens;
+    totalEffectiveEngram += Math.min(engramTokens, baselineTokens);
   }
 
   const aggregateSavings =
     totalBaseline > 0 ? ((totalBaseline - totalEngram) / totalBaseline) * 100 : 0;
+  // The honest, shipped-behaviour number: engram only intercepts when its
+  // packet is smaller, so on a real session it never adds tokens.
+  const effectiveSavings =
+    totalBaseline > 0
+      ? ((totalBaseline - totalEffectiveEngram) / totalBaseline) * 100
+      : 0;
+  const interceptedFiles = perFile.filter(
+    (r) => r.engramTokens < r.baselineTokens
+  ).length;
 
   // 5. Print table (sort by savingsPct descending — biggest wins first)
   perFile.sort((a, b) => b.savingsPct - a.savingsPct);
@@ -221,6 +236,18 @@ async function main(): Promise<void> {
   console.log("─".repeat(102));
   console.log(
     `${"TOTAL".padEnd(60)} ${String(totalBaseline).padStart(10)} ${String(totalEngram).padStart(8)} ${aggregateSavings.toFixed(1).padStart(9)}%`
+  );
+  console.log();
+  console.log(
+    `EFFECTIVE saving (what engram actually delivers — it only intercepts files`
+  );
+  console.log(
+    `it shrinks; the rest read normally and engram adds nothing): ${effectiveSavings.toFixed(
+      1
+    )}%`
+  );
+  console.log(
+    `  ${interceptedFiles}/${perFile.length} files intercepted (the others passed through).`
   );
   console.log();
 
@@ -276,6 +303,9 @@ async function main(): Promise<void> {
       totalBaselineTokens: totalBaseline,
       totalEngramTokens: totalEngram,
       savingsPct: Number(aggregateSavings.toFixed(2)),
+      effectiveSavingsPct: Number(effectiveSavings.toFixed(2)),
+      effectiveEngramTokens: totalEffectiveEngram,
+      interceptedFiles,
       wins,
       median: Number(median.toFixed(2)),
     },
@@ -295,7 +325,9 @@ async function main(): Promise<void> {
     `|---|---|`,
     `| Baseline tokens (all files, raw Read, uncached) | **${totalBaseline.toLocaleString()}** |`,
     `| engramx tokens (rich packets) | **${totalEngram.toLocaleString()}** |`,
-    `| Aggregate per-file structural reduction | **${aggregateSavings.toFixed(1)}%** |`,
+    `| Raw per-file structural reduction | ${aggregateSavings.toFixed(1)}% |`,
+    `| **Effective saving (size-guarded — what engram actually delivers)** | **${effectiveSavings.toFixed(1)}%** |`,
+    `| Files engram intercepts (packet smaller) | ${interceptedFiles} of ${perFile.length} |`,
     `| Median per-file reduction | ${median.toFixed(1)}% |`,
     `| Files where the packet was smaller | ${wins} of ${perFile.length} |`,
     "",
