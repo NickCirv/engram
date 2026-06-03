@@ -20,11 +20,19 @@
  * zero references (never throws). Trees are freed (`tree.delete()`) to avoid a
  * WASM heap leak across a many-file loop.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Node } from "web-tree-sitter";
 import { getSupportedLang, getParser } from "../providers/grammar-loader.js";
 import type { GraphEdge, GraphNode } from "../graph/schema.js";
+
+/** Skip files larger than this for reference parsing (minified bundles, etc.)
+ *  to avoid multi-second tree-sitter stalls / WASM heap blowups on init. */
+const MAX_REF_FILE_BYTES = 1_000_000;
+
+/** A callee name resolving to more defs than this is too ambiguous to be
+ *  signal (e.g. `get`/`map`/`on`); skip it so it doesn't pollute the graph. */
+const MAX_AMBIGUOUS_DEFS = 10;
 
 /** Tree-sitter node types that denote a call/instantiation across languages. */
 const CALL_NODE_TYPES = new Set([
@@ -78,7 +86,8 @@ function extractCalleeNames(root: Node): string[] {
   const visit = (node: Node): void => {
     if (CALL_NODE_TYPES.has(node.type)) {
       const name = calleeName(node);
-      if (name && name.length >= 2) names.add(name);
+      // length >= 1 so single-char callees ($ / _ — jQuery, lodash) aren't dropped.
+      if (name && name.length >= 1) names.add(name);
     }
     for (let i = 0; i < node.childCount; i++) {
       const child = node.child(i);
@@ -136,9 +145,10 @@ export function resolveCallEdges(
   const now = Date.now();
 
   // Bare symbol name from a def label. The regex miner labels functions as
-  // `foo()` / `foo(params)`, but tree-sitter callee names are bare (`foo`),
-  // so we key the index on the bare name to make them match.
-  const bareName = (label: string): string => label.split("(")[0].trim();
+  // `foo()` / `foo(params)` / `foo<T>(params)`, but tree-sitter callee names
+  // are bare (`foo`). Split on the first `(` OR `<` so generic functions
+  // (`wrap<T>()`) also match their bare callee name.
+  const bareName = (label: string): string => label.split(/[(<]/)[0].trim();
 
   // bare-name → callable def nodes
   const byLabel = new Map<string, GraphNode[]>();
@@ -166,6 +176,9 @@ export function resolveCallEdges(
       if (count >= maxPerFile) break;
       const defs = byLabel.get(name);
       if (!defs) continue;
+      // Too-common name (defined in many files) is noise, not a real call —
+      // skip so it doesn't eat the per-file budget with spurious edges.
+      if (defs.length > MAX_AMBIGUOUS_DEFS) continue;
       for (const def of defs) {
         if (def.sourceFile === relPath) continue; // intra-file — no signal
         if (seen.has(def.id)) continue;
@@ -202,7 +215,11 @@ export async function buildReferenceEdges(
   for (const n of nodes) {
     if (n.kind !== "file") continue;
     try {
-      const source = readFileSync(join(projectRoot, n.sourceFile), "utf-8");
+      const abs = join(projectRoot, n.sourceFile);
+      // Skip oversized files (minified bundles) — a synchronous tree-sitter
+      // parse of a multi-MB file stalls init and bloats the WASM heap.
+      if (statSync(abs).size > MAX_REF_FILE_BYTES) continue;
+      const source = readFileSync(abs, "utf-8");
       const names = await extractFileReferences(n.sourceFile, source);
       if (names.length > 0) fileRefs.set(n.sourceFile, names);
     } catch {

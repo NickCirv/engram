@@ -21,9 +21,10 @@ const CALLABLE_KINDS = new Set<GraphNode["kind"]>([
   "variable",
 ]);
 
-/** Bare symbol name — strips the `(params)` the regex miner appends to labels. */
+/** Bare symbol name — strips `(params)` and `<generics>` from miner labels
+ *  (`foo()`, `wrap<T>(x)`) so traversal matches the bare callee name. */
 function bareName(label: string): string {
-  return label.split("(")[0].trim();
+  return label.split(/[(<]/)[0].trim();
 }
 
 function callsEdges(edges: readonly GraphEdge[]): GraphEdge[] {

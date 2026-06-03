@@ -401,13 +401,25 @@ export class GraphStore {
   }
 
   /**
-   * Delete all edges of a given relation. Used to rebuild the `calls`
-   * reference graph from scratch on each init so re-runs never duplicate.
-   * Does NOT call save() — the immediately-following bulkUpsert/close persist;
-   * avoids an extra full-DB serialization on the hot init path.
+   * Atomically replace ALL edges of a relation with a new set: DELETE + INSERT
+   * inside ONE transaction. Used to rebuild the `calls` reference graph each
+   * init. Atomicity matters — a non-atomic delete-then-insert that failed
+   * mid-insert would leave the graph with the old calls edges deleted but the
+   * new ones not yet written, and `close()`→`save()` would then PERSIST that
+   * calls-less graph (worse than before init). On any failure this rolls back,
+   * preserving the prior reference graph.
    */
-  removeEdgesByRelation(relation: string): void {
-    this.db.run("DELETE FROM edges WHERE relation = ?", [relation]);
+  replaceEdgesByRelation(relation: string, edges: GraphEdge[]): void {
+    this.db.run("BEGIN TRANSACTION");
+    try {
+      this.db.run("DELETE FROM edges WHERE relation = ?", [relation]);
+      for (const edge of edges) this.upsertEdge(edge);
+      this.db.run("COMMIT");
+    } catch (err) {
+      this.db.run("ROLLBACK");
+      throw err;
+    }
+    this.save();
   }
 
   clearAll(): void {

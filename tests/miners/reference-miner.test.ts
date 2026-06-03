@@ -72,6 +72,21 @@ describe("resolveCallEdges (pure)", () => {
     const edges = resolveCallEdges([defFoo], new Map([["src/ghost.ts", ["foo"]]]));
     expect(edges).toHaveLength(0);
   });
+
+  it("resolves GENERIC function labels (review A#4: foo<T>(x) → foo)", () => {
+    const defWrap = node({ id: "def_wrap", label: "wrap<T>(x: T)", kind: "function", sourceFile: "src/b.ts" });
+    const edges = resolveCallEdges([fileA, defWrap], new Map([["src/a.ts", ["wrap"]]]));
+    expect(edges).toHaveLength(1);
+    expect(edges[0].target).toBe("def_wrap");
+  });
+
+  it("skips too-ambiguous names defined in many files (review A#3)", () => {
+    const defs = Array.from({ length: 11 }, (_, i) =>
+      node({ id: `c${i}`, label: "common()", kind: "function", sourceFile: `src/f${i}.ts` })
+    );
+    const edges = resolveCallEdges([fileA, ...defs], new Map([["src/a.ts", ["common"]]]));
+    expect(edges).toHaveLength(0); // >10 defs ⇒ noise, not a real call
+  });
 });
 
 describe("extractFileReferences (tree-sitter)", () => {
@@ -94,5 +109,11 @@ describe("extractFileReferences (tree-sitter)", () => {
 
   it("returns [] for unsupported file types", async () => {
     expect(await extractFileReferences("notes.txt", "foo() bar()")).toEqual([]);
+  });
+
+  it("keeps single-char callees like $ and _ (review A#5)", async () => {
+    const names = await extractFileReferences("s.ts", "function g(){ $('x'); _([1]); }");
+    expect(names).toContain("$");
+    expect(names).toContain("_");
   });
 });

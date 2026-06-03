@@ -178,17 +178,21 @@ export async function init(
       // cache is the tracked optimization for very large repos.
       try {
         const refEdges = await buildReferenceEdges(root, store.getAllNodes());
-        store.removeEdgesByRelation("calls");
-        store.bulkUpsert([], refEdges);
-        totalEdgeCount = store.getStats().edges; // authoritative post-rebuild count
+        // Atomic: rolls back on failure so a partial rebuild can't persist a
+        // calls-less graph via the finally-driven close()/save().
+        store.replaceEdgesByRelation("calls", refEdges);
       } catch (err) {
-        // Non-fatal: ranking falls back to degree. But surface it (the repo's
+        // Non-fatal: the atomic replace rolled back, so the prior reference
+        // graph is intact; ranking is unaffected. Surface it (the repo's
         // "no silent fail-open" rule) so a parser/grammar regression isn't
-        // invisible — a degraded ranking on every init would otherwise be silent.
+        // invisible rather than a silently-degraded ranking.
         if (process.env.ENGRAM_DEBUG) {
           console.error("engram: reference-graph rebuild skipped:", err);
         }
       }
+      // Authoritative edge count from disk — correct on full + incremental,
+      // and after a rebuild success OR a rolled-back failure.
+      totalEdgeCount = store.getStats().edges;
     } finally {
       store.close();
     }
