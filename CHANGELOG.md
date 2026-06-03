@@ -6,6 +6,36 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+### Added
+- **Ranked context (PageRank).** A real cross-file reference graph is now
+  built at `engram init` (tree-sitter call/reference extraction → `calls`
+  edges), and query results are ranked by personalized PageRank over it —
+  importance flows from who-references-you, recursively, biased toward your
+  query. Replaces the previous raw edge-degree ordering.
+- **Graph traversal commands:** `engram callers <symbol>`,
+  `engram callees <symbol>`, `engram impact <symbol>` over the reference graph.
+- **Per-session value summary.** A Stop hook prints one line per session:
+  "engram so far: N file-reads answered from the graph · M past-mistake
+  warnings · ~Xk tokens kept out of context (structural — not a bill saving)".
+- **Day-1 mistakes.** A bug-fix-commit miner seeds mistake-memory from
+  `fix:` / `fixes #N` commits (not just rare `git revert`s), so a fresh
+  `engram init` surfaces real landmines immediately; init reports the count.
+
+### Changed
+- **Honesty pass.** All surfaces now frame the per-file reduction as a
+  *structural context-packet reduction*, not a cost/bill saving (engram's net
+  agent-loop cost over prompt caching is ~0; the benchmark self-discloses its
+  baseline). No headline cost claims.
+- **Proactive mistake warnings are high-precision** — only high-confidence
+  mistakes (git reverts, explicit `engram learn`) warn before an edit;
+  inferred bug-fix/session mistakes stay browsable via `engram mistakes` but
+  never nag.
+
+### Known limitations
+- The reference graph (and thus PageRank ranking) is rebuilt on **full**
+  `engram init`. Incremental re-index does not yet maintain `calls` edges, so
+  ranking can drift between full inits — run `engram init` to refresh.
+
 ## [4.0.0] — 2026-05-18 — "Skill Pack"
 
 Engram's memory becomes **active**. v3.x captured mistakes and answered queries when asked; v4.0 surfaces past corrections **before** the agent makes the edit, captures new ones automatically from git history, and ships a sibling marketplace pack so Claude Code users install engram in one command.

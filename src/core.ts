@@ -132,9 +132,13 @@ export async function init(
       ...sessionResult.nodes,
       ...skillNodes,
     ];
-    // Fix #3 Phase 3.1 — cross-file reference graph. Full init only (the scout
-    // gated it; incremental runs keep the prior edges). Failure is non-fatal:
-    // a missing reference graph just means PageRank falls back to degree.
+    // Fix #3 Phase 3.1 — cross-file reference graph. Built on FULL init only.
+    // KNOWN LIMITATION: incremental re-index drops a changed file's `calls`
+    // edges (removeNodesForFile cascades) without rebuilding them, so the
+    // reference graph slowly goes stale between full inits — run `engram init`
+    // (full) to refresh ranking. Correct incremental maintenance needs
+    // dependent re-resolution (every file that calls a changed file) and is a
+    // tracked follow-up. Failure here is non-fatal: PageRank falls back to degree.
     let referenceEdges: typeof edges = [];
     if (!options.incremental) {
       try {
