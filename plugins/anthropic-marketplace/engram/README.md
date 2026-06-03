@@ -9,8 +9,9 @@ The context spine that 10x's your Claude Code sessions.
 
 engram intercepts file reads in your Claude Code session. Instead of pushing
 the full file content into the model, it returns a structural summary from a
-local SQLite knowledge graph. On a real 87-file codebase, the measured token
-reduction is **89.1%** — same task, far fewer tokens, longer sessions before
+local SQLite knowledge graph. On engramx's own repo, the measured per-file
+structural context reduction is **up to ~89%** (structural, not a bill saving —
+your repo varies) — same task, far fewer tokens, longer sessions before
 hitting limits.
 
 Plus it remembers past mistakes (bi-temporal — they auto-expire when fixed),
@@ -112,12 +113,13 @@ Writes a Markdown weekly report at `~/.engram/cost-report-YYYY-Www.md`. Paste in
 
 - A 5-person team migrating from Cursor was paying $4,600/6 weeks before. After installing engram on Claude Code Max, the same team reports their Max 5x sessions stretch through full workdays without hitting the cap.
 - Solo dev going from $2k/week on Cursor to ~1/10th the cost on Claude Code Max + engram is the most-cited migration story in the community.
-- Independent migration guides ([dev.to/56kode](https://dev.to/56_kode/why-were-moving-from-cursor-to-claude-code-and-why-you-should-too-9kh), [SpectrumAI](https://spectrumailab.com/blog/claude-code-vs-cursor)) cite engram's 89.1% measurement as the strongest in the category.
+- Independent migration guides ([dev.to/56kode](https://dev.to/56_kode/why-were-moving-from-cursor-to-claude-code-and-why-you-should-too-9kh), [SpectrumAI](https://spectrumailab.com/blog/claude-code-vs-cursor)) cite engram's structural context reduction as the strongest in the category.
 
 ## Numbers
 
-- 89.1% measured token reduction on `bench/real-world.ts` — committed to the
-  repo, reproducible with `engram bench` on your own codebase
+- Up to ~89% structural context reduction on `bench/real-world.ts` (structural,
+  not a bill saving; your repo varies) — committed to the repo, reproducible
+  with `engram bench` on your own codebase
 - 907 tests across Ubuntu + Windows × Node 20+22
 - 26 npm releases in 23 days; cited at 89% reduction in independent migration
   guides ([dev.to/56kode](https://dev.to/56_kode/why-were-moving-from-cursor-to-claude-code-and-why-you-should-too-9kh),

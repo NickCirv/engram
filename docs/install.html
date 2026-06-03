@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>Install · engramx v4.0 "Skill Pack" — bi-temporal mistakes for every AI coding tool</title>
+<title>Install · engramx v4.1 "Compass" — ranked code-graph context for every AI coding tool</title>
 <meta name="description" content="One install. Works in Claude Code, Cursor, Cline, Continue, Aider, Codex, Windsurf, Zed. Bi-temporal mistakes auto-fire before your agent repeats them. Auto-captured from git revert history. Auto-installed on engram init. Up to ~89% fewer context tokens (structural, codebase-dependent — not a bill saving). Local SQLite, zero cloud, Apache 2.0.">
 <link rel="canonical" href="https://github.com/NickCirv/engram/blob/main/docs/install.html">
 
-<meta property="og:title" content="engramx v4.0 — bi-temporal mistakes for every AI coding tool. Catches your agent before it repeats a fix the repo already reverted.">
+<meta property="og:title" content="engramx v4.1 'Compass' — ranked code-graph context for every AI coding tool. PageRank over a real cross-file reference graph, plus mistakes memory that fires before your agent repeats a fix the repo already reverted.">
 <meta property="og:description" content="npm install -g engramx → engram init. Auto-installs the Sentinel hook. Auto-captures bi-temporal mistakes from git revert. Up to ~89% fewer context tokens (structural, codebase-dependent — not a bill saving). Local SQLite, zero cloud. Apache 2.0.">
 <meta property="og:image" content="https://raw.githubusercontent.com/NickCirv/engram/main/assets/banner-v3.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -847,7 +847,7 @@
       eng<span class="accent">r</span><span class="accent">a</span>m
     </a>
     <ul class="nav-links">
-      <li><a class="nav-link" href="#coming-next">v4.0</a></li>
+      <li><a class="nav-link" href="#coming-next">v4.1</a></li>
       <li><a class="nav-link" href="#whats-new">v3.4</a></li>
       <li><a class="nav-link" href="#install">Install</a></li>
       <li><a class="nav-link" href="#how">How it works</a></li>
@@ -867,7 +867,7 @@
   <div class="container">
     <div class="hero-grid">
       <div>
-        <span class="hero-pill">● v4.0 "Skill Pack" · shipped 2026-05-18 · bi-temporal mistakes · 1025 tests</span>
+        <span class="hero-pill">● v4.1 "Compass" · shipped 2026-06-03 · ranked context graph · 1074 tests</span>
 
         <h1 class="hero-headline reveal">
           your AI agent<br>
@@ -896,8 +896,8 @@
 
         <div class="metrics-strip reveal" role="list" aria-label="engramx metrics">
           <div class="metric" role="listitem">
-            <span class="metric-value"><span class="accent">89.1</span>%</span>
-            <span class="metric-label">Measured savings · 87 real files</span>
+            <span class="metric-value">~<span class="accent">89</span>%</span>
+            <span class="metric-label">Structural reduction · own repo · varies</span>
           </div>
           <div class="metric" role="listitem">
             <span class="metric-value"><span class="accent">$0</span></span>
@@ -944,56 +944,58 @@
   </div>
 </section>
 
-<!-- ================== WHAT SHIPPED IN v4.0 ================== -->
+<!-- ================== WHAT SHIPPED IN v4.1 ================== -->
 <section class="block" id="coming-next" style="border-top: 1px solid var(--border);">
   <div class="container">
     <div class="section-head">
       <div>
-        <div class="section-eyebrow">// v4.0 · shipped 2026-05-18</div>
-        <h2 class="section-title">Skill Pack: engram's memory becomes active.</h2>
+        <div class="section-eyebrow">// v4.1 · shipped 2026-06-03</div>
+        <h2 class="section-title">Compass: engram ranks the graph.</h2>
       </div>
-      <div class="section-meta">1025 tests passing · auto-install on init · permissive by default</div>
+      <div class="section-meta">1074 tests passing · PageRank ranking · the only ranked tool in its category</div>
     </div>
 
     <p style="color: var(--text-secondary); max-width: 720px; margin-bottom: 2rem;">
-      v3.x captured mistakes when asked. v4.0 surfaces past corrections <em>before</em> the agent
-      makes the edit. Schema v9 encodes four bi-temporal fields per mistake. A new git-revert
-      miner auto-populates them. The Sentinel hook installs by default and fires permissively
-      out of the box. Same engram, same graph, same 89.1% reduction — now plus the catch-it-before-it-recurs
-      layer.
+      Earlier versions returned graph neighbours by raw edge-degree. v4.1 builds a real
+      cross-file reference graph at <code>engram init</code> — tree-sitter call extraction into
+      <code>calls</code> edges — and ranks query results by <em>personalized PageRank</em> over
+      it: importance flows from who-references-you, recursively, biased toward your query. Most
+      tools in this space dump the graph; engram is the only one that ranks it. The per-file
+      structural context reduction stays high (~89% on this repo, 50–90% across real OSS repos)
+      and is now size-guarded — engram only replaces a read when its packet is genuinely smaller,
+      so a reported reduction is never negative. Structural, codebase-dependent, not a bill saving.
     </p>
 
     <div class="v3-grid">
       <article class="v3-card">
-        <div class="v3-card-tag">bi-temporal</div>
-        <h3 class="v3-card-title"><span class="accent">◆</span> Bi-temporal mistakes</h3>
+        <div class="v3-card-tag">ranked</div>
+        <h3 class="v3-card-title"><span class="accent">◆</span> PageRank context</h3>
         <p class="v3-card-body">
-          Schema v9 adds <code>then_believed</code>, <code>found_false_at</code>, <code>truth_now</code>,
-          and <code>applies_to</code> to every mistake. The PreToolUse hook injects this structured
-          block into Claude's context window before risky edits. The agent reads <em>what you used
-          to believe</em> vs <em>what's now true</em> and adapts.
+          A real cross-file reference graph (<code>calls</code> edges from tree-sitter) is built at
+          init, and query results are ranked by personalized PageRank over it — importance flows
+          from who-references-you, recursively, biased toward your query. The most-referenced
+          symbols surface first instead of a flat edge-degree dump.
         </p>
       </article>
 
       <article class="v3-card">
-        <div class="v3-card-tag">auto-capture</div>
-        <h3 class="v3-card-title"><span class="accent">◇</span> git-revert miner</h3>
+        <div class="v3-card-tag">traversal</div>
+        <h3 class="v3-card-title"><span class="accent">◇</span> callers · callees · impact</h3>
         <p class="v3-card-body">
-          Fresh <code>engram init</code> on any git-active repo produces a non-empty mistakes table
-          within seconds. The miner walks revert pairs, extracts the original belief from the
-          reverted commit's subject, and writes a bi-temporal mistake node. No manual <code>engram
-          learn</code> seeding required.
+          <code>engram callers &lt;symbol&gt;</code>, <code>engram callees &lt;symbol&gt;</code>, and
+          <code>engram impact &lt;symbol&gt;</code> walk the same reference graph — trace what calls a
+          function, what it calls, and the blast radius of a change, straight from the CLI or MCP.
         </p>
       </article>
 
       <article class="v3-card">
-        <div class="v3-card-tag">marketplace</div>
-        <h3 class="v3-card-title"><span class="accent">★</span> engram-skill-pack</h3>
+        <div class="v3-card-tag">day-1</div>
+        <h3 class="v3-card-title"><span class="accent">★</span> Day-1 mistakes</h3>
         <p class="v3-card-body">
-          Sibling repo ships engram as Claude Code Skills. Three active skills today
-          (<code>engram-mistakes</code>, <code>engram-query</code>, <code>engram-gods</code>),
-          full five-skill surface in v0.3.0. <code>npx @anthropic-ai/claude-code add
-          nickcirv/engram-skill-pack</code> — one command to install.
+          A bug-fix-commit miner reads <code>fix:</code> / <code>fixes #N</code> commits — not just
+          rare reverts — so a fresh <code>engram init</code> surfaces real landmines immediately. A
+          per-session value line then shows what engram kept out of context each session. (v4.0's
+          bi-temporal revert mistakes still ship — see CHANGELOG.)
         </p>
       </article>
     </div>
@@ -1176,7 +1178,7 @@
           </div>
           <div class="terminal-body">
 <pre id="step-01"><span class="prompt">$</span><span class="cmd">npm install -g engramx</span>
-<span class="out-dim">↳</span> <span class="out-info">added engramx@3.0.0 in 4s</span></pre>
+<span class="out-dim">↳</span> <span class="out-info">added engramx@4.1.0 in 4s</span></pre>
           </div>
         </div>
       </article>
@@ -1248,8 +1250,9 @@
           structure, recent edits, related decisions, known mistakes — packs
           ~500 tokens, denies the original Read with the packet as the reason.
           The agent sees a richer answer than the file itself, in a fraction
-          of the tokens. Multiplied across a session: <strong>89.1% measured
-          savings</strong> on 87 real files of engramx itself — reproducible via
+          of the tokens. Across engramx's own source the per-file structural
+          context reduction is <strong>up to ~89%</strong> (structural, not a
+          bill saving — your repo varies) — reproducible via
           <code style="color:var(--accent);">npx tsx bench/real-world.ts</code>.
         </p>
 
@@ -1318,8 +1321,8 @@
       <!-- Big metric cell -->
       <div class="bento-cell">
         <span class="label">// measured, reproducible</span>
-        <span class="big-number"><span class="accent">89.1</span>%</span>
-        <p>real-world token savings on 87 source files of engramx itself. Committed report at <code style="color:var(--accent);">bench/results/</code>. Reproduce with one command.</p>
+        <span class="big-number">~<span class="accent">89</span>%</span>
+        <p>per-file structural context reduction on engramx's own source — structural, not a bill saving; your repo varies. Committed report at <code style="color:var(--accent);">bench/results/</code>. Reproduce with one command.</p>
       </div>
 
       <div class="bento-cell">
@@ -1425,8 +1428,9 @@
     </div>
 
     <p class="intro-copy reveal" style="max-width: 680px; color: var(--text-secondary); font-size: 14px; line-height: 1.7; margin-top: 16px;">
-      The <strong style="color:var(--text);">89.1% savings</strong> is what you get with engramx's
-      9 built-in providers. Every MCP server you plug in covers another context gap — cross-file symbols,
+      The <strong style="color:var(--text);">up-to-~89% structural reduction</strong> is what engramx's
+      9 built-in providers measure on its own repo (structural, not a bill saving — your repo varies).
+      Every MCP server you plug in covers another context gap — cross-file symbols,
       production errors, schema, tickets, library docs — that the agent would otherwise burn tokens
       researching. And because every provider is budget-capped + budget-weighted reranked, more plugins
       = more <strong style="color:var(--text);">relevant</strong> context without packet bloat.
@@ -1783,7 +1787,7 @@
       </details>
 
       <details>
-        <summary>How is the 89.1% number measured?</summary>
+        <summary>How is the ~89% number measured?</summary>
         <div class="faq-body">
           End-to-end on 87 real source files from engramx itself. For every file we compare the raw-file-read
           token cost (bytes / 4) against the rich-packet cost the resolver produces. Script lives at
@@ -1881,8 +1885,8 @@
       Stop paying for context<br>you've already paid for.
     </h2>
     <p style="max-width: 58ch; color: var(--text-secondary); margin: 0;">
-      One command. The next session has memory. <strong style="color:var(--text);">89.1% fewer tokens</strong>
-      in a reproducible benchmark. Any MCP server becomes a provider in 10 lines. Zero cloud, zero
+      One command. The next session has memory. <strong style="color:var(--text);">Up to ~89% fewer context tokens</strong>
+      (structural, your repo varies) in a reproducible benchmark. Any MCP server becomes a provider in 10 lines. Zero cloud, zero
       telemetry, Apache 2.0 — uninstall whenever, it's 30 seconds back either way.
     </p>
     <div class="cta-row" style="margin-top: 0.5rem;">

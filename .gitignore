@@ -11,8 +11,10 @@ dist/
 .aider-context.md
 .context/
 .cursor/
-# Dated benchmark result files (TEMPLATE.csv is tracked for reference)
+# Dated benchmark result files (TEMPLATE.csv is tracked for reference).
+# Generated reports embed the absolute project path — keep them out of git.
 bench/results/*.json
+bench/results/real-world-2*.md
 
 # Local planning docs (not published)
 .planning/

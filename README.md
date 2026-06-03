@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v4.0 'Skill Pack')" width="100%">
+  <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v4.1 'Compass')" width="100%">
 </p>
 
 <p align="center">
@@ -86,8 +86,8 @@ mkdir -p /tmp/engram-demo && cd /tmp/engram-demo && \
   echo "export const buggy = () => null;" > src.ts && \
   git add -A && git commit -q -m "feat: add buggy helper returning null causing form crashes" && \
   git revert --no-edit HEAD > /dev/null && \
-  npx --yes engramx@4.0.0 init . && \
-  npx --yes engramx@4.0.0 mistakes
+  npx --yes engramx@4.1.0 init . && \
+  npx --yes engramx@4.1.0 mistakes
 ```
 
 You should see, within 30 seconds, the **bi-temporal pre-mortem** engram auto-captured from your revert:
@@ -115,13 +115,13 @@ Three things broke at the same time. Cursor went usage-based and people started 
 
 Engramx is what makes the session last longer. It indexes your codebase into a local SQLite knowledge graph once. Then it intercepts file reads at the agent boundary and replaces them with a structural summary the agent already has the working memory for. Same edit, same diff, same code shipped — fewer tokens consumed in the round trip.
 
-On engramx's own 87-file repo, the **per-file structural context reduction is 89.1%** (codebase-dependent — `bench/real-world.ts` reproduces it on any project you point it at). This is a *structural* token-reduction measured on this codebase, not an agent-loop cost-savings figure, and it varies by repo. Independent migration guides ([dev.to/56kode](https://dev.to/56_kode/why-were-moving-from-cursor-to-claude-code-and-why-you-should-too-9kh), [SpectrumAI Lab](https://spectrumailab.com/blog/claude-code-vs-cursor)) cite engram for the strongest measured structural reduction in the category.
+On engramx's own repo the **per-file structural context reduction is ~89%** (89.5% in the latest `bench/real-world.ts` run, size-guarded so it never counts a file engram wouldn't shrink). Across eight real OSS repos it ranges roughly **50–90% — highest on large-file Python/Go codebases, lower on many-small-file projects** (`bench/real-world.ts` reproduces it on any project you point it at). This is a *structural* context-packet reduction measured per file, **not** an agent-loop cost saving, and it varies by repo. Independent migration guides ([dev.to/56kode](https://dev.to/56_kode/why-were-moving-from-cursor-to-claude-code-and-why-you-should-too-9kh), [SpectrumAI Lab](https://spectrumailab.com/blog/claude-code-vs-cursor)) cite engram for the strongest measured structural reduction in the category.
 
 Works in 8 IDEs and counting — Claude Code, Cursor, Cline, Continue.dev, Aider, Windsurf, Zed, OpenAI Codex CLI. One install, one graph, every tool benefits. Apache 2.0. Local SQLite. Nothing leaves your machine.
 
-> **v4.0 "Skill Pack" shipped 2026-05-18 — in 30 seconds:** Bi-temporal mistakes auto-fire before your agent repeats them. Fresh installs auto-capture mistakes from git revert history. Hook auto-installs on `engram init`. Skill-pack sibling repo ships engram to the Claude Code Marketplace in one command.
+> **v4.1 "Compass" shipped 2026-06-03 — engram now ranks the graph.** A real cross-file reference graph (tree-sitter `calls` edges) is built at `engram init`, and query results are ranked by **personalized PageRank** over it — importance flows from who-references-you, recursively, biased toward your query, instead of raw edge-degree. engram is the only tool in its category that *ranks* the graph rather than dumping it. New traversal commands `engram callers <symbol>`, `engram callees <symbol>`, and `engram impact <symbol>` walk the same edges.
 >
-> v3.x captured mistakes when asked; v4.0 surfaces past corrections *before* the agent makes the edit. Schema v9 adds four bi-temporal fields per mistake (`then_believed`, `found_false_at`, `truth_now`, `applies_to`). A new **git-revert miner** auto-populates them from your repo's revert history — fresh `engram init` produces a non-empty mistakes table within seconds, no manual seeding needed. `engram init` now **auto-installs** the Sentinel hook by default (opt out with `--no-hook`) and the mistake-guard runs in `permissive` mode by default (opt out with `ENGRAM_MISTAKE_GUARD=0`). Sibling repo **[engram-skill-pack](https://github.com/NickCirv/engram-skill-pack)** ships engram as Claude Code Skills via the Anthropic Marketplace — three active skills (`engram-mistakes`, `engram-query`, `engram-gods`), full five-skill surface in v0.3.0. **Mesh moves to v4.5** behind `ENGRAM_MESH_EXPERIMENTAL=1`; the May 18 strategic re-cut prioritised distribution-via-skills over federation. 1025 tests passing. See [CHANGELOG.md](CHANGELOG.md) for the full v4.0 diff.
+> Also new: **day-1 mistakes** — a bug-fix-commit miner (`fix:` / `fixes #N`, not just rare reverts) means a fresh `engram init` surfaces real landmines immediately, and a **per-session value line** (Stop hook) shows what engram kept out of context each session. And the **honesty pass**: every surface now frames the per-file win as a *structural context-packet reduction, not a cost saving* (engram's net agent-loop cost over prompt caching is ~0); the Read hook is size-guarded so a reported reduction is never negative, and `bench/real-world.ts` self-discloses its baseline. Incremental re-index now maintains the reference graph atomically, so ranking stays fresh between full inits. 1074 tests passing. See [CHANGELOG.md](CHANGELOG.md) for the full v4.1 diff (and v4.0 "Skill Pack" — bi-temporal mistakes from git-revert history).
 
 <details>
 <summary><strong>Earlier release notes (v3.4 "Universal Spine", May 2)</strong></summary>
@@ -181,9 +181,9 @@ Your AI coding agent keeps re-reading the same files. Every `Read`, every `Edit`
 
 The agent gets what it needs, structured. And **every plugin you add extends what engram can surface** — Serena for LSP symbols, GitHub MCP for issue context, Sentry MCP for production errors, Supabase / Neon for schema. Each one closes a context gap the agent would otherwise spend turns researching. (More providers = more capability; whether they net fewer tokens on a given task depends on the task — measure it on yours.)
 
-**Per-file structural reduction on a reproducible benchmark: 89.1%** (engramx's own codebase; structural token reduction, not agent-loop cost). 85 of 87 real source files saw reduced per-file token cost. Best case 98.4% (18,820 tokens → 306). Your per-repo numbers vary.
+**Per-file structural reduction on a reproducible benchmark: up to ~89%** (engramx's own codebase; structural token reduction, not agent-loop cost). On the committed 87-file run, 85 of 87 real source files saw reduced per-file token cost, best case 98.4% (18,820 tokens → 306); a fresh sample of 50 files reduces ~89.5% aggregate. Your per-repo numbers vary — run it on yours.
 
-> **What this number is (and isn't):** 89.1% is a *per-file structural context reduction* measured on engramx's own repo with all 9 providers active — it measures how much smaller engram's context packet is than reading the full files raw. It is **not** an agent-loop cost-savings figure and will differ on your codebase. Your actual dollar saving depends on your prompt-caching setup and workload — run the benchmark on your own repo (see [Benchmark](#benchmark)) to get your structural number.
+> **What this number is (and isn't):** ~89% is a *per-file structural context reduction* measured on engramx's own repo with all 9 providers active — it measures how much smaller engram's context packet is than reading the full files raw. It is **not** an agent-loop cost-savings figure and will differ on your codebase. Your actual dollar saving depends on your prompt-caching setup and workload — run the benchmark on your own repo (see [Benchmark](#benchmark)) to get your structural number.
 
 ### One command to everything
 

@@ -6,12 +6,15 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+## [4.1.0] — 2026-06-03 — "Compass"
+
 ### Added
 - **Ranked context (PageRank).** A real cross-file reference graph is now
   built at `engram init` (tree-sitter call/reference extraction → `calls`
   edges), and query results are ranked by personalized PageRank over it —
   importance flows from who-references-you, recursively, biased toward your
-  query. Replaces the previous raw edge-degree ordering.
+  query. Replaces the previous raw edge-degree ordering. engram is the only
+  tool in its category that *ranks* the graph rather than dumping it.
 - **Graph traversal commands:** `engram callers <symbol>`,
   `engram callees <symbol>`, `engram impact <symbol>` over the reference graph.
 - **Per-session value summary.** A Stop hook prints one line per session:
@@ -26,15 +29,19 @@ All notable changes to engram are documented here. Format based on
   *structural context-packet reduction*, not a cost/bill saving (engram's net
   agent-loop cost over prompt caching is ~0; the benchmark self-discloses its
   baseline). No headline cost claims.
+- **Reduction is now honest by construction.** The Read hook only replaces a
+  file read when its structural packet is actually *smaller* than the file
+  (`statSync` size-guard) — tiny files pass through untouched, so a reported
+  saving is never negative. The benchmark reports both raw per-file reduction
+  and an **effective (size-guarded)** number — what engram actually delivers.
+- **Incremental re-index now maintains the reference graph.** The full
+  `calls`-edge set is rebuilt atomically (single transaction, rollback on
+  failure) on every init including incremental, so PageRank ranking stays
+  fresh between full inits — no manual refresh needed.
 - **Proactive mistake warnings are high-precision** — only high-confidence
   mistakes (git reverts, explicit `engram learn`) warn before an edit;
   inferred bug-fix/session mistakes stay browsable via `engram mistakes` but
   never nag.
-
-### Known limitations
-- The reference graph (and thus PageRank ranking) is rebuilt on **full**
-  `engram init`. Incremental re-index does not yet maintain `calls` edges, so
-  ranking can drift between full inits — run `engram init` to refresh.
 
 ## [4.0.0] — 2026-05-18 — "Skill Pack"
 
