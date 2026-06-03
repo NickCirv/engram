@@ -16,16 +16,30 @@
  * real grep runs. Default to doing nothing; act only when provably helpful.
  *
  * Returns:
- *   - A deny response whose reason is engram's caller list (the files that
- *     reference the symbol), when the pattern is a known symbol with references.
+ *   - A deny response whose reason is engram's call-site list (the actual
+ *     `file:line: code` lines that reference the symbol, from the files that
+ *     call it), when the pattern is a known symbol with references.
  *   - PASSTHROUGH (null) otherwise — caller writes nothing, exits 0, the real
  *     Grep runs unchanged.
  * Never throws. Every error path resolves to PASSTHROUGH via wrapSafely.
  */
+import { readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { PASSTHROUGH, isHookDisabled, type HandlerResult } from "../safety.js";
 import { findProjectRoot, isValidCwd } from "../context.js";
 import { buildDenyResponse } from "../formatter.js";
 import { callers } from "../../core.js";
+
+/** Bounds that keep the packet richer than a file list yet smaller than a raw
+ *  repo-wide grep (ADR-0004). */
+const MAX_CALLER_FILES = 15;
+const MAX_SITES = 25;
+const MAX_LINE_LEN = 140;
+const MAX_FILE_BYTES = 1_000_000;
+/** Below this many caller files a content grep is small enough that engram's
+ *  packet + boilerplate would cost MORE than the grep it replaces — so pass
+ *  through. The win scales with usage; this floors out the regressing tail. */
+const MIN_CALLER_FILES = 4;
 
 export interface GrepHookPayload {
   tool_name?: string;
@@ -80,6 +94,12 @@ export async function handleGrep(
     return PASSTHROUGH;
   }
 
+  // (1b) Output-mode gate (ADR-0004): engram's call-site packet can only beat a
+  // CONTENT grep (matching lines). The default `files_with_matches` and `count`
+  // modes return just filenames / a number — cheaper than any packet — so for
+  // those, pass through and let the agent's cheap grep run.
+  if (payload.tool_input?.output_mode !== "content") return PASSTHROUGH;
+
   // (2) Resolve the project root from cwd (no file path on a Grep).
   const cwd = payload.cwd;
   if (typeof cwd !== "string" || !isValidCwd(cwd)) return PASSTHROUGH;
@@ -89,28 +109,112 @@ export async function handleGrep(
   // (3) Kill switch.
   if (isHookDisabled(projectRoot)) return PASSTHROUGH;
 
-  // (4) Ask the reference graph who references this symbol. No callers means
-  // either an unknown symbol or a textual-only occurrence — let grep run.
+  // (4) Ask the reference graph who references this symbol. Fewer than
+  // MIN_CALLER_FILES → a content grep would be small enough that engram's packet
+  // would cost more; pass through. (0 callers = unknown / textual-only symbol.)
   const callerFiles = await callers(projectRoot, pattern);
-  if (callerFiles.length === 0) return PASSTHROUGH;
+  if (callerFiles.length < MIN_CALLER_FILES) return PASSTHROUGH;
 
-  return buildDenyResponse(buildGrepAnswer(pattern, callerFiles));
+  // (5) Pull the actual call-site lines from those files (ADR-0004) so the
+  // packet answers "where/how is it used", not just "which files". If the scan
+  // finds nothing (e.g. the edge came from dynamic dispatch the literal symbol
+  // word doesn't appear), let the agent's grep run.
+  const found = collectCallSites(projectRoot, callerFiles, pattern);
+  if (found.sites.length === 0) return PASSTHROUGH;
+
+  return buildDenyResponse(buildGrepAnswer(pattern, callerFiles.length, found));
+}
+
+interface CallSite {
+  readonly file: string;
+  readonly line: number;
+  readonly text: string;
+}
+interface CallSiteScan {
+  readonly sites: readonly CallSite[];
+  readonly filesOmitted: number;
+  readonly truncated: boolean;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
- * Format engram's structural answer plus the explicit escalation path. The
+ * Scan the resolved caller files for the lines that reference `symbol`
+ * (word-boundary) — the actual call sites the agent grepped for (ADR-0004).
+ * Bounded so the packet stays smaller than a raw grep: at most MAX_CALLER_FILES
+ * files, MAX_SITES lines, each trimmed to MAX_LINE_LEN; files > MAX_FILE_BYTES
+ * are skipped. Best-effort — unreadable files are skipped, never throws.
+ */
+function collectCallSites(
+  projectRoot: string,
+  callerFiles: readonly string[],
+  symbol: string
+): CallSiteScan {
+  // Identifier boundaries via lookarounds (not `\b`) so symbols containing `$`
+  // (jQuery/legacy) anchor correctly — `\b` can't sit next to a non-word `$`.
+  const re = new RegExp(`(?<![\\w$])${escapeRegExp(symbol)}(?![\\w$])`);
+  const sites: CallSite[] = [];
+  const scanFiles = callerFiles.slice(0, MAX_CALLER_FILES);
+  const filesOmitted = callerFiles.length - scanFiles.length;
+  let truncated = false;
+
+  for (const rel of scanFiles) {
+    if (sites.length >= MAX_SITES) {
+      truncated = true;
+      break;
+    }
+    let content: string;
+    try {
+      if (statSync(join(projectRoot, rel)).size > MAX_FILE_BYTES) continue;
+      content = readFileSync(join(projectRoot, rel), "utf-8");
+    } catch {
+      continue;
+    }
+    const lines = content.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (sites.length >= MAX_SITES) {
+        truncated = true;
+        break;
+      }
+      if (!re.test(lines[i])) continue;
+      let text = lines[i].trim();
+      if (text.length > MAX_LINE_LEN) text = text.slice(0, MAX_LINE_LEN) + "…";
+      sites.push({ file: rel, line: i + 1, text });
+    }
+  }
+  return { sites, filesOmitted, truncated };
+}
+
+/**
+ * Render engram's call-site answer plus the explicit escalation path. The
  * escalation line is non-negotiable — it's what makes denying the grep
  * recall-safe (the agent can always get the full textual matches).
  */
-function buildGrepAnswer(pattern: string, callerFiles: string[]): string {
-  const list = callerFiles.map((f) => `  - ${f}`).join("\n");
+function buildGrepAnswer(
+  symbol: string,
+  callerCount: number,
+  scan: CallSiteScan
+): string {
+  const lines = scan.sites.map((s) => `  ${s.file}:${s.line}: ${s.text}`);
+  const head =
+    `[engram] "${symbol}" — ${scan.sites.length}${scan.truncated ? "+" : ""} ` +
+    `call site(s) across ${callerCount} file(s) (resolved \`calls\` edges):`;
+  // When capped, don't claim a specific omitted-file count — the line cap can
+  // hit before all caller files are scanned, so any number would be wrong. Just
+  // point at the rg escalation for the complete set.
+  const capNote =
+    scan.truncated || scan.filesOmitted > 0
+      ? [`  … more call sites exist — run the rg command below for the complete set.`]
+      : [];
   return [
-    `[engram] "${pattern}" is referenced by ${callerFiles.length} file(s) ` +
-      `in the reference graph (structural \`calls\` edges):`,
-    list,
+    head,
+    ...lines,
+    ...capNote,
     "",
-    "This is engram's structural answer — resolved function/class references " +
-      "only. It does NOT include comments, strings, or dynamic references. " +
-      `If you need full textual matches, run: rg -n "${pattern}"`,
+    "This is engram's structural answer — resolved references in files that " +
+      "call the symbol. It may omit comments, strings, and dynamic references. " +
+      `For a full textual search, run: rg -n "${symbol}"`,
   ].join("\n");
 }

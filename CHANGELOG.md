@@ -21,9 +21,15 @@ All notable changes to engram are documented here. Format based on
 - **Grep interception (research-loop elimination — ADR-0001).** A new
   `PreToolUse:Grep` handler answers symbol-usage searches from the `calls`
   reference graph instead of letting a raw match dump flood the context window.
-  When the agent greps a bare identifier that's a known symbol with references,
-  engram denies the grep and returns the list of files that reference it,
-  plus the exact `rg -n "<pattern>"` escalation command. **Recall-safe by
+  For a **content-mode** grep of a well-referenced symbol (≥4 caller files),
+  engram denies the grep and returns the actual **call-site lines**
+  (`file:line: code`, scanned from the resolved caller files, deduplicated and
+  capped — ADR-0004) plus the exact `rg -n "<pattern>"` escalation command.
+  The call-site lines give the agent the usage context it grepped for (so it
+  rarely re-greps) while staying smaller than the content grep it replaces — e.g.
+  on engram's own repo `init` is 573 tok vs 9,317 for the raw grep. Default
+  `files_with_matches` / `count` greps and low-usage symbols pass through (their
+  grep is already cheaper than any packet). **Recall-safe by
   construction:** regex/text/multi-word/stopword patterns and unknown symbols
   pass straight through (grep out-recalls the structural graph there), and the
   escalation command means the agent can always recover full textual matches in

@@ -52,6 +52,14 @@ export function lookup(name: string): number {
 }
 `
     );
+    // 3 more caller files so hashToken clears MIN_CALLER_FILES (≥4 callers →
+    // a content grep is big enough that engram's packet is a real win).
+    for (const n of [2, 3, 4]) {
+      writeFileSync(
+        join(projectRoot, "src", `svc${n}.ts`),
+        `import { hashToken } from "./util";\nexport function use${n}(x: string): number { return hashToken(x); }\n`
+      );
+    }
     await init(projectRoot);
   });
 
@@ -59,11 +67,17 @@ export function lookup(name: string): number {
     rmSync(projectRoot, { recursive: true, force: true });
   });
 
-  function grepPayload(pattern: string): Record<string, unknown> {
+  function grepPayload(
+    pattern: string,
+    outputMode: string | undefined = "content"
+  ): Record<string, unknown> {
     return {
       tool_name: "Grep",
       cwd: projectRoot,
-      tool_input: { pattern },
+      tool_input:
+        outputMode === undefined
+          ? { pattern }
+          : { pattern, output_mode: outputMode },
     };
   }
 
@@ -127,7 +141,58 @@ export function lookup(name: string): number {
     // engram's structural answer names the calling file...
     expect(reason).toContain("svc.ts");
     expect(reason).toContain("hashToken");
+    // ...with the ACTUAL call-site lines (file:line: code) — the recall
+    // sufficiency a bare file list lacked (ADR-0004)...
+    expect(reason).toContain("call site");
+    expect(reason).toMatch(/src\/svc\.ts:\d+:/); // file:line prefix
+    expect(reason).toContain("return hashToken(name)"); // a real usage line
     // ...and ALWAYS includes the recall-safety escalation command.
     expect(reason).toContain('rg -n "hashToken"');
+  });
+
+  it("caps the call-site list for a heavily-used symbol", async () => {
+    // a caller file with far more than MAX_SITES (25) references to hashToken
+    const many = Array.from(
+      { length: 60 },
+      (_, i) => `export function use${i}(n: string): number { return hashToken(n) + ${i}; }`
+    ).join("\n");
+    writeFileSync(join(projectRoot, "src", "heavy.ts"), `import { hashToken } from "./util";\n${many}\n`);
+    await init(projectRoot);
+
+    const r = (await handleGrep(grepPayload("hashToken"))) as Record<
+      string,
+      unknown
+    >;
+    const reason = (r.hookSpecificOutput as Record<string, unknown>)
+      .permissionDecisionReason as string;
+    // cap marker present, and the rendered line count never exceeds the cap
+    expect(reason).toContain("more call sites exist");
+    expect(reason).toMatch(/\d+\+ call site/); // "25+ call site(s)"
+    const siteLines = reason.split("\n").filter((l) => /:\d+:/.test(l));
+    expect(siteLines.length).toBeLessThanOrEqual(25);
+  });
+
+  it("passes through a non-content grep (files_with_matches / default / count)", async () => {
+    // engram's call-site packet can't beat a filenames-only or count grep
+    expect(await handleGrep(grepPayload("hashToken", "files_with_matches"))).toBe(
+      PASSTHROUGH
+    );
+    expect(await handleGrep(grepPayload("hashToken", "count"))).toBe(PASSTHROUGH);
+    // output_mode omitted entirely = default files mode → passthrough.
+    // (Built as a raw payload; passing `undefined` to grepPayload would trigger
+    // its `= "content"` default — the classic JS default-param gotcha.)
+    expect(
+      await handleGrep({
+        tool_name: "Grep",
+        cwd: projectRoot,
+        tool_input: { pattern: "hashToken" },
+      } as never)
+    ).toBe(PASSTHROUGH);
+  });
+
+  it("passes through a symbol with too few caller files (content grep is small)", async () => {
+    // `normalize` is called only by svc.ts (1 caller) < MIN_CALLER_FILES → a
+    // content grep would be tiny, so engram's packet would cost more → passthrough
+    expect(await handleGrep(grepPayload("normalize"))).toBe(PASSTHROUGH);
   });
 });
