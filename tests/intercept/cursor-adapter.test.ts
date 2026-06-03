@@ -27,11 +27,32 @@ describe("handleCursorBeforeReadFile", () => {
     authFile = join(projectRoot, "src", "auth.ts");
     writeFileSync(
       authFile,
-      `export class AuthService {}
-export class SessionStore {}
-export function createAuthService() { return new AuthService(); }
-export function verifyToken() { return true; }
-export function hashPassword() { return "h"; }
+      `// Realistically sized so engram's summary is smaller than the file
+// (tiny stubs now pass through by design).
+export class AuthService {
+  validate(token: string): boolean {
+    return typeof token === "string" && token.startsWith("tok_");
+  }
+  issue(userId: string): string { return "tok_" + userId; }
+}
+export class SessionStore {
+  private sessions = new Map<string, number>();
+  create(userId: string): string {
+    const id = "sess_" + userId;
+    this.sessions.set(id, Date.now());
+    return id;
+  }
+  isActive(id: string): boolean { return this.sessions.has(id); }
+}
+export function createAuthService(): AuthService { return new AuthService(); }
+export function verifyToken(t: string): boolean {
+  return typeof t === "string" && t.startsWith("tok_");
+}
+export function hashPassword(p: string): string {
+  let h = 0;
+  for (let i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) | 0;
+  return "h_" + (h >>> 0).toString(16);
+}
 `
     );
     await init(projectRoot);

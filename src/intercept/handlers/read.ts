@@ -15,6 +15,7 @@
  * line of defense only; the primary safety net is `runHandler`.
  */
 import { relative } from "node:path";
+import { statSync } from "node:fs";
 import { getFileContext, getStore } from "../../core.js";
 import {
   resolveInterceptContext,
@@ -119,6 +120,20 @@ export async function handleRead(
   // (9) Confidence threshold — ensure we have enough coverage AND quality
   // to trust the summary as a full-file replacement.
   if (fileCtx.confidence < READ_CONFIDENCE_THRESHOLD) return PASSTHROUGH;
+
+  // (10) Token-saving gate — only intercept when engram's structural summary
+  // is genuinely SMALLER than the file. On a small file the packet floor
+  // exceeds the raw file, so replacing the Read would ADD tokens, not save
+  // them. PASSTHROUGH lets the cheap Read run; this makes "engram saves
+  // tokens" true on every intercepted Read. (Mistakes still surface via the
+  // SessionStart brief and the Edit/Write landmine.)
+  try {
+    const fileTokens = Math.ceil(statSync(ctx.absPath).size / 4);
+    const summaryTokens = Math.ceil(fileCtx.summary.length / 4);
+    if (summaryTokens >= fileTokens) return PASSTHROUGH;
+  } catch {
+    return PASSTHROUGH;
+  }
 
   // Enrich the graph summary with additional providers (Context Spine).
   // Structure is already computed in fileCtx.summary — we resolve the

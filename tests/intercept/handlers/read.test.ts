@@ -51,30 +51,71 @@ describe("handleRead — integration tests", () => {
     // miner (which extracts classes and functions as nodes) produces
     // enough code declarations to cross the 0.7 confidence threshold.
     authFile = join(projectRoot, "src", "auth.ts");
+    // A realistically-sized file (function bodies + comments) so engram's
+    // structural summary is genuinely SMALLER than the raw file — i.e. a file
+    // engram actually saves tokens on. (Tiny stub files now pass through by
+    // design: replacing them would add tokens, not save them.)
     writeFileSync(
       authFile,
-      `export class AuthService {
+      `// Authentication service for the example app.
+// Handles token validation, issuance, session lifecycle, and password hashing.
+export class AuthService {
   constructor(readonly secret: string) {}
-  validate(token: string): boolean { return !!token; }
-  issue(userId: string): string { return "tok_" + userId; }
+
+  validate(token: string): boolean {
+    if (!token || typeof token !== "string") return false;
+    if (!token.startsWith("tok_")) return false;
+    const body = token.slice(4);
+    if (body.length < 3) return false;
+    return body.split("").every((c) => /[a-zA-Z0-9_]/.test(c));
+  }
+
+  issue(userId: string): string {
+    const nonce = Math.floor(userId.length * 31 + this.secret.length);
+    return "tok_" + userId + "_" + nonce.toString(36);
+  }
+
+  rotate(oldToken: string, userId: string): string {
+    if (!this.validate(oldToken)) throw new Error("invalid token");
+    return this.issue(userId);
+  }
 }
 
 export class SessionStore {
   private sessions = new Map<string, number>();
-  create(userId: string): string { return "sess_" + userId; }
-  destroy(sessionId: string): void { this.sessions.delete(sessionId); }
+
+  create(userId: string): string {
+    const id = "sess_" + userId + "_" + this.sessions.size;
+    this.sessions.set(id, Date.now());
+    return id;
+  }
+
+  destroy(sessionId: string): void {
+    this.sessions.delete(sessionId);
+  }
+
+  isActive(sessionId: string): boolean {
+    const ts = this.sessions.get(sessionId);
+    if (ts === undefined) return false;
+    return Date.now() - ts < 3_600_000;
+  }
 }
 
 export function createAuthService(secret: string): AuthService {
+  if (!secret || secret.length < 8) throw new Error("weak secret");
   return new AuthService(secret);
 }
 
 export function verifyToken(token: string): boolean {
-  return token.startsWith("tok_");
+  return typeof token === "string" && token.startsWith("tok_");
 }
 
 export function hashPassword(pw: string): string {
-  return "hash_" + pw;
+  let h = 0;
+  for (let i = 0; i < pw.length; i++) {
+    h = (h * 31 + pw.charCodeAt(i)) | 0;
+  }
+  return "hash_" + (h >>> 0).toString(16);
 }
 `
     );
