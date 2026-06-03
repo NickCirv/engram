@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v4.1 'Compass')" width="100%">
+  <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v4.2 'Loop')" width="100%">
 </p>
 
 <p align="center">
@@ -58,7 +58,7 @@
   <a href="https://open-vsx.org/extension/nickcirv/engram-vscode"><img src="https://img.shields.io/open-vsx/v/nickcirv/engram-vscode?color=blue&label=OpenVSX" alt="OpenVSX engram-vscode"></a>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node">
-  <img src="https://img.shields.io/badge/tests-1025%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-1100%20passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/per--file%20reduction-53--89%25-orange" alt="53-89% per-file structural reduction">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
   <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
@@ -86,8 +86,8 @@ mkdir -p /tmp/engram-demo && cd /tmp/engram-demo && \
   echo "export const buggy = () => null;" > src.ts && \
   git add -A && git commit -q -m "feat: add buggy helper returning null causing form crashes" && \
   git revert --no-edit HEAD > /dev/null && \
-  npx --yes engramx@4.1.0 init . && \
-  npx --yes engramx@4.1.0 mistakes
+  npx --yes engramx@4.2.0 init . && \
+  npx --yes engramx@4.2.0 mistakes
 ```
 
 You should see, within 30 seconds, the **bi-temporal pre-mortem** engram auto-captured from your revert:
@@ -119,9 +119,9 @@ On engramx's own repo the **per-file structural context reduction is ~89%** (89.
 
 Works in 8 IDEs and counting — Claude Code, Cursor, Cline, Continue.dev, Aider, Windsurf, Zed, OpenAI Codex CLI. One install, one graph, every tool benefits. Apache 2.0. Local SQLite. Nothing leaves your machine.
 
-> **v4.1 "Compass" shipped 2026-06-03 — engram now ranks the graph.** A real cross-file reference graph (tree-sitter `calls` edges) is built at `engram init`, and query results are ranked by **personalized PageRank** over it — importance flows from who-references-you, recursively, biased toward your query, instead of raw edge-degree. engram is the only tool in its category that *ranks* the graph rather than dumping it. New traversal commands `engram callers <symbol>`, `engram callees <symbol>`, and `engram impact <symbol>` walk the same edges.
+> **v4.2 "Loop" shipped 2026-06-03 — engram now closes the agent's investigation loop.** The original Context Spine goal was to collapse the whole `grep → read → read` loop, not just the single file read. v4.2 ships the rest: a **Grep interception** that answers a content-mode symbol search from the reference graph with the actual `file:line: code` call sites — smaller than the raw grep (`init` is 573 vs 9,317 tokens on engram's own repo) while showing the real usage — and **same-session read dedup** that returns a pointer instead of re-serving an unchanged file the agent already read.
 >
-> Also new: **day-1 mistakes** — a bug-fix-commit miner (`fix:` / `fixes #N`, not just rare reverts) means a fresh `engram init` surfaces real landmines immediately, and a **per-session value line** (Stop hook) shows what engram kept out of context each session. And the **honesty pass**: every surface now frames the per-file win as a *structural context-packet reduction, not a cost saving* (engram's net agent-loop cost over prompt caching is ~0); the Read hook is size-guarded so a reported reduction is never negative, and `bench/real-world.ts` self-discloses its baseline. Incremental re-index now maintains the reference graph atomically, so ranking stays fresh between full inits. 1074 tests passing. See [CHANGELOG.md](CHANGELOG.md) for the full v4.1 diff (and v4.0 "Skill Pack" — bi-temporal mistakes from git-revert history).
+> Both are **recall-safe by construction** (an `rg -n` escalation path; byte-unchanged + PreCompact/SessionStart reset guards) and **gated so they only fire when they genuinely save tokens** — a default `files_with_matches` grep, a low-usage symbol, or a tiny file all pass straight through. Honest framing throughout: a *structural* context-token reduction, not a bill saving (engram's net agent-loop cost over prompt caching is ~0). A new deterministic **session-level bench** (`bench/session-level.ts`) models the saving as a function of how often the agent re-fetches raw content, instead of quoting one number. 1100 tests passing. See [CHANGELOG.md](CHANGELOG.md) for the full v4.2 diff (and v4.1 "Compass" — PageRank-ranked graph + `callers`/`callees`/`impact` traversal).
 
 <details>
 <summary><strong>Earlier release notes (v3.4 "Universal Spine", May 2)</strong></summary>

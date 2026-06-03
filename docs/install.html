@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>Install · engramx v4.1 "Compass" — ranked code-graph context for every AI coding tool</title>
+<title>Install · engramx v4.2 "Loop" — closes the agent's research loop for every AI coding tool</title>
 <meta name="description" content="One install. Works in Claude Code, Cursor, Cline, Continue, Aider, Codex, Windsurf, Zed. Bi-temporal mistakes auto-fire before your agent repeats them. Auto-captured from git revert history. Auto-installed on engram init. Up to ~89% fewer context tokens (structural, codebase-dependent — not a bill saving). Local SQLite, zero cloud, Apache 2.0.">
 <link rel="canonical" href="https://github.com/NickCirv/engram/blob/main/docs/install.html">
 
-<meta property="og:title" content="engramx v4.1 'Compass' — ranked code-graph context for every AI coding tool. PageRank over a real cross-file reference graph, plus mistakes memory that fires before your agent repeats a fix the repo already reverted.">
+<meta property="og:title" content="engramx v4.2 'Loop' — closes the agent's grep → read investigation loop. Symbol greps answered from the reference graph with real call sites; same-session re-reads deduped. Recall-safe and gated to only fire when it saves tokens.">
 <meta property="og:description" content="npm install -g engramx → engram init. Auto-installs the Sentinel hook. Auto-captures bi-temporal mistakes from git revert. Up to ~89% fewer context tokens (structural, codebase-dependent — not a bill saving). Local SQLite, zero cloud. Apache 2.0.">
 <meta property="og:image" content="https://raw.githubusercontent.com/NickCirv/engram/main/assets/banner-v3.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -847,7 +847,7 @@
       eng<span class="accent">r</span><span class="accent">a</span>m
     </a>
     <ul class="nav-links">
-      <li><a class="nav-link" href="#coming-next">v4.1</a></li>
+      <li><a class="nav-link" href="#coming-next">v4.2</a></li>
       <li><a class="nav-link" href="#whats-new">v3.4</a></li>
       <li><a class="nav-link" href="#install">Install</a></li>
       <li><a class="nav-link" href="#how">How it works</a></li>
@@ -867,7 +867,7 @@
   <div class="container">
     <div class="hero-grid">
       <div>
-        <span class="hero-pill">● v4.1 "Compass" · shipped 2026-06-03 · ranked context graph · 1074 tests</span>
+        <span class="hero-pill">● v4.2 "Loop" · shipped 2026-06-03 · grep + read-dedup interception · 1100 tests</span>
 
         <h1 class="hero-headline reveal">
           your AI agent<br>
@@ -944,58 +944,53 @@
   </div>
 </section>
 
-<!-- ================== WHAT SHIPPED IN v4.1 ================== -->
+<!-- ================== WHAT SHIPPED IN v4.2 ================== -->
 <section class="block" id="coming-next" style="border-top: 1px solid var(--border);">
   <div class="container">
     <div class="section-head">
       <div>
-        <div class="section-eyebrow">// v4.1 · shipped 2026-06-03</div>
-        <h2 class="section-title">Compass: engram ranks the graph.</h2>
+        <div class="section-eyebrow">// v4.2 · shipped 2026-06-03</div>
+        <h2 class="section-title">Loop: engram closes the research loop.</h2>
       </div>
-      <div class="section-meta">1074 tests passing · PageRank ranking · the only ranked tool in its category</div>
+      <div class="section-meta">1100 tests passing · grep + read-dedup interception · recall-safe + gated</div>
     </div>
 
     <p style="color: var(--text-secondary); max-width: 720px; margin-bottom: 2rem;">
-      Earlier versions returned graph neighbours by raw edge-degree. v4.1 builds a real
-      cross-file reference graph at <code>engram init</code> — tree-sitter call extraction into
-      <code>calls</code> edges — and ranks query results by <em>personalized PageRank</em> over
-      it: importance flows from who-references-you, recursively, biased toward your query. Most
-      tools in this space dump the graph; engram is the only one that ranks it. The per-file
-      structural context reduction stays high (~89% on this repo, 50–90% across real OSS repos)
-      and is now size-guarded — engram only replaces a read when its packet is genuinely smaller,
-      so a reported reduction is never negative. Structural, codebase-dependent, not a bill saving.
+      The original goal was to collapse the agent's whole <code>grep → read → read</code>
+      investigation loop, not just the single file read. v4.2 ships the rest — and every piece
+      is gated so it only fires when it genuinely saves tokens, with an escalation path so it
+      can never blind the agent. Structural context-token effect, not a bill saving.
     </p>
 
     <div class="v3-grid">
       <article class="v3-card">
-        <div class="v3-card-tag">ranked</div>
-        <h3 class="v3-card-title"><span class="accent">◆</span> PageRank context</h3>
+        <div class="v3-card-tag">grep</div>
+        <h3 class="v3-card-title"><span class="accent">◆</span> Symbol greps → call sites</h3>
         <p class="v3-card-body">
-          A real cross-file reference graph (<code>calls</code> edges from tree-sitter) is built at
-          init, and query results are ranked by personalized PageRank over it — importance flows
-          from who-references-you, recursively, biased toward your query. The most-referenced
-          symbols surface first instead of a flat edge-degree dump.
+          A content-mode grep for a well-referenced symbol is answered from the reference graph
+          with the actual <code>file:line: code</code> call sites — smaller than the raw grep
+          (<code>init</code>: 573 vs 9,317 tokens on this repo) while showing the real usage.
+          Default filename greps and low-usage symbols pass straight through.
         </p>
       </article>
 
       <article class="v3-card">
-        <div class="v3-card-tag">traversal</div>
-        <h3 class="v3-card-title"><span class="accent">◇</span> callers · callees · impact</h3>
+        <div class="v3-card-tag">dedup</div>
+        <h3 class="v3-card-title"><span class="accent">◇</span> Same-session read dedup</h3>
         <p class="v3-card-body">
-          <code>engram callers &lt;symbol&gt;</code>, <code>engram callees &lt;symbol&gt;</code>, and
-          <code>engram impact &lt;symbol&gt;</code> walk the same reference graph — trace what calls a
-          function, what it calls, and the blast radius of a change, straight from the CLI or MCP.
+          Re-read an unchanged file you already read this session and engram returns a pointer
+          ("it's still in your context above"), not the file again. Byte-unchanged guard, full
+          reads only, and a PreCompact / SessionStart reset so it never points at evicted content.
         </p>
       </article>
 
       <article class="v3-card">
-        <div class="v3-card-tag">day-1</div>
-        <h3 class="v3-card-title"><span class="accent">★</span> Day-1 mistakes</h3>
+        <div class="v3-card-tag">measured</div>
+        <h3 class="v3-card-title"><span class="accent">★</span> Honest session bench</h3>
         <p class="v3-card-body">
-          A bug-fix-commit miner reads <code>fix:</code> / <code>fixes #N</code> commits — not just
-          rare reverts — so a fresh <code>engram init</code> surfaces real landmines immediately. A
-          per-session value line then shows what engram kept out of context each session. (v4.0's
-          bi-temporal revert mistakes still ship — see CHANGELOG.)
+          A deterministic <code>bench/session-level.ts</code> models the session saving as a curve
+          over how often the agent re-fetches raw content — instead of quoting one number. The
+          break-even is the honest headline: engram nets positive unless that fallback rate is high.
         </p>
       </article>
     </div>
@@ -1018,7 +1013,7 @@
         <div class="section-eyebrow">// v3.0 · what's new</div>
         <h2 class="section-title">Six upgrades that make v3.0 land.</h2>
       </div>
-      <div class="section-meta">11 of 12 scope items · 1074 tests · up to ~89% structural reduction (own repo)</div>
+      <div class="section-meta">11 of 12 scope items · 1100 tests · up to ~89% structural reduction (own repo)</div>
     </div>
 
     <div class="v3-grid">
@@ -1178,7 +1173,7 @@
           </div>
           <div class="terminal-body">
 <pre id="step-01"><span class="prompt">$</span><span class="cmd">npm install -g engramx</span>
-<span class="out-dim">↳</span> <span class="out-info">added engramx@4.1.0 in 4s</span></pre>
+<span class="out-dim">↳</span> <span class="out-info">added engramx@4.2.0 in 4s</span></pre>
           </div>
         </div>
       </article>

@@ -6,6 +6,8 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+## [4.2.0] — 2026-06-03 — "Loop"
+
 ### Added
 - **Same-session read dedup (ADR-0003).** Within a session, the Read handler
   records every full read; a subsequent read of the **same, byte-unchanged**
