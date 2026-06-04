@@ -37,9 +37,10 @@ memory, audit). "Ranked" refers only to the **PageRank query ordering**, never t
 | **Differentiation comparison** (#78) | `docs/COMPARISON.md` — verified-facts-only vs CodeGraphContext/codegraph (both query-based MCP + unranked + no mistakes-memory; CodeGraphContext = 13 IDEs > engram's 8) | — |
 | **`engram measure`** (#81) | shipped CLI — honest structural reduction on the USER's own repo; auto-discovers top symbols, all disclosures computed live; only counts genuine reductions | — |
 | **Grep never-worse gate** (#82) | `src/intercept/handlers/grep.ts` — sizes the real grep scoped to the agent's cwd+path+glob; passes through when the packet isn't smaller. Closes a real "never worse" violation found by #81 | **0007** |
+| **Sub-agent context broker** (#83) | `src/intercept/handlers/subagent-start.ts` — registers Claude Code's `SubagentStart`; injects a ~100-tok production-only structural slice per sub-agent (the fan-out regime caching can't help). Honest (a bet, not "never worse"); opt-out `ENGRAM_SUBAGENT_CONTEXT=0` | **0008** |
 | Master plan + Frontier research | `docs/PLAN.md` (four tracks + §9 frontier) · `docs/FRONTIER.md` (5-front pioneer research) · `docs/COMPARISON.md` honesty fix (Aider ranks too) · README cost-claim scrub | — |
 
-**Next (engineering):** **#83 sub-agent context broker** (the flagship pioneer move — biggest honest dollar saving; Phase-0 on cross-IDE sub-agent injection running) + its proof **#85**. Then README hero-asset embed; v4.3 release (#74, Nick 2FA) bundles Bash-grep + measure + the never-worse gate. Frontier moves: #83/#84/#85 (see `docs/FRONTIER.md` §5).
+**Next (engineering):** **#86** — smoke-test SubagentStart `additionalContext` delivery in a REAL Claude Code sub-agent (Nick; the #83 end-to-end gate). Then **#85** (recall→resolve benchmark — proves #82/#83 honestly) and **#84** (compaction-surviving ledger). README hero-asset embed; v4.3 release (#74, Nick 2FA) bundles Bash-grep + measure + never-worse gate + sub-agent broker. Frontier: `docs/FRONTIER.md` §5.
 
 ### Measurement (how we keep ourselves honest)
 
