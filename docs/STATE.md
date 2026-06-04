@@ -42,22 +42,33 @@ ADR index: `docs/adr/0001`–`0004` (grep intercept · session bench · read ded
 
 ---
 
-## Open threads / next-step candidates
+## Roadmap
 
-1. **Bash-grep interception** — agents also run `rg`/`grep` via the **Bash** tool, which bypasses the
-   Grep-tool interception entirely. Closing it extends the v4.2 grep win to the Bash path. Real user
-   value, Phase-0-measurable (how often do agents grep via Bash?). _Strongest next lever._
-2. **git-bugfix-miner hardening** (task #70, deferred, non-blocking) — per-commit `git show` forks,
-   separator-byte parsing, surrogate slice. Perf/robustness, not correctness.
-3. **Workload router** — _parked._ Built on the W1.9 bimodal, our weakest evidence (N=3, high
-   variance). The per-call honest gates we already ship (read size-guard, grep content+caller gate,
-   dedup) are effectively a better router — they only fire when engram genuinely saves. Revisit only
-   if the bimodal firms up with more runs.
+**The full goal — strategy, four tracks (Product / Proof / Distribution / Enterprise), and the
+competitive reframe — now lives in `docs/PLAN.md` (the master form).** This section tracks the Product
+track ("close the loop"). Per PLAN §8, after item A the highest-leverage move is the **Track-D
+before/after demo (#77)**, not more interception — distribution is the binding constraint, not the loop.
+
+| # | Task | Status | Why |
+|---|---|---|---|
+| **A (#71)** | **Bash-grep interception** | **done, audited** (commit pending) | agents `rg`/`grep` via the **Bash** tool, bypassing the v4.2 Grep-tool win entirely. Reuses `handleGrep` + all gates; ADR-0005; 51/51 bash tests; full suite 1110; adversarial SHIP. Net-new coverage for shell-only IDEs (Aider/Codex/Cline). |
+| B (#72) | Bash exploration intercept (`ls`/`find`/`tree`/Glob) | blocked by A | directory listings flood context; answer from the graph's file tree, gated. |
+| C (#73) | Cumulative session measurement (replay/live) | blocked by A,B | prove the *combined* saving end-to-end (transcript replay over real logs), not per-mechanism. |
+| D (#74) | Release **v4.3** (Bash bundle) | blocked by A,B | ship the Bash interceptions to users (else stranded on main). Nick 2FA. |
+| E (#75) | git-bugfix-miner hardening | backlog | perf/robustness, non-blocking. |
+| F (#76) | Workload router | **PARKED** | built on N=3 (weakest evidence); the per-call gates are already a better router. Revisit only if W1.9 firms up. |
+
+## Operating rhythm (every task)
+
+`Phase-0 measure → ADR → build (gated + recall-safe + opt-out) → triple-audit (tsc + full suite + e2e
+from the built CLI) → adversarial review (it has caught a real issue every single feature this arc) →
+leak-audit → ship + CI-green`. Update this file + the memory anchor after each. Never claim done
+without the verification output.
 
 ## Gated (needs Nick / not engineering)
 
-- **LEAK-P2** — purge advisory docs + paths from OLD engram-counter history (git-filter-repo +
-  force-push). Drafted; awaiting authorization.
+- **LEAK-P2** (task #65) — purge advisory docs + paths from OLD engram-counter history (git-filter-repo
+  + force-push). Drafted; awaiting authorization.
 
 ## Working rhythm (what produced this arc)
 
