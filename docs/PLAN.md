@@ -135,3 +135,23 @@ interception.** Recommended sequence:
    informed by what the demo reveals.
 
 Open to Nick's steer on step 3. Steps 1–2 proceed now.
+
+## 9. The frontier (where we pioneer) — see `docs/FRONTIER.md`
+
+A 5-front research sweep (2026-06-04) mapped the whole realm of context-token efficiency and the
+unoccupied white space. Key results that reshape the roadmap:
+
+- **The value thesis is validated:** less + ranked + relevant context measurably *improves* agent
+  resolve-rate (Chroma context-rot: 18 models degrade 20–50%; SWE-Pruner 64% vs 54%; lost-in-the-middle
+  30%+). Lead with **capacity + quality** — it's evidence-backed, not marketing.
+- **Honesty correction:** PageRank ranking is **not** unique — Aider's repomap ranks too. The moat is the
+  **combination**: ranked *and* hook-auto-injected *and* mistakes-memory *and* honestly measured. (Fixed
+  in COMPARISON.md.)
+- **Where engram nets a REAL dollar saving** (honest exceptions to "net ≈ 0"): the cache-hostile regimes
+  caching can't touch — first-reads, edit-busts, and especially **sub-agent fan-out (~15× tokens, fresh
+  cache write per agent)**.
+
+Pioneering moves now tracked: **#83 sub-agent context broker** (F1 — the biggest honest dollar lever),
+**#84 compaction-surviving session ledger** (F2), **#85 recall→resolve benchmark** (F3 — the procurement-
+grade honesty moat). #83 + #85 are the highest-leverage pair: F1 saves real cost where caching can't, F3
+proves it without over-claiming.

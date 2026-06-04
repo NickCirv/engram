@@ -34,7 +34,10 @@ where one competitor does — that's a deliberate choice, explained next, not a 
 2. **Ranking.** A graph that treats every node equally hands the agent a flat neighbourhood. engram ranks
    the reference graph with PageRank, so a symbol search returns the *important* call-sites first — which
    is what lets a ranked subset answer the question instead of a flood of matches. ("Ranked" refers to
-   query ordering only — never a re-ordering of your grep results behind your back.)
+   query ordering only — never a re-ordering of your grep results behind your back.) In fairness, ranking
+   alone isn't unique — **Aider's repomap also ranks via PageRank**; it differentiates engram from the
+   *unranked* MCP-server tools above. The moat versus the whole field is the **combination** — ranked
+   *and* hook-auto-injected *and* mistakes-memory *and* honestly measured (see `docs/FRONTIER.md`).
 
 3. **Past-mistakes memory.** engram mines `fix:` / `fixes #N` history into a bi-temporal memory and
    surfaces the relevant past mistake when the agent is about to touch the same code. No other local-graph
