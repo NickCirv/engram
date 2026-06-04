@@ -24,6 +24,7 @@
  * Never throws. Every error path resolves to PASSTHROUGH via wrapSafely.
  */
 import { readFileSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { PASSTHROUGH, isHookDisabled, type HandlerResult } from "../safety.js";
 import { findProjectRoot, isValidCwd } from "../context.js";
@@ -71,6 +72,48 @@ const STOPWORDS = new Set([
   "boolean", "value", "error", "result", "data", "type", "interface",
   "todo", "fixme", "console", "test", "default",
 ]);
+
+/** Token estimate — same ~4-chars/token heuristic the benches use. */
+const estimateTokens = (t: string): number => Math.ceil(t.length / 4);
+
+/**
+ * A conservative token FLOOR for the content grep the agent would otherwise get,
+ * sized against the AGENT'S OWN SCOPE (its cwd + `path` + `glob`) — not the whole
+ * repo. `rg -wF` (word-boundary, fixed-string) is the FEWEST matches the agent
+ * could see (its default substring grep returns at least as many). If engram's
+ * repo-wide packet isn't smaller than this scoped floor, intercepting would cost
+ * more tokens than the grep it replaces, so the handler passes through ("never
+ * worse", ADR-0007). Returns:
+ *   - the floor (0 when the scope has no matches),
+ *   - `Number.MAX_SAFE_INTEGER` when the raw is too big to buffer/finish (a
+ *     guaranteed win → caller intercepts),
+ *   - `null` when it can't size safely (rg missing / unknown error) → caller
+ *     must PASS THROUGH (never add tokens we can't justify). Never throws.
+ */
+function rawGrepFloorTokens(
+  pattern: string,
+  cwd: string,
+  target: string,
+  glob: string | undefined
+): number | null {
+  const args = ["-wF", "--no-heading", "--line-number"];
+  if (glob) args.push("-g", glob);
+  args.push("--", pattern, target);
+  try {
+    const out = execFileSync("rg", args, {
+      cwd,
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 5000,
+    });
+    return estimateTokens(out);
+  } catch (e) {
+    const err = e as { status?: number; code?: string; killed?: boolean };
+    if (err.status === 1) return 0; // no matches in the agent's scope
+    if (err.code === "ENOBUFS" || err.killed) return Number.MAX_SAFE_INTEGER; // huge raw → real win
+    return null; // rg missing / unknown → can't size the agent's scope → pass through
+  }
+}
 
 export async function handleGrep(
   payload: GrepHookPayload
@@ -122,7 +165,27 @@ export async function handleGrep(
   const found = collectCallSites(projectRoot, callerFiles, pattern);
   if (found.sites.length === 0) return PASSTHROUGH;
 
-  return buildDenyResponse(buildGrepAnswer(pattern, callerFiles.length, found));
+  // (6) Never-worse size gate (ADR-0007, #82): the packet must actually be
+  // smaller than the grep the agent would otherwise get. MIN_CALLER_FILES is only
+  // a proxy. Crucially, size the floor against the AGENT'S scope (its cwd + path +
+  // glob) — an agent grepping a subdir gets a small result the repo-wide packet
+  // could exceed. We keep the promise only by comparing against what the agent
+  // actually gets; when its scope can't be faithfully reproduced (a non-string
+  // path/glob) or sized (rg missing), pass through.
+  const ti = payload.tool_input ?? {};
+  if (ti.path !== undefined && typeof ti.path !== "string") return PASSTHROUGH;
+  if (ti.glob !== undefined && typeof ti.glob !== "string") return PASSTHROUGH;
+  const answer = buildGrepAnswer(pattern, callerFiles.length, found);
+  const rawFloor = rawGrepFloorTokens(
+    pattern,
+    cwd,
+    typeof ti.path === "string" ? ti.path : ".",
+    typeof ti.glob === "string" ? ti.glob : undefined
+  );
+  if (rawFloor === null) return PASSTHROUGH; // can't size the agent's scope → never-worse
+  if (estimateTokens(answer) >= rawFloor) return PASSTHROUGH;
+
+  return buildDenyResponse(answer);
 }
 
 interface CallSite {

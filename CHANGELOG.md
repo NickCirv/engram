@@ -34,6 +34,14 @@ All notable changes to engram are documented here. Format based on
   is a plain content symbol grep passes straight through.
 
 ### Fixed
+- **Grep interception now honours "never worse" by measurement (ADR-0007).** The
+  Grep handler gated only on `MIN_CALLER_FILES` (a proxy); on a symbol with ≥4
+  caller files but few short call sites the call-site packet could come out
+  *larger* than the raw grep — engram intercepted and increased context. It now
+  sizes the real grep (`rg -wF`, a conservative word-boundary floor) **scoped to
+  the agent's own cwd + `path` + `glob`** and passes through if the packet isn't
+  actually smaller. A scoped grep the repo-wide packet would exceed, a scope it
+  can't reproduce, or a missing `rg` → pass through. Surfaced by `engram measure`.
 - `tsx` was missing from `devDependencies`, so `npm run bench` / `stress` / `demo`
   failed in a fresh clone. Added it.
 

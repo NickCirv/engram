@@ -366,15 +366,19 @@ export function hashPassword(p: string): string {
   });
 
   it("delegates a Bash 'rg <symbol>' to handleGrep — call-site packet (ADR-0005)", async () => {
-    // a symbol referenced by ≥4 caller files so the grep gate (MIN_CALLER_FILES) fires
+    // Many caller files, two calls each, so the raw grep is genuinely larger
+    // than engram's packet — a real win that clears the ADR-0007 never-worse
+    // size gate (not just MIN_CALLER_FILES).
     writeFileSync(
       join(projectRoot, "src", "hashutil.ts"),
       "export function hashThing(s: string): number { let h = 0; for (const c of s) h = (h*31 + c.charCodeAt(0))|0; return h >>> 0; }\n"
     );
-    for (const n of [1, 2, 3, 4]) {
+    for (let n = 1; n <= 16; n++) {
       writeFileSync(
         join(projectRoot, "src", `caller${n}.ts`),
-        `import { hashThing } from "./hashutil";\nexport function use${n}(x: string): number { return hashThing(x); }\n`
+        `import { hashThing } from "./hashutil";\n` +
+          `export function use${n}a(x: string): number { return hashThing(x); }\n` +
+          `export function use${n}b(x: string): number { return hashThing(hashThing(x)); }\n`
       );
     }
     await init(projectRoot);

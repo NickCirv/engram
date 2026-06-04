@@ -52,12 +52,16 @@ export function lookup(name: string): number {
 }
 `
     );
-    // 3 more caller files so hashToken clears MIN_CALLER_FILES (≥4 callers →
-    // a content grep is big enough that engram's packet is a real win).
-    for (const n of [2, 3, 4]) {
+    // Many caller files, each calling hashToken twice, so the raw `rg` is
+    // genuinely LARGER than engram's (capped) call-site packet — a real win that
+    // clears the ADR-0007 never-worse size gate, not just MIN_CALLER_FILES.
+    // (svc.ts sorts first, so its `return hashToken(name)` stays in the packet.)
+    for (let n = 2; n <= 20; n++) {
       writeFileSync(
         join(projectRoot, "src", `svc${n}.ts`),
-        `import { hashToken } from "./util";\nexport function use${n}(x: string): number { return hashToken(x); }\n`
+        `import { hashToken } from "./util";\n` +
+          `export function use${n}a(x: string): number { return hashToken(x); }\n` +
+          `export function use${n}b(x: string): number { return hashToken(hashToken(x)); }\n`
       );
     }
     await init(projectRoot);
@@ -148,6 +152,50 @@ export function lookup(name: string): number {
     expect(reason).toContain("return hashToken(name)"); // a real usage line
     // ...and ALWAYS includes the recall-safety escalation command.
     expect(reason).toContain('rg -n "hashToken"');
+  });
+
+  it("passes through when the packet would be larger than the raw grep (ADR-0007 never-worse)", async () => {
+    // A fresh tiny project: a symbol with ≥4 caller files but one short call
+    // each, so the raw grep is small and engram's packet (header + sites +
+    // escalation footer) would exceed it. The size gate must pass through.
+    const tiny = mkdtempSync(join(tmpdir(), "engram-grep-nw-"));
+    try {
+      mkdirSync(join(tiny, "src"), { recursive: true });
+      writeFileSync(join(tiny, "src", "u.ts"), "export function tok(s: string): number { return s.length; }\n");
+      for (let i = 0; i < 5; i++) {
+        writeFileSync(join(tiny, "src", `c${i}.ts`), `import {tok} from "./u";\nexport const x${i}=tok("${i}");\n`);
+      }
+      await init(tiny);
+      const r = await handleGrep({
+        tool_name: "Grep",
+        cwd: tiny,
+        tool_input: { pattern: "tok", output_mode: "content" },
+      });
+      expect(r).toBe(PASSTHROUGH);
+    } finally {
+      rmSync(tiny, { recursive: true, force: true });
+    }
+  });
+
+  it("passes through when the agent scopes its grep narrower than the repo-wide packet (ADR-0007)", async () => {
+    // hashToken is a big win repo-wide, but scoped to one small file the agent's
+    // actual grep returns little — the repo-wide packet would be LARGER, so the
+    // gate must size against the AGENT'S scope (path) and pass through.
+    const r = await handleGrep({
+      tool_name: "Grep",
+      cwd: projectRoot,
+      tool_input: { pattern: "hashToken", output_mode: "content", path: "src/svc4.ts" },
+    });
+    expect(r).toBe(PASSTHROUGH);
+  });
+
+  it("passes through when path/glob is a non-string scope it can't reproduce (ADR-0007)", async () => {
+    const r = await handleGrep({
+      tool_name: "Grep",
+      cwd: projectRoot,
+      tool_input: { pattern: "hashToken", output_mode: "content", glob: ["*.ts"] },
+    });
+    expect(r).toBe(PASSTHROUGH);
   });
 
   it("caps the call-site list for a heavily-used symbol", async () => {
