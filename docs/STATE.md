@@ -38,9 +38,10 @@ memory, audit). "Ranked" refers only to the **PageRank query ordering**, never t
 | **`engram measure`** (#81) | shipped CLI — honest structural reduction on the USER's own repo; auto-discovers top symbols, all disclosures computed live; only counts genuine reductions | — |
 | **Grep never-worse gate** (#82) | `src/intercept/handlers/grep.ts` — sizes the real grep scoped to the agent's cwd+path+glob; passes through when the packet isn't smaller. Closes a real "never worse" violation found by #81 | **0007** |
 | **Sub-agent context broker** (#83) | `src/intercept/handlers/subagent-start.ts` — registers Claude Code's `SubagentStart`; injects a ~100-tok production-only structural slice per sub-agent (the fan-out regime caching can't help). Honest (a bet, not "never worse"); opt-out `ENGRAM_SUBAGENT_CONTEXT=0` | **0008** |
+| **Recall-coverage benchmark** (#85, deterministic half) | `npm run bench:recall` — the honesty moat: does engram's ranked answer surface co-changed files? recall@10 33.0% (vs 29.8% random-within-candidate, 10.4% blind); reaches 43.0%, ranker +3.2pp. Backtest killed the 88.9% `impact`-firehose vanity number. Live resolve-rate A/B → #87 (gated) | **0009** |
 | Master plan + Frontier research | `docs/PLAN.md` (four tracks + §9 frontier) · `docs/FRONTIER.md` (5-front pioneer research) · `docs/COMPARISON.md` honesty fix (Aider ranks too) · README cost-claim scrub | — |
 
-**Next (engineering):** **#86** — smoke-test SubagentStart `additionalContext` delivery in a REAL Claude Code sub-agent (Nick; the #83 end-to-end gate). Then **#85** (recall→resolve benchmark — proves #82/#83 honestly) and **#84** (compaction-surviving ledger). README hero-asset embed; v4.3 release (#74, Nick 2FA) bundles Bash-grep + measure + never-worse gate + sub-agent broker. Frontier: `docs/FRONTIER.md` §5.
+**Next (engineering):** **#84** (compaction-surviving session ledger — the last frontier build) is the next code task. Gated/Nick: **#86** (real-Claude-Code smoke of the #83 slice delivery), **#87** (live resolve-rate A/B — the budget-gated half of #85). Then README hero-asset embed; **v4.3 release (#74, Nick 2FA)** bundles Bash-grep + measure + never-worse gate + sub-agent broker + recall bench. Frontier: `docs/FRONTIER.md` §5.
 
 ### Measurement (how we keep ourselves honest)
 
