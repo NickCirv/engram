@@ -116,7 +116,7 @@ export function buildAllowWithContextResponse(
  * injection.
  */
 export function buildSessionContextResponse(
-  eventName: "SessionStart" | "UserPromptSubmit",
+  eventName: "SessionStart" | "UserPromptSubmit" | "SubagentStart",
   additionalContext: string
 ): Record<string, unknown> | null {
   const trimmed = additionalContext?.trim() ?? "";

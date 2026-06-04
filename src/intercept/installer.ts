@@ -23,6 +23,7 @@ export const ENGRAM_HOOK_EVENTS = [
   "PreToolUse",
   "PostToolUse",
   "SessionStart",
+  "SubagentStart",
   "UserPromptSubmit",
   "PreCompact",
   "CwdChanged",
@@ -126,6 +127,11 @@ export function buildEngramHookEntries(
     },
     SessionStart: {
       // No matcher — SessionStart has no tool name.
+      hooks: [baseCmd],
+    },
+    SubagentStart: {
+      // No matcher — SubagentStart has no tool name. Injects a tight structural
+      // slice into each spawning sub-agent (ADR-0008, #83).
       hooks: [baseCmd],
     },
     UserPromptSubmit: {

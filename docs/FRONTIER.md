@@ -55,7 +55,8 @@ where engram genuinely saves cost, honestly:
    forces full-price reprocessing. Fewer structural tokens upstream of the edit = smaller reprocess bill.
 3. **Sub-agent fan-out** — multi-agent runs use **~15× the tokens** of a chat because *each* spawned
    agent opens a fresh window and pays a fresh cache **write**. Caching doesn't share across agents.
-   Feeding each sub-agent a tight ranked slice multiplies the saving by N at write price. **This is the
+   Feeding each sub-agent a tight ranked slice multiplies the saving by N at write price **when the slice
+   displaces more exploration than it costs** (per-workload, measured by #85 — never asserted). **This is the
    single biggest honest dollar lever, and it's engram's best case.**
 4. **Window-limit avoidance** — past the window there is no cache discount; structural reduction is the
    *enabling* move (and avoids lost-in-the-middle quality loss).

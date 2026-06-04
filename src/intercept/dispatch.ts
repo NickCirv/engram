@@ -38,6 +38,10 @@ import {
   type SessionStartHookPayload,
 } from "./handlers/session-start.js";
 import {
+  handleSubagentStart,
+  type SubagentStartHookPayload,
+} from "./handlers/subagent-start.js";
+import {
   handleUserPromptSubmit,
   type UserPromptHookPayload,
 } from "./handlers/user-prompt.js";
@@ -127,6 +131,11 @@ export async function dispatchHook(
     case "SessionStart":
       return runHandler(() =>
         handleSessionStart(payload as unknown as SessionStartHookPayload)
+      );
+
+    case "SubagentStart":
+      return runHandler(() =>
+        handleSubagentStart(payload as unknown as SubagentStartHookPayload)
       );
 
     case "UserPromptSubmit":

@@ -7,6 +7,17 @@ All notable changes to engram are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Sub-agent context broker (`SubagentStart`, ADR-0008).** Injects a tiny
+  (~100-token) structural slice — the project's top-ranked **production** entities
+  + graph shape — into each spawning Claude Code sub-agent, so it can orient
+  without the grep→read discovery fan-out. Multi-agent fan-out is the one regime
+  prompt caching can't help (each sub-agent pays a fresh cache *write*), so a tight
+  per-agent slice is where structural reduction nets real tokens — **when it
+  displaces more exploration than it costs** (the per-workload net the recall→
+  resolve bench measures; never asserted). Minimal vs SessionStart (top-5 entities,
+  no landmines/mempalace), opt-out via `ENGRAM_SUBAGENT_CONTEXT=0`. engram emits
+  the slice correctly; live Claude Code delivery of the `additionalContext` is
+  pending a real-session smoke test.
 - **`engram measure` — the honest, user-runnable saving on YOUR repo.** Auto-
   discovers your repo's highest-fan-out symbols (PageRank god-nodes, bare-
   identifier-resolved), runs the REAL `handleGrep` on each, and reports the live
