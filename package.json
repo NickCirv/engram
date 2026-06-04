@@ -29,7 +29,8 @@
     "stress": "tsx bench/stress-test.ts",
     "postinstall": "node scripts/postinstall.mjs",
     "preuninstall": "node scripts/preuninstall.mjs",
-    "demo": "tsx demo/run.ts"
+    "demo": "tsx demo/run.ts",
+    "bench:recall": "tsx bench/recall-coverage.ts"
   },
   "keywords": [
     "structural-code-graph",
