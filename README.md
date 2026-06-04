@@ -580,6 +580,18 @@ engram hook-enable     # removes the kill switch
 engram uninstall-hook  # surgical removal, preserves other hooks in settings.json
 ```
 
+**Per-feature opt-outs (env vars — disable one behaviour without the kill switch):**
+
+```bash
+ENGRAM_GREP_INTERCEPT=0   # don't answer symbol greps from the reference graph
+ENGRAM_READ_DEDUP=0       # don't dedup same-session re-reads of unchanged files
+ENGRAM_MISTAKE_GUARD=0    # don't warn before an edit that repeats a past mistake
+ENGRAM_NO_UPDATE_CHECK=1  # silence the passive "newer version available" hint
+```
+
+All interception is on by default and recall-safe; these let you turn off a single
+behaviour (e.g. in a hook config or shell profile) while keeping the rest.
+
 ---
 
 ## CLI Reference

@@ -441,9 +441,17 @@ async function main(): Promise<void> {
   const dedupBase = symbol.reduce((a, r) => a + r.dedupBaseline, 0);
   const dedupEng = symbol.reduce((a, r) => a + r.dedupEngram, 0);
   const dedupReduction = dedupBase > 0 ? ((dedupBase - dedupEng) / dedupBase) * 100 : 0;
+  // Actual re-reads per trace (Math.round, so e.g. R=0.4 over 3 reads = 1 ≈ 33%,
+  // NOT 40% — report the real fraction, not the nominal flag).
+  const reReadsPerTrace = Math.round(REPEAT_RATE * READS_PER_TRACE);
+  const actualRepeatPct =
+    READS_PER_TRACE > 0 ? (reReadsPerTrace / READS_PER_TRACE) * 100 : 0;
 
   // ── Whole session = first-reads/greps (P) + dedup (clean) ──
   const sessionBase = pBase + dedupBase;
+  // How much of the whole-session baseline is the (near-free) dedup bucket — so a
+  // reader knows the lift over the P-model is a cheap bucket, not better intercept.
+  const dedupShare = sessionBase > 0 ? (dedupBase / sessionBase) * 100 : 0;
 
   // Recall-coverage: of the match locations a raw content grep would show the
   // agent, what fraction does engram's packet actually surface? A bare file-list
@@ -515,15 +523,23 @@ async function main(): Promise<void> {
   console.log();
 
   console.log(
-    `Read dedup (re-reads at R=${REPEAT_RATE}): ${dedupReduction.toFixed(1)}% of the re-read budget ` +
-      `(${dedupBase} → ${Math.round(dedupEng)} tok).\n  A CLEAN saving — the re-read content is ` +
-      `already in the agent's context, so it is NOT discounted by P.`
+    `Read dedup (${reReadsPerTrace} re-read/trace of ${READS_PER_TRACE}, ~${actualRepeatPct.toFixed(0)}%): ` +
+      `${dedupReduction.toFixed(1)}% of the re-read budget (${dedupBase} → ${Math.round(dedupEng)} tok), ` +
+      `${dedupShare.toFixed(0)}% of the session baseline.`
+  );
+  console.log(
+    "  ⚠ SAME-EPOCH CEILING: dedup only fires when NO context compaction happened\n" +
+      "  since the first read (ADR-0003 resets the served-set on PreCompact /\n" +
+      "  SessionStart). A real re-read that FOLLOWS a compaction correctly re-serves,\n" +
+      "  so the realistic whole-session rate is BELOW these same-epoch figures."
   );
   console.log();
-  console.log("WHOLE SESSION (first-reads/greps at the P-model + dedup re-reads):");
+  console.log(
+    "WHOLE SESSION = first-reads/greps (P-model) + dedup re-reads — SAME-EPOCH CEILING:"
+  );
   console.log(
     `  P=0.00: ${sessionReductionAt(0).toFixed(1)}%  ·  P=0.50: ${sessionReductionAt(0.5).toFixed(1)}%  ` +
-      `(of ${sessionBase} session tokens)`
+      `(of ${sessionBase} session tokens; dedup is ${dedupShare.toFixed(0)}% of that base)`
   );
   console.log();
 
@@ -583,12 +599,19 @@ async function main(): Promise<void> {
           grepRawMatchLocations: rawLocs,
         },
         dedup: {
+          reReadsPerTrace,
+          actualRepeatPct: Number(actualRepeatPct.toFixed(1)),
           reReadBaselineTokens: dedupBase,
           reReadEngramTokens: dedupEng,
           reductionPct: Number(dedupReduction.toFixed(2)),
+          shareOfSessionBasePct: Number(dedupShare.toFixed(1)),
+          sameEpochCeiling: true,
+          caveat:
+            "Same-epoch best case — dedup does not fire after a context compaction (ADR-0003 reset); realistic rate is lower.",
         },
         wholeSession: {
           baselineTokens: sessionBase,
+          sameEpochCeiling: true,
           reductionAtP0: Number(sessionReductionAt(0).toFixed(2)),
           reductionAtP05: Number(sessionReductionAt(0.5).toFixed(2)),
         },
@@ -625,9 +648,11 @@ async function main(): Promise<void> {
     "",
     `## Read dedup (re-reads) + whole session`,
     "",
-    `**Read dedup: ${dedupReduction.toFixed(1)}%** of the re-read budget (${dedupBase} → ${Math.round(dedupEng)} tok) at a ${REPEAT_RATE} re-read rate (Phase-0 measured 38–46% of real reads are same-session repeats). A **clean** saving — the re-read content is already in the agent's context, so it is NOT discounted by P.`,
+    `**Read dedup: ${dedupReduction.toFixed(1)}%** of the re-read budget (${dedupBase} → ${Math.round(dedupEng)} tok), with ${reReadsPerTrace} re-read/trace of ${READS_PER_TRACE} (~${actualRepeatPct.toFixed(0)}%; Phase-0 measured 38–46% of real reads are same-session repeats). A **clean** saving — the re-read content is already in the agent's context, so it is NOT discounted by P.`,
     "",
-    `**Whole session** (first-reads/greps at the P-model + dedup re-reads, ${sessionBase} tokens): P=0 **${sessionReductionAt(0).toFixed(1)}%** · P=0.5 **${sessionReductionAt(0.5).toFixed(1)}%**.`,
+    `> **⚠ Same-epoch ceiling.** Dedup only fires when no context compaction has happened since the first read — ADR-0003 resets the served-set on PreCompact / SessionStart. A real re-read that *follows* a compaction (the most common real trigger) correctly re-serves, so the realistic rate is **below** these figures. The dedup bucket is ${dedupShare.toFixed(0)}% of the whole-session baseline, so most of the lift over the P-model is this near-free bucket, not improved interception.`,
+    "",
+    `**Whole session** (first-reads/greps at the P-model + dedup re-reads, ${sessionBase} tokens, same-epoch ceiling): P=0 **${sessionReductionAt(0).toFixed(1)}%** · P=0.5 **${sessionReductionAt(0.5).toFixed(1)}%**.`,
     "",
     `> The **P=0 number is an OPTIMISTIC ceiling**, not a lower bound: it assumes engram's structural packet fully answers what the agent grepped/read. The packet is a subset of the raw output, so the real saving lies between P=0 and break-even, by workload (high recall-sufficiency on structural/discovery work, low when exact call sites are needed — the same bimodal split as W1.9). Structural context-token reduction, **not** a bill saving. Traces generated by a rule (top-${TOP_SYMBOLS} most-referenced symbols × caller files), word-boundary grep baseline.`,
     "",

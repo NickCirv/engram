@@ -1,6 +1,13 @@
 # ADR-0001: Intercept symbol-search Grep with the reference graph (recall-safe)
 
-**Status:** Accepted · **Date:** 2026-06-03 · **Author:** Nicholas
+**Status:** Accepted (evolved by [ADR-0004](0004-grep-richer-find-usages.md)) · **Date:** 2026-06-03 · **Author:** Nicholas
+
+> **Update (ADR-0004):** the deny payload no longer returns a bare *caller-file
+> list* (as described below) — it returns the actual **call-site lines**
+> (`file:line: code`) scanned from those files, and interception is gated to
+> `output_mode === "content"` + `≥4` caller files. The recall-safe design and the
+> `rg -n` escalation here still hold; only the packet contents and the gates
+> evolved. Read 0001 for the *why*, 0004 for the *what ships*.
 
 ## Context
 
