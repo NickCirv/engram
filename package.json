@@ -28,7 +28,8 @@
     "bench": "tsx bench/runner.ts",
     "stress": "tsx bench/stress-test.ts",
     "postinstall": "node scripts/postinstall.mjs",
-    "preuninstall": "node scripts/preuninstall.mjs"
+    "preuninstall": "node scripts/preuninstall.mjs",
+    "demo": "tsx demo/run.ts"
   },
   "keywords": [
     "structural-code-graph",
@@ -75,6 +76,7 @@
   "devDependencies": {
     "@types/node": "^25.5.2",
     "tsup": "^8.5.1",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.2",
     "vitest": "^4.1.4"
   }

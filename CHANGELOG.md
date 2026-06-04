@@ -7,6 +7,14 @@ All notable changes to engram are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Honest before/after demo (`npm run demo`, ADR-0006).** A deterministic,
+  asciinema-recordable demo that runs the **real** `handleGrep` on engram's own
+  repo and shows the structural context-token collapse on real symbol searches
+  (grep-flood → ranked call-site packet — the same grep-step model as
+  `bench/session-level.ts`). Honest by construction: structural-not-cost framing,
+  the per-search reductions are disclosed as a **ceiling** (with ~22% recall-
+  coverage + `npm run bench` for the P-modelled figure), the real ~20% intercept
+  rate is shown, and a passthrough case proves engram never makes it worse.
 - **Bash grep interception (ADR-0005).** Agents that search by running `rg`/`grep`
   via the **Bash** tool (the only grep path in IDEs without a structured Grep tool
   — Aider, Codex CLI, Cline, …) now get the same call-site answer as the Grep tool.
@@ -16,6 +24,10 @@ All notable changes to engram are documented here. Format based on
   files), the call-site packet, the `rg -n` escalation, and the
   `ENGRAM_GREP_INTERCEPT=0` opt-out. Conservative parser: anything it can't prove
   is a plain content symbol grep passes straight through.
+
+### Fixed
+- `tsx` was missing from `devDependencies`, so `npm run bench` / `stress` / `demo`
+  failed in a fresh clone. Added it.
 
 ## [4.2.0] — 2026-06-03 — "Loop"
 
