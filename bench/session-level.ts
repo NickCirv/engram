@@ -38,7 +38,14 @@
  * Usage:
  *   npx tsx bench/session-level.ts [--project PATH] [--symbols K] [--reads N] [--out DIR]
  */
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  readFileSync,
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  readdirSync,
+} from "node:fs";
 import { join, dirname, isAbsolute, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -54,7 +61,14 @@ function argOf(name: string, def: string): string {
 const PROJECT = argOf("project", join(__dirname, ".."));
 const TOP_SYMBOLS = parseInt(argOf("symbols", "12"), 10);
 const READS_PER_TRACE = parseInt(argOf("reads", "3"), 10);
+// Fraction of a trace's reads that are re-reads of an earlier file — models the
+// "agent comes back to a file" pattern that dedup catches. Phase-0 measured
+// 38–46% of real reads are same-session repeats (2,983 reads, 16 hook-logs);
+// 0.4 is the reference. The dedup saving is reported as a function of this.
+const REPEAT_RATE = parseFloat(argOf("repeat-rate", "0.4"));
 const OUT_DIR = argOf("out", join(__dirname, "results"));
+/** A filesystem-safe, deterministic session id per trace (for read dedup). */
+const benchSession = (i: number): string => `bench-sess-${i}`;
 
 /** Same heuristic as real-world.ts — keeps the two benches comparable. */
 function estimateTokens(text: string): number {
@@ -139,6 +153,21 @@ function fileLineSet(text: string): Set<string> {
   return set;
 }
 
+/** Remove the per-trace served-reads stores the bench writes for dedup, so a
+ *  later run never dedups against this run's records (and `.engram` stays clean). */
+function clearBenchServedReads(root: string): void {
+  try {
+    const dir = join(root, ".engram");
+    for (const name of readdirSync(dir)) {
+      if (name.startsWith("served-reads-bench-sess-") && name.endsWith(".json")) {
+        rmSync(join(dir, name), { force: true });
+      }
+    }
+  } catch {
+    /* ignore — best-effort cleanup */
+  }
+}
+
 // ── Trace types ────────────────────────────────────────────────────
 
 interface TraceStep {
@@ -149,6 +178,8 @@ interface Trace {
   name: string;
   kind: "symbol" | "control";
   steps: TraceStep[];
+  /** Per-trace session id so a re-read of an earlier file triggers dedup. */
+  sessionId: string;
 }
 interface StepResult {
   tool: string;
@@ -170,11 +201,22 @@ interface TraceResult {
    *  many the engram packet actually surfaces (a bare file list ≈ 0). */
   rawGrepLocs: number;
   coveredGrepLocs: number;
+  /** Re-read (dedup) bucket — a CLEAN saving, NOT P-discounted: the content the
+   *  pointer refers to is already in the agent's context. Kept separate from the
+   *  P-model so the two savings aren't conflated. */
+  dedupBaseline: number;
+  dedupEngram: number;
 }
 
-/** engram cost for a trace at recall-recovery fraction P. */
+/** engram cost for a trace at recall-recovery fraction P (first-reads/greps). */
 function engramAt(t: TraceResult, p: number): number {
   return t.passthroughBaseline + t.interceptedPacket + p * t.interceptedBaseline;
+}
+
+/** A trace's first-read/grep baseline — excludes the re-read (dedup) bucket, so
+ *  the P-model isn't diluted by re-reads (which are a separate clean saving). */
+function pTraceBase(t: TraceResult): number {
+  return t.passthroughBaseline + t.interceptedBaseline;
 }
 
 // ── Trace generation (deterministic rule, no cherry-picking) ───────
@@ -210,23 +252,30 @@ function buildTraces(
     )
     .slice(0, TOP_SYMBOLS);
 
-  const symbolTraces: Trace[] = ranked.map((s) => ({
-    name: `investigate:${s.name}`,
-    kind: "symbol",
-    steps: [
-      { tool: "Grep", arg: s.name },
-      ...s.callers
-        .slice(0, READS_PER_TRACE)
-        .map((f): TraceStep => ({ tool: "Read", arg: f })),
-    ],
-  }));
+  const symbolTraces: Trace[] = ranked.map((s, i) => {
+    const reads = s.callers.slice(0, READS_PER_TRACE);
+    // Re-read the first ⌊REPEAT_RATE·reads⌋ files — the agent revisiting its
+    // working set. These are the reads dedup catches.
+    const reReads = reads.slice(0, Math.round(REPEAT_RATE * reads.length));
+    return {
+      name: `investigate:${s.name}`,
+      kind: "symbol" as const,
+      sessionId: benchSession(i),
+      steps: [
+        { tool: "Grep" as const, arg: s.name },
+        ...reads.map((f): TraceStep => ({ tool: "Read", arg: f })),
+        ...reReads.map((f): TraceStep => ({ tool: "Read", arg: f })),
+      ],
+    };
+  });
 
   // Control: stopword text-searches, GREP-ONLY. engram passes these through,
   // so control reduction is a true 0% — proof of no harm / no headline padding.
-  const controlTraces: Trace[] = ["return", "error", "import"].map((p) => ({
+  const controlTraces: Trace[] = ["return", "error", "import"].map((p, i) => ({
     name: `text-search:${p}`,
-    kind: "control",
-    steps: [{ tool: "Grep", arg: p }],
+    kind: "control" as const,
+    sessionId: benchSession(1000 + i),
+    steps: [{ tool: "Grep" as const, arg: p }],
   }));
 
   return [...symbolTraces, ...controlTraces];
@@ -247,10 +296,14 @@ async function costTrace(
   let passthroughBaseline = 0;
   let rawGrepLocs = 0;
   let coveredGrepLocs = 0;
+  let dedupBaseline = 0;
+  let dedupEngram = 0;
+  const seenReads = new Set<string>();
 
   for (const step of trace.steps) {
     let base = 0;
     let packetTokens: number | null = null;
+    let isReread = false;
 
     if (step.tool === "Grep") {
       const rawOut = rgRaw(step.arg, root, trace.kind === "symbol");
@@ -275,6 +328,8 @@ async function costTrace(
       }
     } else {
       const abs = isAbsolute(step.arg) ? step.arg : join(root, step.arg);
+      isReread = seenReads.has(abs);
+      if (!isReread) seenReads.add(abs);
       let content = "";
       try {
         content = readFileSync(abs, "utf-8");
@@ -282,9 +337,11 @@ async function costTrace(
         content = "";
       }
       base = estimateTokens(content);
+      // session_id makes the first read RECORD and a later re-read DEDUP.
       const r = await handleRead({
         tool_name: "Read",
         cwd: root,
+        session_id: trace.sessionId,
         tool_input: { file_path: abs },
       });
       const reason = denyReason(r);
@@ -300,7 +357,11 @@ async function costTrace(
       packet: intercepted ? packetTokens! : base,
     });
     baseline += base;
-    if (intercepted) {
+    if (isReread) {
+      // Re-read → dedup bucket (clean saving, not P-discounted).
+      dedupBaseline += base;
+      dedupEngram += intercepted ? packetTokens! : base;
+    } else if (intercepted) {
       interceptedBaseline += base;
       interceptedPacket += packetTokens!;
     } else {
@@ -318,6 +379,8 @@ async function costTrace(
     passthroughBaseline,
     rawGrepLocs,
     coveredGrepLocs,
+    dedupBaseline,
+    dedupEngram,
   };
 }
 
@@ -354,18 +417,33 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Bench dedup uses per-trace `bench-sess-*` ids; clear any left over from a
+  // prior run so a first read never dedups against a stale record.
+  clearBenchServedReads(PROJECT);
   const results: TraceResult[] = [];
   for (const t of traces) {
     results.push(await costTrace(t, PROJECT, handleRead as never, handleGrep as never));
   }
+  clearBenchServedReads(PROJECT);
 
   const symbol = results.filter((r) => r.kind === "symbol");
   const control = results.filter((r) => r.kind === "control");
 
-  // Session aggregates over symbol-investigation traces.
-  const symBase = symbol.reduce((a, r) => a + r.baseline, 0);
+  // ── First-read / grep aggregates (the P-model — packets are LOSSY) ──
+  const pBase = symbol.reduce(
+    (a, r) => a + r.passthroughBaseline + r.interceptedBaseline,
+    0
+  );
   const intBase = symbol.reduce((a, r) => a + r.interceptedBaseline, 0);
   const intPacket = symbol.reduce((a, r) => a + r.interceptedPacket, 0);
+
+  // ── Dedup aggregates (re-reads — a CLEAN saving, not P-discounted) ──
+  const dedupBase = symbol.reduce((a, r) => a + r.dedupBaseline, 0);
+  const dedupEng = symbol.reduce((a, r) => a + r.dedupEngram, 0);
+  const dedupReduction = dedupBase > 0 ? ((dedupBase - dedupEng) / dedupBase) * 100 : 0;
+
+  // ── Whole session = first-reads/greps (P) + dedup (clean) ──
+  const sessionBase = pBase + dedupBase;
 
   // Recall-coverage: of the match locations a raw content grep would show the
   // agent, what fraction does engram's packet actually surface? A bare file-list
@@ -375,23 +453,29 @@ async function main(): Promise<void> {
   const coveredLocs = symbol.reduce((a, r) => a + r.coveredGrepLocs, 0);
   const recallCoverage = rawLocs > 0 ? (coveredLocs / rawLocs) * 100 : 0;
 
+  // P-model reduction over first-reads/greps only.
   const reductionAt = (p: number): number => {
     const eng = symbol.reduce((a, r) => a + engramAt(r, p), 0);
-    return symBase > 0 ? ((symBase - eng) / symBase) * 100 : 0;
+    return pBase > 0 ? ((pBase - eng) / pBase) * 100 : 0;
   };
-  // engram nets positive while reduction(P) > 0. Break-even:
-  //   symBase = passΣ + intPacket + P*intBase  →  P = (intBase - intPacket)/intBase
+  // Whole-session reduction = P-model engram + dedup (clean), over the full base.
+  const sessionReductionAt = (p: number): number => {
+    const eng = symbol.reduce((a, r) => a + engramAt(r, p), 0) + dedupEng;
+    return sessionBase > 0 ? ((sessionBase - eng) / sessionBase) * 100 : 0;
+  };
+  // engram nets positive (first-read/grep model) while reduction(P) > 0:
+  //   pBase = passΣ + intPacket + P*intBase  →  P = (intBase - intPacket)/intBase
   const breakEvenP = intBase > 0 ? (intBase - intPacket) / intBase : 0;
 
-  // Per-trace optimistic (P=0) reductions — for median + range.
+  // Per-trace optimistic (P=0) reductions — for median + range (P-model base).
   const perTraceP0 = symbol.map((r) =>
-    r.baseline > 0 ? ((r.baseline - engramAt(r, 0)) / r.baseline) * 100 : 0
+    pTraceBase(r) > 0 ? ((pTraceBase(r) - engramAt(r, 0)) / pTraceBase(r)) * 100 : 0
   );
   const sortedP0 = [...perTraceP0].sort((a, b) => a - b);
   const median = sortedP0[Math.floor(sortedP0.length / 2)] ?? 0;
 
-  // Invariant: at P=0 engram must never cost more than baseline on any trace.
-  const regressions = symbol.filter((r) => engramAt(r, 0) > r.baseline);
+  // Invariant: at P=0 engram must never cost more than the first-read/grep base.
+  const regressions = symbol.filter((r) => engramAt(r, 0) > pTraceBase(r));
 
   // ── Print ──
   console.log(
@@ -399,10 +483,10 @@ async function main(): Promise<void> {
   );
   console.log("─".repeat(74));
   for (const r of symbol) {
-    const red =
-      r.baseline > 0 ? ((r.baseline - engramAt(r, 0)) / r.baseline) * 100 : 0;
+    const pb = pTraceBase(r);
+    const red = pb > 0 ? ((pb - engramAt(r, 0)) / pb) * 100 : 0;
     console.log(
-      `${r.name.slice(0, 40).padEnd(40)} ${String(r.baseline).padStart(10)} ${String(Math.round(engramAt(r, 0))).padStart(12)} ${red.toFixed(1).padStart(7)}%`
+      `${r.name.slice(0, 40).padEnd(40)} ${String(pb).padStart(10)} ${String(Math.round(engramAt(r, 0))).padStart(12)} ${red.toFixed(1).padStart(7)}%`
     );
   }
   console.log("─".repeat(74));
@@ -430,6 +514,19 @@ async function main(): Promise<void> {
   );
   console.log();
 
+  console.log(
+    `Read dedup (re-reads at R=${REPEAT_RATE}): ${dedupReduction.toFixed(1)}% of the re-read budget ` +
+      `(${dedupBase} → ${Math.round(dedupEng)} tok).\n  A CLEAN saving — the re-read content is ` +
+      `already in the agent's context, so it is NOT discounted by P.`
+  );
+  console.log();
+  console.log("WHOLE SESSION (first-reads/greps at the P-model + dedup re-reads):");
+  console.log(
+    `  P=0.00: ${sessionReductionAt(0).toFixed(1)}%  ·  P=0.50: ${sessionReductionAt(0.5).toFixed(1)}%  ` +
+      `(of ${sessionBase} session tokens)`
+  );
+  console.log();
+
   if (control.length > 0) {
     const cBase = control.reduce((a, r) => a + r.baseline, 0);
     const cEng = control.reduce((a, r) => a + engramAt(r, 0), 0);
@@ -452,7 +549,7 @@ async function main(): Promise<void> {
   if (regressions.length > 0) {
     console.log(`⚠ ${regressions.length} trace(s) where engram(P=0) cost MORE than baseline:`);
     for (const r of regressions) {
-      console.log(`    ${r.name}: baseline ${r.baseline} > engram ${Math.round(engramAt(r, 0))}`);
+      console.log(`    ${r.name}: baseline ${pTraceBase(r)} > engram ${Math.round(engramAt(r, 0))}`);
     }
     console.log();
   }
@@ -466,12 +563,16 @@ async function main(): Promise<void> {
     join(OUT_DIR, `session-level-${date}.json`),
     JSON.stringify(
       {
-        version: "session-level.v3",
+        version: "session-level.v4",
         date: new Date().toISOString(),
         project: proj,
-        config: { topSymbols: TOP_SYMBOLS, readsPerTrace: READS_PER_TRACE },
-        session: {
-          baselineTokens: symBase,
+        config: {
+          topSymbols: TOP_SYMBOLS,
+          readsPerTrace: READS_PER_TRACE,
+          repeatRate: REPEAT_RATE,
+        },
+        firstReadGrep: {
+          baselineTokens: pBase,
           reductionByP: Object.fromEntries(
             [0, 0.25, 0.5, 0.75, 1.0].map((p) => [p, Number(reductionAt(p).toFixed(2))])
           ),
@@ -480,6 +581,16 @@ async function main(): Promise<void> {
           rangeP0: [Number(Math.min(...perTraceP0).toFixed(2)), Number(Math.max(...perTraceP0).toFixed(2))],
           grepRecallCoveragePct: Number(recallCoverage.toFixed(2)),
           grepRawMatchLocations: rawLocs,
+        },
+        dedup: {
+          reReadBaselineTokens: dedupBase,
+          reReadEngramTokens: dedupEng,
+          reductionPct: Number(dedupReduction.toFixed(2)),
+        },
+        wholeSession: {
+          baselineTokens: sessionBase,
+          reductionAtP0: Number(sessionReductionAt(0).toFixed(2)),
+          reductionAtP05: Number(sessionReductionAt(0.5).toFixed(2)),
         },
         regressions: regressions.map((r) => r.name),
         traces: results,
@@ -494,7 +605,7 @@ async function main(): Promise<void> {
     "",
     `**Project:** \`${proj}\` · top ${TOP_SYMBOLS} symbols · ${READS_PER_TRACE} reads/trace`,
     "",
-    `## Session reduction vs recall-recovery fraction (P)`,
+    `## First-read / grep reduction vs recall-recovery fraction (P)`,
     "",
     `P = fraction of intercepted calls where the agent still needs the raw content`,
     `(because engram's packet is a *subset* of the raw grep/read output).`,
@@ -511,6 +622,12 @@ async function main(): Promise<void> {
     `Per-trace median (P=0): **${median.toFixed(1)}%** · range ${Math.min(...perTraceP0).toFixed(1)}%–${Math.max(...perTraceP0).toFixed(1)}%. Control (text-search passthrough): 0%.`,
     "",
     `**Grep recall-coverage: ${recallCoverage.toFixed(1)}%** of the ${rawLocs} match locations a raw content grep would show are surfaced in engram's call-site packets (a bare file-list packet ≈ 0%). Higher coverage means the agent re-greps less — i.e. a *lower effective P*, which moves the real saving toward the ceiling. This is the measured proxy for the find-usages recall gain.`,
+    "",
+    `## Read dedup (re-reads) + whole session`,
+    "",
+    `**Read dedup: ${dedupReduction.toFixed(1)}%** of the re-read budget (${dedupBase} → ${Math.round(dedupEng)} tok) at a ${REPEAT_RATE} re-read rate (Phase-0 measured 38–46% of real reads are same-session repeats). A **clean** saving — the re-read content is already in the agent's context, so it is NOT discounted by P.`,
+    "",
+    `**Whole session** (first-reads/greps at the P-model + dedup re-reads, ${sessionBase} tokens): P=0 **${sessionReductionAt(0).toFixed(1)}%** · P=0.5 **${sessionReductionAt(0.5).toFixed(1)}%**.`,
     "",
     `> The **P=0 number is an OPTIMISTIC ceiling**, not a lower bound: it assumes engram's structural packet fully answers what the agent grepped/read. The packet is a subset of the raw output, so the real saving lies between P=0 and break-even, by workload (high recall-sufficiency on structural/discovery work, low when exact call sites are needed — the same bimodal split as W1.9). Structural context-token reduction, **not** a bill saving. Traces generated by a rule (top-${TOP_SYMBOLS} most-referenced symbols × caller files), word-boundary grep baseline.`,
     "",
