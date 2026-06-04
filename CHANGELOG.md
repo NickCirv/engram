@@ -6,6 +6,17 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+### Added
+- **Bash grep interception (ADR-0005).** Agents that search by running `rg`/`grep`
+  via the **Bash** tool (the only grep path in IDEs without a structured Grep tool
+  — Aider, Codex CLI, Cline, …) now get the same call-site answer as the Grep tool.
+  The Bash handler parses a content-mode symbol grep (`rg`/`grep`/`egrep` of a bare
+  identifier; no `-l`/`-c`/`-o`/`-v` mode flags, no pipes/redirects/chains) and
+  delegates to the Grep handler — reusing every gate (content-mode + ≥4 caller
+  files), the call-site packet, the `rg -n` escalation, and the
+  `ENGRAM_GREP_INTERCEPT=0` opt-out. Conservative parser: anything it can't prove
+  is a plain content symbol grep passes straight through.
+
 ## [4.2.0] — 2026-06-03 — "Loop"
 
 ### Added

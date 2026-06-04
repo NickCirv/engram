@@ -13,6 +13,7 @@ import { init } from "../../../src/core.js";
 import {
   handleBash,
   parseReadLikeBashCommand,
+  parseGrepBashCommand,
   type BashHookPayload,
 } from "../../../src/intercept/handlers/bash.js";
 import { PASSTHROUGH } from "../../../src/intercept/safety.js";
@@ -171,6 +172,70 @@ describe("parseReadLikeBashCommand", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────
+// Grep parser — content-mode symbol greps only (ADR-0005)
+// ────────────────────────────────────────────────────────────────────────
+describe("parseGrepBashCommand", () => {
+  it("parses a plain rg/grep of a symbol", () => {
+    expect(parseGrepBashCommand("rg handleAuth")).toBe("handleAuth");
+    expect(parseGrepBashCommand("grep handleAuth")).toBe("handleAuth");
+    expect(parseGrepBashCommand("egrep handleAuth")).toBe("handleAuth");
+    expect(parseGrepBashCommand("rg handleAuth src/")).toBe("handleAuth");
+  });
+
+  it("handles safe boolean flags + bundles", () => {
+    expect(parseGrepBashCommand("rg -n handleAuth")).toBe("handleAuth");
+    expect(parseGrepBashCommand("rg -w handleAuth")).toBe("handleAuth");
+    expect(parseGrepBashCommand("grep -rn handleAuth")).toBe("handleAuth");
+    expect(parseGrepBashCommand("grep -rni handleAuth .")).toBe("handleAuth");
+    expect(parseGrepBashCommand("rg --word-regexp handleAuth")).toBe("handleAuth");
+  });
+
+  it("handles -e / --regexp pattern flags", () => {
+    expect(parseGrepBashCommand("rg -e handleAuth")).toBe("handleAuth");
+    expect(parseGrepBashCommand("grep -rn -e handleAuth src/")).toBe("handleAuth");
+  });
+
+  it("strips surrounding quotes", () => {
+    expect(parseGrepBashCommand('rg "handleAuth"')).toBe("handleAuth");
+    expect(parseGrepBashCommand("rg 'handleAuth'")).toBe("handleAuth");
+    expect(parseGrepBashCommand('grep -rn "handleAuth"')).toBe("handleAuth");
+  });
+
+  it("rejects files/count/invert modes (not a content search)", () => {
+    expect(parseGrepBashCommand("rg -l handleAuth")).toBe(null);
+    expect(parseGrepBashCommand("rg --files-with-matches handleAuth")).toBe(null);
+    expect(parseGrepBashCommand("grep -c handleAuth")).toBe(null);
+    expect(parseGrepBashCommand("rg -o handleAuth")).toBe(null);
+    expect(parseGrepBashCommand("grep -v handleAuth")).toBe(null);
+    expect(parseGrepBashCommand("grep -rl handleAuth")).toBe(null); // bundle w/ l
+  });
+
+  it("rejects shell control chars (pipe/redirect/subst/chain)", () => {
+    expect(parseGrepBashCommand("rg handleAuth | head")).toBe(null);
+    expect(parseGrepBashCommand("rg handleAuth > out.txt")).toBe(null);
+    expect(parseGrepBashCommand("rg $(echo handleAuth)")).toBe(null);
+    expect(parseGrepBashCommand("cd src && rg handleAuth")).toBe(null);
+    expect(parseGrepBashCommand("rg handleAuth; ls")).toBe(null);
+  });
+
+  it("rejects arg-taking / unknown flags (can't safely find the pattern)", () => {
+    expect(parseGrepBashCommand("rg -A 3 handleAuth")).toBe(null);
+    expect(parseGrepBashCommand("rg -m 5 handleAuth")).toBe(null);
+    expect(parseGrepBashCommand("rg --max-count 5 handleAuth")).toBe(null);
+    expect(parseGrepBashCommand("rg -g '*.ts' handleAuth")).toBe(null);
+  });
+
+  it("rejects non-grep commands and malformed input", () => {
+    expect(parseGrepBashCommand("cat handleAuth")).toBe(null);
+    expect(parseGrepBashCommand("ls")).toBe(null);
+    expect(parseGrepBashCommand("rg")).toBe(null); // no pattern
+    expect(parseGrepBashCommand("  rg handleAuth")).toBe(null); // leading ws
+    expect(parseGrepBashCommand("")).toBe(null);
+    expect(parseGrepBashCommand(null as unknown as string)).toBe(null);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────
 // Integration layer — delegates to handleRead with a real graph
 // ────────────────────────────────────────────────────────────────────────
 describe("handleBash — integration tests", () => {
@@ -298,6 +363,36 @@ export function hashPassword(p: string): string {
     writeFileSync(envFile, "SECRET=x\n");
     const result = await handleBash(buildPayload(`cat ${toBashPath(envFile)}`));
     expect(result).toBe(PASSTHROUGH);
+  });
+
+  it("delegates a Bash 'rg <symbol>' to handleGrep — call-site packet (ADR-0005)", async () => {
+    // a symbol referenced by ≥4 caller files so the grep gate (MIN_CALLER_FILES) fires
+    writeFileSync(
+      join(projectRoot, "src", "hashutil.ts"),
+      "export function hashThing(s: string): number { let h = 0; for (const c of s) h = (h*31 + c.charCodeAt(0))|0; return h >>> 0; }\n"
+    );
+    for (const n of [1, 2, 3, 4]) {
+      writeFileSync(
+        join(projectRoot, "src", `caller${n}.ts`),
+        `import { hashThing } from "./hashutil";\nexport function use${n}(x: string): number { return hashThing(x); }\n`
+      );
+    }
+    await init(projectRoot);
+
+    const result = (await handleBash(buildPayload("rg hashThing"))) as Record<
+      string,
+      unknown
+    >;
+    expect(result).not.toBe(PASSTHROUGH);
+    const reason = (result.hookSpecificOutput as Record<string, unknown>)
+      .permissionDecisionReason as string;
+    expect(reason).toContain("hashThing");
+    expect(reason).toContain("call site");
+    expect(reason).toContain('rg -n "hashThing"'); // escalation preserved
+  });
+
+  it("passes through a Bash 'rg -l <symbol>' (files mode, not content)", async () => {
+    expect(await handleBash(buildPayload("rg -l AuthService"))).toBe(PASSTHROUGH);
   });
 
   it("never throws on malformed command input", async () => {

@@ -35,6 +35,7 @@
  *   cd /tmp && cat auth.ts     (chain)
  */
 import { handleRead } from "./read.js";
+import { handleGrep } from "./grep.js";
 import { PASSTHROUGH, type HandlerResult } from "../safety.js";
 
 export interface BashHookPayload {
@@ -113,10 +114,91 @@ export function parseReadLikeBashCommand(command: string): string | null {
   return path;
 }
 
+// ── Bash grep → Grep handler (ADR-0005) ────────────────────────────
+
+/** Grep-family commands an agent runs via Bash (the only grep path in IDEs
+ *  without a structured Grep tool — Aider, Codex CLI, Cline, …). */
+const GREP_COMMANDS = new Set<string>(["rg", "grep", "egrep", "fgrep"]);
+
+/** Shell-control chars that mean pipe / redirect / substitution / chain → bail.
+ *  Note: quotes and regex/glob chars are deliberately NOT here — a grep pattern
+ *  may contain them, and handleGrep's SYMBOL_RE gate rejects non-identifiers. */
+const GREP_UNSAFE_SHELL = /[|&;<>$`\n\\()]/;
+
+/** Flags that change the output mode or match semantics so the result is NOT a
+ *  content symbol search — bail (let the real grep run). */
+const GREP_REJECT_FLAGS = new Set<string>([
+  "-l", "--files-with-matches", "-L", "--files-without-match",
+  "-c", "--count", "-o", "--only-matching", "-v", "--invert-match", "--json",
+]);
+
+/** Long boolean flags that keep it a plain content search — safe to skip. */
+const GREP_SAFE_LONG = new Set<string>([
+  "--line-number", "--ignore-case", "--word-regexp", "--recursive",
+  "--fixed-strings", "--case-sensitive", "--smart-case", "--no-heading",
+  "--with-filename", "--color",
+]);
+
+/** Short boolean flags safe to bundle (`-rn`, `-rni`). Anything else — the
+ *  reject flags (l/c/o/L/v) or arg-taking ones (A/B/C/m/e/g/d) — fails this and
+ *  bails. */
+const GREP_SAFE_SHORT = /^[niwrRFsSH]+$/;
+
 /**
- * Handle a PreToolUse:Bash payload. If the command is a safe read-like
- * invocation, delegate to `handleRead` with a synthesized payload. Any
- * parse failure or non-read command resolves to passthrough.
+ * Parse a Bash command into the symbol it greps for — but ONLY when it is a
+ * plain content-mode search of (what could be) a symbol: an `rg`/`grep` family
+ * command, no shell control chars, no files/count/invert mode, no arg-taking or
+ * unknown flags. Returns the (de-quoted) pattern, or null to pass through.
+ * handleGrep's gates (SYMBOL_RE, ≥4 callers, …) decide whether to actually
+ * intercept — this parser only guarantees "a content grep we can safely model".
+ */
+export function parseGrepBashCommand(command: string): string | null {
+  if (!command || typeof command !== "string") return null;
+  if (command.length > 300) return null;
+  const trimmed = command.trim();
+  if (trimmed !== command) return null;
+  if (GREP_UNSAFE_SHELL.test(trimmed)) return null;
+
+  const tokens = trimmed.split(/\s+/);
+  if (tokens.length < 2) return null;
+  if (!GREP_COMMANDS.has(tokens[0])) return null;
+
+  let pattern: string | null = null;
+  for (let i = 1; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.startsWith("--")) {
+      if (GREP_REJECT_FLAGS.has(t)) return null;
+      if (t === "--regexp") {
+        pattern = tokens[i + 1] ?? null;
+        break;
+      }
+      if (GREP_SAFE_LONG.has(t)) continue;
+      return null; // unknown / arg-taking long flag → bail
+    }
+    if (t.startsWith("-")) {
+      if (GREP_REJECT_FLAGS.has(t)) return null;
+      if (t === "-e") {
+        pattern = tokens[i + 1] ?? null;
+        break;
+      }
+      if (GREP_SAFE_SHORT.test(t.slice(1))) continue;
+      return null; // reject/arg-taking short flag or bundle → bail
+    }
+    pattern = t; // first non-flag token is the pattern
+    break;
+  }
+  if (pattern === null) return null;
+  // Strip one layer of surrounding matching quotes.
+  pattern = pattern.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+  return pattern.length > 0 ? pattern : null;
+}
+
+/**
+ * Handle a PreToolUse:Bash payload. Closes two shell bypasses by delegating to
+ * the handler that owns the gates:
+ *   - a single-file read (`cat`/`head`/`tail`) → handleRead
+ *   - a content-mode symbol grep (`rg`/`grep`) → handleGrep (ADR-0005)
+ * Any parse failure or unrecognised command resolves to passthrough.
  */
 export async function handleBash(
   payload: BashHookPayload
@@ -126,18 +208,29 @@ export async function handleBash(
   const command = payload.tool_input?.command;
   if (!command || typeof command !== "string") return PASSTHROUGH;
 
+  // (1) read-like → Read handler (owns exempt paths, kill switch, staleness,
+  //     confidence, token-saving gate, dedup — we don't duplicate them).
   const filePath = parseReadLikeBashCommand(command);
-  if (filePath === null) return PASSTHROUGH;
+  if (filePath !== null) {
+    return handleRead({
+      tool_name: "Read",
+      cwd: payload.cwd,
+      tool_input: { file_path: filePath },
+    });
+  }
 
-  // Delegate to the Read handler. Synthesized payload mirrors what
-  // Claude Code would send for a direct Read call. The Read handler
-  // does all its own safety checks (exempt paths, kill switch, staleness,
-  // confidence threshold, etc.), so we don't duplicate them here.
-  return handleRead({
-    tool_name: "Read",
-    cwd: payload.cwd,
-    tool_input: {
-      file_path: filePath,
-    },
-  });
+  // (2) content-mode symbol grep → Grep handler. Reuses every v4.2 gate
+  //     (ENGRAM_GREP_INTERCEPT opt-out, SYMBOL_RE + stopwords, content-mode,
+  //     kill switch, ≥4 callers), the ADR-0004 call-site packet, and the
+  //     `rg -n` escalation. No new graph / recall-safety logic here.
+  const pattern = parseGrepBashCommand(command);
+  if (pattern !== null) {
+    return handleGrep({
+      tool_name: "Grep",
+      cwd: payload.cwd,
+      tool_input: { pattern, output_mode: "content" },
+    });
+  }
+
+  return PASSTHROUGH;
 }
