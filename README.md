@@ -58,7 +58,7 @@
   <a href="https://open-vsx.org/extension/nickcirv/engram-vscode"><img src="https://img.shields.io/open-vsx/v/nickcirv/engram-vscode?color=blue&label=OpenVSX" alt="OpenVSX engram-vscode"></a>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node">
-  <img src="https://img.shields.io/badge/tests-1100%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-1110%20passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/per--file%20reduction-53--89%25-orange" alt="53-89% per-file structural reduction">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
   <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
@@ -121,7 +121,7 @@ Works in 8 IDEs and counting — Claude Code, Cursor, Cline, Continue.dev, Aider
 
 > **v4.2 "Loop" shipped 2026-06-03 — engram now closes the agent's investigation loop.** The original Context Spine goal was to collapse the whole `grep → read → read` loop, not just the single file read. v4.2 ships the rest: a **Grep interception** that answers a content-mode symbol search from the reference graph with the actual `file:line: code` call sites — smaller than the raw grep (`init` is 573 vs 9,317 tokens on engram's own repo) while showing the real usage — and **same-session read dedup** that returns a pointer instead of re-serving an unchanged file the agent already read.
 >
-> Both are **recall-safe by construction** (an `rg -n` escalation path; byte-unchanged + PreCompact/SessionStart reset guards) and **gated so they only fire when they genuinely save tokens** — a default `files_with_matches` grep, a low-usage symbol, or a tiny file all pass straight through. Honest framing throughout: a *structural* context-token reduction, not a bill saving (engram's net agent-loop cost over prompt caching is ~0). A new deterministic **session-level bench** (`bench/session-level.ts`) models the saving as a function of how often the agent re-fetches raw content, instead of quoting one number. 1100 tests passing. See [CHANGELOG.md](CHANGELOG.md) for the full v4.2 diff (and v4.1 "Compass" — PageRank-ranked graph + `callers`/`callees`/`impact` traversal).
+> Both are **recall-safe by construction** (an `rg -n` escalation path; byte-unchanged + PreCompact/SessionStart reset guards) and **gated so they only fire when they genuinely save tokens** — a default `files_with_matches` grep, a low-usage symbol, or a tiny file all pass straight through. Honest framing throughout: a *structural* context-token reduction, not a bill saving (engram's net agent-loop cost over prompt caching is ~0). A new deterministic **session-level bench** (`bench/session-level.ts`) models the saving as a function of how often the agent re-fetches raw content, instead of quoting one number. 1110 tests passing. See [CHANGELOG.md](CHANGELOG.md) for the full v4.2 diff (and v4.1 "Compass" — PageRank-ranked graph + `callers`/`callees`/`impact` traversal).
 
 <details>
 <summary><strong>Earlier release notes (v3.4 "Universal Spine", May 2)</strong></summary>
@@ -169,13 +169,13 @@ npm install engramx-continue
 
 Adds engram as an `@engram` context provider. [Package on npm](https://www.npmjs.com/package/engramx-continue) · [Integration docs](docs/integrations/continue.md).
 
-> The Anthropic Claude Code plugin (`/plugin install engram` from the official directory) is in review as of 2026-05-02. When it lands, that's a fourth install path with zero CLI steps. Until then, path 1 covers Claude Code via hooks.
+> The Anthropic Claude Code plugin (`/plugin install engram` from the official directory) is pending in the official directory. When it lands, that's a fourth install path with zero CLI steps. Until then, path 1 covers Claude Code via hooks.
 
 ---
 
 # EngramX — the cached context spine for AI coding agents.
 
-Your AI coding agent keeps re-reading the same files. Every `Read`, every `Edit`, every `cat` re-pays for context you've already paid for.
+Your AI coding agent keeps re-reading the same files. Every `Read`, every `Edit`, every `cat` re-loads context that's already in your window.
 
 **EngramX is the spine.** It intercepts every file read at the tool boundary, answers from a pre-assembled context packet held in **three layers of cache** — a knowledge graph the agent has already "paid" to build, a per-provider SQLite cache of external lookups, and an in-memory LRU of recent queries — and hands the agent a single ~500-token response instead of a raw file.
 
@@ -201,12 +201,12 @@ The **next session** you open starts with the spine pre-loaded: project brief al
 
 ## I'm not a developer — what does this actually do?
 
-Short answer: **your AI coding assistant stops charging you for the same information twice.**
+Short answer: **your AI coding assistant stops re-loading the same information into context twice.**
 
 Long answer:
 
 1. You ask your AI assistant (Claude Code, Cursor, Codex, whatever) to help with a file.
-2. The assistant tries to read that file. Normally it reads the whole thing, pays for every byte in tokens, and throws most of it away.
+2. The assistant tries to read that file. Normally it reads the whole thing, loads every byte into context, and throws most of it away.
 3. EngramX catches the read, answers with a cached summary (the 50–200 lines the agent actually needs, plus context from your git history, past mistakes, library docs, and anything else useful), and lets the agent work from that.
 4. The agent works from a compact structural view instead of re-reading whole files. Multi-hour sessions stop hitting context limits, and the agent stops re-introducing bugs you already fixed — because EngramX remembers what broke. (Token-cost impact depends on your workload — engram-counter measures your real number.)
 
@@ -783,7 +783,7 @@ src/
 
 ## Privacy
 
-Everything runs locally. No data leaves your machine. No telemetry. No cloud dependency. The only network call is `npm install`. Prompt content is never logged (asserted in 579 tests).
+Everything runs locally. No data leaves your machine. No telemetry. No cloud dependency. The only network call is `npm install`. Prompt content is never logged (asserted in the test suite).
 
 ---
 

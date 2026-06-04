@@ -1,8 +1,9 @@
 # How engram compares
 
 engram is a **local, ranked, hook-boundary** code-graph context layer for AI coding agents. The closest
-tools are the local code-graph projects **CodeGraphContext** and **codegraph** (colbymchenry). All three
-are MIT-licensed and run fully local — that's parity, not a differentiator. The differences that matter
+tools are the local code-graph projects **CodeGraphContext** and **codegraph** (colbymchenry). All three are
+permissively licensed (engram **Apache-2.0**; the other two MIT) and run fully local — that's parity,
+not a differentiator. The differences that matter
 are architectural, and they're verifiable.
 
 _Facts below verified against each project's README + the GitHub API on 2026-06-04. If any has changed,
@@ -15,7 +16,7 @@ open an issue — we'd rather fix this table than carry a stale claim._
 | Delivery | **Hook-boundary — answers the agent's Read/Grep automatically** | Query-based MCP server (agent must choose to call it) | Query-based MCP server |
 | Result ordering | **PageRank-ranked** (returns the *important* call-sites first) | Unranked graph queries | Unranked (SQLite + FTS5 lexical) |
 | Past-mistakes memory | **Yes** (bi-temporal — surfaces fixes the agent already made) | No | No |
-| License / local | MIT / fully local | MIT / local-capable | MIT / fully local |
+| License / local | **Apache-2.0** / fully local | MIT / local-capable | MIT / fully local |
 | IDE coverage | 8 | 13 | 8 |
 | Cost claim | **None — by design** (see below) | None | Markets ~16% cheaper |
 
