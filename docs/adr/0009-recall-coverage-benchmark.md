@@ -31,13 +31,14 @@ on the PageRank-ranked list, with `impact` excluded**, or our own honesty discip
   agent doesn't always start at the hub file. Reported against a **random-chance baseline** (k / #source
   files = "what you'd get grepping the repo blind").
 
-First result (engram on engram, deterministic): **recall@5 23.9%, recall@10 31.4%, MRR 0.469, 71.9% of
-trials hit @10, worst-case recall@10 18.5%.** Decomposed honestly (adversarial review): candidate
-generation (callers∪callees) **reaches 41.1%** of co-changed files; PageRank ranking then captures
-**76.3% of that reachable set** at @10 — vs 28.0% for *random ordering of the same candidates* (the
-ranker's own lift, +3.4pp) and 10.4% for blind-grep chance. So the headline is mostly the candidate set,
-with a modest, honestly-stated ranker contribution. First co-changed file near rank 2. Real signal, not
-inflated.
+First result (engram on engram, default `npm run bench:recall`, deterministic): **recall@5 24.7%,
+recall@10 33.0%, MRR 0.466, 71.5% of trials hit @10, worst-case recall@10 20.2%.** Decomposed honestly
+(adversarial review): candidate generation (callers∪callees) **reaches 43.0%** of co-changed files;
+PageRank ranking then captures **76.6% of that reachable set** at @10 — vs 29.8% for *random ordering of
+the same candidates* (the ranker's own lift, +3.2pp) and 10.4% for blind-grep chance. So the headline is
+mostly the candidate set, with a modest, honestly-stated ranker contribution. First co-changed file near
+rank 2. Real signal, not inflated. _(Self-repo numbers drift as the repo's history grows — reproduce the
+current figure with `npm run bench:recall`.)_
 
 ## Honesty (disclosed in the bench output itself)
 
@@ -45,10 +46,10 @@ inflated.
   whether the agent succeeds. The resolve-rate half needs live agents (gated).
 - **Co-change ≠ structural relatedness.** Sibling refactors and doc+code changes share no call edge — a
   hard ceiling on what *any* structural tool can predict. The method's own reachable ceiling (callers∪
-  callees membership) is **41.1%**, so recall@10 31.4% is read against 41.1%, not 100% — it captures 76%
+  callees membership) is **43.0%**, so recall@10 33.0% is read against 43.0%, not 100% — it captures 76.6%
   of what's structurally reachable.
 - **Ranking vs candidate generation are reported separately** (vs a random-order-within-candidates
-  baseline) so the PageRank ranker's real contribution (+3.4pp) isn't conflated with set membership.
+  baseline) so the PageRank ranker's real contribution (+3.2pp) isn't conflated with set membership.
 - **9.1% of co-changed source files have no extracted symbols** and are excluded (disclosed in output) —
   engram can't structurally predict them.
 - **`impact` excluded** as a vanity firehose (the backtest finding, baked into the method).

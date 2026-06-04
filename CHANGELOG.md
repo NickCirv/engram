@@ -13,12 +13,12 @@ All notable changes to engram are documented here. Format based on
   that changed ≥2 source files, it rotates each as the start file and measures
   recall@5/@10 + MRR of the co-changed files among engram's PageRank-ranked
   `callers∪callees` (impact excluded as an 81%-of-repo firehose), against a
-  baseline. First result (engram on engram): recall@10 31.4% — decomposed
-  honestly: candidate generation (callers∪callees) reaches 41.1% of co-changed
-  files, PageRank ranking captures 76% of that (vs 28.0% random-order within the
-  same candidates — the ranker's real +3.4pp lift; 10.4% blind chance). All
-  caveats (structural-not-resolve-rate, co-change≠structural, 9.1% no-symbol
-  exclusion, self-repo) in the output. The live resolve-rate A/B stays budget-gated.
+  baseline. First result (engram on engram, default run): recall@10 33.0% —
+  decomposed honestly: candidate generation (callers∪callees) reaches 43.0% of
+  co-changed files, PageRank ranking captures 76.6% of that (vs 29.8% random-order
+  within the same candidates — the ranker's real +3.2pp lift; 10.4% blind chance).
+  All caveats (structural-not-resolve-rate, co-change≠structural, 9.1% no-symbol
+  exclusion, self-repo drift) in the output. The live resolve-rate A/B stays budget-gated.
 - **Sub-agent context broker (`SubagentStart`, ADR-0008).** Injects a tiny
   (~100-token) structural slice — the project's top-ranked **production** entities
   + graph shape — into each spawning Claude Code sub-agent, so it can orient
