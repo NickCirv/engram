@@ -78,39 +78,65 @@ function bareName(label: string): string {
 // ── Tool-cost primitives ───────────────────────────────────────────
 
 /**
- * Baseline Grep cost: tokens a real ripgrep dump puts in context.
+ * Raw ripgrep output — the dump an agent's content grep puts in context.
  * `wholeWord` uses `-w` for symbol traces — the apples-to-apples baseline for
  * "find this symbol", vs noisy substring matching ("init" ⊃ "initialize").
  */
-function rgTokens(pattern: string, root: string, wholeWord: boolean): number {
+function rgRaw(pattern: string, root: string, wholeWord: boolean): string {
+  // The `.` path arg is REQUIRED: under execFileSync rg has no TTY stdin, so
+  // without a path it would read (empty) stdin and find nothing. rg then
+  // prefixes every line with `./`; we strip it so the baseline isn't inflated
+  // and the paths match the packet's relative `src/...` form (recall-coverage).
   const args = ["-n", "--no-heading", "--color=never"];
   if (wholeWord) args.push("-w");
   args.push("-e", pattern, ".");
+  const strip = (out: string): string => out.replace(/^\.\//gm, "");
   try {
-    const out = execFileSync("rg", args, {
-      cwd: root,
-      encoding: "utf-8",
-      maxBuffer: 128 * 1024 * 1024,
-    });
-    return estimateTokens(out);
+    return strip(
+      execFileSync("rg", args, {
+        cwd: root,
+        encoding: "utf-8",
+        maxBuffer: 128 * 1024 * 1024,
+      })
+    );
   } catch (e: unknown) {
     // rg exits 1 when there are zero matches; its (empty) stdout is on the error.
-    const out =
+    return strip(
       e && typeof e === "object" && "stdout" in e
         ? String((e as { stdout?: unknown }).stdout ?? "")
-        : "";
-    return estimateTokens(out);
+        : ""
+    );
   }
 }
 
-/** If a handler returned a deny, the token cost the agent pays is the packet. */
-function denyTokens(result: unknown): number | null {
+/** The deny packet text (what the agent pays), or null for a passthrough. */
+function denyReason(result: unknown): string | null {
   if (!result || typeof result !== "object") return null;
   const out = (result as Record<string, unknown>).hookSpecificOutput as
     | Record<string, unknown>
     | undefined;
   const reason = out?.permissionDecisionReason;
-  return typeof reason === "string" ? estimateTokens(reason) : null;
+  return typeof reason === "string" ? reason : null;
+}
+
+/**
+ * The set of `file:line` match locations in an rg dump or an engram packet —
+ * used to measure recall-coverage (does the packet surface the lines the agent
+ * grepped for?). Robust to the leading-space difference between the two formats.
+ */
+function fileLineSet(text: string): Set<string> {
+  const set = new Set<string>();
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    const i1 = line.indexOf(":");
+    if (i1 <= 0) continue;
+    const i2 = line.indexOf(":", i1 + 1);
+    if (i2 <= i1) continue;
+    if (/^\d+$/.test(line.slice(i1 + 1, i2))) {
+      set.add(line.slice(0, i2).replace(/^\.\//, "")); // normalised "file:line"
+    }
+  }
+  return set;
 }
 
 // ── Trace types ────────────────────────────────────────────────────
@@ -140,6 +166,10 @@ interface TraceResult {
   interceptedBaseline: number;
   interceptedPacket: number;
   passthroughBaseline: number;
+  /** recall-coverage: `file:line` match locations the raw grep would show vs how
+   *  many the engram packet actually surfaces (a bare file list ≈ 0). */
+  rawGrepLocs: number;
+  coveredGrepLocs: number;
 }
 
 /** engram cost for a trace at recall-recovery fraction P. */
@@ -215,19 +245,34 @@ async function costTrace(
   let interceptedBaseline = 0;
   let interceptedPacket = 0;
   let passthroughBaseline = 0;
+  let rawGrepLocs = 0;
+  let coveredGrepLocs = 0;
 
   for (const step of trace.steps) {
     let base = 0;
     let packetTokens: number | null = null;
 
     if (step.tool === "Grep") {
-      base = rgTokens(step.arg, root, trace.kind === "symbol");
+      const rawOut = rgRaw(step.arg, root, trace.kind === "symbol");
+      base = estimateTokens(rawOut);
       const r = await handleGrep({
         tool_name: "Grep",
         cwd: root,
-        tool_input: { pattern: step.arg },
+        // content mode models a content-mode investigation — the case where
+        // engram's call-site packet beats the raw grep. (A default
+        // files_with_matches grep is cheaper than any packet → passthrough.)
+        tool_input: { pattern: step.arg, output_mode: "content" },
       });
-      packetTokens = denyTokens(r); // null = passthrough
+      const reason = denyReason(r);
+      packetTokens = reason === null ? null : estimateTokens(reason);
+      // recall-coverage: of the locations the raw grep would show, how many does
+      // the packet actually surface? A bare file list ≈ 0; call-site lines high.
+      if (reason !== null && trace.kind === "symbol") {
+        const rawSet = fileLineSet(rawOut);
+        const pktSet = fileLineSet(reason);
+        rawGrepLocs += rawSet.size;
+        for (const loc of rawSet) if (pktSet.has(loc)) coveredGrepLocs++;
+      }
     } else {
       const abs = isAbsolute(step.arg) ? step.arg : join(root, step.arg);
       let content = "";
@@ -242,7 +287,8 @@ async function costTrace(
         cwd: root,
         tool_input: { file_path: abs },
       });
-      packetTokens = denyTokens(r);
+      const reason = denyReason(r);
+      packetTokens = reason === null ? null : estimateTokens(reason);
     }
 
     const intercepted = packetTokens !== null;
@@ -270,6 +316,8 @@ async function costTrace(
     interceptedBaseline,
     interceptedPacket,
     passthroughBaseline,
+    rawGrepLocs,
+    coveredGrepLocs,
   };
 }
 
@@ -319,6 +367,14 @@ async function main(): Promise<void> {
   const intBase = symbol.reduce((a, r) => a + r.interceptedBaseline, 0);
   const intPacket = symbol.reduce((a, r) => a + r.interceptedPacket, 0);
 
+  // Recall-coverage: of the match locations a raw content grep would show the
+  // agent, what fraction does engram's packet actually surface? A bare file-list
+  // packet ≈ 0% (the agent must re-grep → high effective P); call-site lines push
+  // it up (lower effective P → the real saving moves toward the ceiling).
+  const rawLocs = symbol.reduce((a, r) => a + r.rawGrepLocs, 0);
+  const coveredLocs = symbol.reduce((a, r) => a + r.coveredGrepLocs, 0);
+  const recallCoverage = rawLocs > 0 ? (coveredLocs / rawLocs) * 100 : 0;
+
   const reductionAt = (p: number): number => {
     const eng = symbol.reduce((a, r) => a + engramAt(r, p), 0);
     return symBase > 0 ? ((symBase - eng) / symBase) * 100 : 0;
@@ -350,6 +406,13 @@ async function main(): Promise<void> {
     );
   }
   console.log("─".repeat(74));
+  console.log();
+
+  console.log(
+    `Grep recall-coverage: engram's call-site packets surface ${recallCoverage.toFixed(1)}% ` +
+      `of the\n  ${rawLocs} match locations a raw content grep would show ` +
+      `(a bare file list ≈ 0%).\n  Higher coverage → the agent re-greps less → lower effective P.`
+  );
   console.log();
 
   console.log("Session reduction vs recall-recovery fraction P");
@@ -403,7 +466,7 @@ async function main(): Promise<void> {
     join(OUT_DIR, `session-level-${date}.json`),
     JSON.stringify(
       {
-        version: "session-level.v2",
+        version: "session-level.v3",
         date: new Date().toISOString(),
         project: proj,
         config: { topSymbols: TOP_SYMBOLS, readsPerTrace: READS_PER_TRACE },
@@ -415,6 +478,8 @@ async function main(): Promise<void> {
           breakEvenP: Number(breakEvenP.toFixed(4)),
           medianTraceReductionP0: Number(median.toFixed(2)),
           rangeP0: [Number(Math.min(...perTraceP0).toFixed(2)), Number(Math.max(...perTraceP0).toFixed(2))],
+          grepRecallCoveragePct: Number(recallCoverage.toFixed(2)),
+          grepRawMatchLocations: rawLocs,
         },
         regressions: regressions.map((r) => r.name),
         traces: results,
@@ -444,6 +509,8 @@ async function main(): Promise<void> {
     `**Break-even P = ${(breakEvenP * 100).toFixed(1)}%** — engram nets a positive session reduction as long as the agent falls back to raw content on fewer than ${(breakEvenP * 100).toFixed(0)}% of intercepted calls.`,
     "",
     `Per-trace median (P=0): **${median.toFixed(1)}%** · range ${Math.min(...perTraceP0).toFixed(1)}%–${Math.max(...perTraceP0).toFixed(1)}%. Control (text-search passthrough): 0%.`,
+    "",
+    `**Grep recall-coverage: ${recallCoverage.toFixed(1)}%** of the ${rawLocs} match locations a raw content grep would show are surfaced in engram's call-site packets (a bare file-list packet ≈ 0%). Higher coverage means the agent re-greps less — i.e. a *lower effective P*, which moves the real saving toward the ceiling. This is the measured proxy for the find-usages recall gain.`,
     "",
     `> The **P=0 number is an OPTIMISTIC ceiling**, not a lower bound: it assumes engram's structural packet fully answers what the agent grepped/read. The packet is a subset of the raw output, so the real saving lies between P=0 and break-even, by workload (high recall-sufficiency on structural/discovery work, low when exact call sites are needed — the same bimodal split as W1.9). Structural context-token reduction, **not** a bill saving. Traces generated by a rule (top-${TOP_SYMBOLS} most-referenced symbols × caller files), word-boundary grep baseline.`,
     "",
