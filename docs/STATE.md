@@ -35,9 +35,11 @@ memory, audit). "Ranked" refers only to the **PageRank query ordering**, never t
 | **Bash-grep interception** (#71) | `src/intercept/handlers/bash.ts` — `rg`/`grep` via Bash → `handleGrep`; net-new for shell-only IDEs | **0005** |
 | **Honest before/after demo** (#77) | `npm run demo` + `docs/demos/before-after.cast`; −78% / ~4.5× with ceiling + ~22% recall + ~20% intercept-rate + passthrough floor all disclosed | **0006** |
 | **Differentiation comparison** (#78) | `docs/COMPARISON.md` — verified-facts-only vs CodeGraphContext/codegraph (both query-based MCP + unranked + no mistakes-memory; CodeGraphContext = 13 IDEs > engram's 8) | — |
-| Master plan / operating form | `docs/PLAN.md` — four tracks + the strategic reframe | — |
+| **`engram measure`** (#81) | shipped CLI — honest structural reduction on the USER's own repo; auto-discovers top symbols, all disclosures computed live; only counts genuine reductions | — |
+| **Grep never-worse gate** (#82) | `src/intercept/handlers/grep.ts` — sizes the real grep scoped to the agent's cwd+path+glob; passes through when the packet isn't smaller. Closes a real "never worse" violation found by #81 | **0007** |
+| Master plan + Frontier research | `docs/PLAN.md` (four tracks + §9 frontier) · `docs/FRONTIER.md` (5-front pioneer research) · `docs/COMPARISON.md` honesty fix (Aider ranks too) · README cost-claim scrub | — |
 
-**Next (engineering):** README hero-asset embed (the cast + COMPARISON link, where evaluators land) → then Track-P **#72 (Bash-explore)** or Track-M **#81 (`engram bench` on the user's repo)**. v4.3 release (#74) bundles the Bash work — Nick 2FA.
+**Next (engineering):** **#83 sub-agent context broker** (the flagship pioneer move — biggest honest dollar saving; Phase-0 on cross-IDE sub-agent injection running) + its proof **#85**. Then README hero-asset embed; v4.3 release (#74, Nick 2FA) bundles Bash-grep + measure + the never-worse gate. Frontier moves: #83/#84/#85 (see `docs/FRONTIER.md` §5).
 
 ### Measurement (how we keep ourselves honest)
 
