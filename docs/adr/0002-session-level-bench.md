@@ -53,9 +53,9 @@ engram_cost(step, P) = intercepted ? packet + P*baseline : baseline
 The break-even P being high (e.g. ~0.89 on engram's own repo) is the defensible claim: the packet is so
 much smaller than the raw output that engram nets positive unless the agent re-fetches raw content on
 most intercepted calls. The recall-sufficiency is workload-dependent — high on structural/discovery
-investigation, low when exact call sites are needed — which is the same bimodal split the live W1.9
+investigation, low when exact call sites are needed — which is the same bimodal split the live
 bench found (+24% troubleshooting / −9% refactor). The symbol-grep baseline uses word-boundary `rg -w`
 (apples-to-apples with engram's symbol answer). This is a *structural* context-token reduction, not a
-bill saving (caching owns cost; net ≈ 0 per W1.9). The live LLM-in-the-loop bench (`engram-benchmarks`)
+bill saving (caching owns cost; net ≈ 0). The live LLM-in-the-loop bench (`engram-benchmarks`)
 remains the gold standard for behavioural reality; this deterministic bench complements it by isolating
 the mechanical reduction and its sensitivity to recall-recovery.

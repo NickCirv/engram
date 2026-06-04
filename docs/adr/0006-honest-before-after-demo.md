@@ -8,9 +8,9 @@ Research (PLAN §2, 2026-06-04) says the single highest-leverage adoption asset 
 before/after demo, and that the binding constraint on winning is distribution, not more interception.
 But engram's whole credibility rests on the honest spine (PLAN §1): every number is a **structural
 context-token reduction**, never a cost saving. A demo that flashes "−95%!" without context would be
-the exact W1.9 sin — selling the **P=0 ceiling** (agent needs zero raw follow-up) as if it were the
-realistic case. The competitors (CodeGraphContext, codegraph) already over-claim "~35% cheaper"; engram
-cannot join that race.
+the exact ceiling-as-headline sin — selling the **P=0 ceiling** (agent needs zero raw follow-up) as if it were the
+realistic case. A local-graph competitor (codegraph) markets a modest cost saving (~16%); another
+(CodeGraphContext) claims none — and engram honestly can't claim cost at all (caching owns it).
 
 The bench engine already does honest measurement: `bench/session-level.ts` replays real
 `Grep(symbol) → Read(caller files)` traces through the **real shipped handlers** (`handleGrep`,

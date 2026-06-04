@@ -15,7 +15,7 @@ engram's original Context Spine thesis (`docs/specs/2026-04-13-context-spine-des
 collapse the agent's 5-call investigation loop (grep → read → read → grep) into one packet, targeting
 90%+ *session-level* token reduction. The shipped product only intercepts `Read`/`cat` — so the agent
 still runs every `Grep` raw, and a symbol search across a large repo floods the context window with
-match lines (often 2–20k tokens). The W1.9 benchmark shows engram already wins exactly on the
+match lines (often 2–20k tokens). Our session benchmark shows engram already wins exactly on the
 explore-heavy workloads (troubleshooting +24.9%, code-understanding +23.3%) and is neutral/negative on
 linear edits — i.e. the value is in *exploration elimination*, which this gap leaves on the table. The
 `calls` reference graph + `findCallers/findCallees/findImpact` (pure traversal, alphabetically sorted) already exist but are

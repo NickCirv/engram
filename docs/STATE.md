@@ -14,7 +14,7 @@ the graph instead of letting raw file/grep output flood the context window.
 
 **The honest claim (do not drift):** every number engram reports is a *structural context-token
 reduction* — fewer tokens entering the model's context window per tool call — **not** a cost/bill
-saving. With prompt caching, engram's net effect on the dollar bill is ~0 (measured, W1.9). The value
+saving. With prompt caching, engram's net effect on the dollar bill is ~0 (measured). The value
 is capacity (longer sessions, fewer "context full" walls) and quality (ranked context, mistakes
 memory, audit). "Ranked" refers only to the **PageRank query ordering**, never the grep caller list.
 
@@ -56,7 +56,7 @@ before/after demo (#77)**, not more interception — distribution is the binding
 | C (#73) | Cumulative session measurement (replay/live) | blocked by A,B | prove the *combined* saving end-to-end (transcript replay over real logs), not per-mechanism. |
 | D (#74) | Release **v4.3** (Bash bundle) | blocked by A,B | ship the Bash interceptions to users (else stranded on main). Nick 2FA. |
 | E (#75) | git-bugfix-miner hardening | backlog | perf/robustness, non-blocking. |
-| F (#76) | Workload router | **PARKED** | built on N=3 (weakest evidence); the per-call gates are already a better router. Revisit only if W1.9 firms up. |
+| F (#76) | Workload router | **PARKED** | built on N=3 (weakest evidence); the per-call gates are already a better router. Revisit only if the evidence firms up. |
 
 ## Operating rhythm (every task)
 

@@ -16,7 +16,7 @@ win adoption as free OSS — **honestly**, on capacity + quality + memory + audi
 
 Every number engram reports is a **structural context-token reduction** — fewer tokens entering the
 model's context window per tool call — **not** a cost/bill saving. With prompt caching, engram's net
-effect on the dollar bill is ≈ 0 (measured, W1.9). The value is **capacity** (longer sessions, fewer
+effect on the dollar bill is ≈ 0 (measured). The value is **capacity** (longer sessions, fewer
 "context full" walls) and **quality** (ranked context, mistakes memory, audit). "Ranked" refers only to
 the **PageRank query ordering**, never the grep caller list. This constraint is not a weakness to hide —
 it's the credibility that the louder incumbents have thrown away (§2).
