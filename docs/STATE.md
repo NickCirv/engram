@@ -28,6 +28,17 @@ memory, audit). "Ranked" refers only to the **PageRank query ordering**, never t
 | **Same-session read dedup** | Re-read of an unchanged file → pointer, not re-serve | byte-unchanged + full-read-only + PreCompact/SessionStart reset + TTL/cap; `ENGRAM_READ_DEDUP=0` | 0003 |
 | Day-1 mistakes | `fix:`/`fixes #N` miner seeds mistake-memory on init | `ENGRAM_MISTAKE_GUARD` (warn floor) | (v4.1) |
 
+### Shipped 2026-06-04 (on `main`, post-v4.2 — bundles into v4.3)
+
+| What | Where | ADR |
+|---|---|---|
+| **Bash-grep interception** (#71) | `src/intercept/handlers/bash.ts` — `rg`/`grep` via Bash → `handleGrep`; net-new for shell-only IDEs | **0005** |
+| **Honest before/after demo** (#77) | `npm run demo` + `docs/demos/before-after.cast`; −78% / ~4.5× with ceiling + ~22% recall + ~20% intercept-rate + passthrough floor all disclosed | **0006** |
+| **Differentiation comparison** (#78) | `docs/COMPARISON.md` — verified-facts-only vs CodeGraphContext/codegraph (both query-based MCP + unranked + no mistakes-memory; CodeGraphContext = 13 IDEs > engram's 8) | — |
+| Master plan / operating form | `docs/PLAN.md` — four tracks + the strategic reframe | — |
+
+**Next (engineering):** README hero-asset embed (the cast + COMPARISON link, where evaluators land) → then Track-P **#72 (Bash-explore)** or Track-M **#81 (`engram bench` on the user's repo)**. v4.3 release (#74) bundles the Bash work — Nick 2FA.
+
 ### Measurement (how we keep ourselves honest)
 
 - `bench/real-world.ts` — per-file structural reduction (size-guarded "effective" number).
