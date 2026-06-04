@@ -25,15 +25,16 @@ it's the credibility that the louder incumbents have thrown away (§2).
 
 The local-code-graph category is now contested:
 
-| Player | Sells | Shape |
+| Player | Sells (verified 2026-06-04) | Shape |
 |---|---|---|
-| **CodeGraphContext** (~3.1K★, 100K+ dl) | "~35% lower cost, ~70% fewer tool calls, 100% local" | MCP server — agent must choose to query; **unranked** graph |
-| **colbymchenry/codegraph** | same cost/privacy story, 7+ IDEs | MCP server; **unranked** |
+| **CodeGraphContext** (~3.6K★, MIT) | privacy / local graph queries — **makes no cost claim** | query-based **MCP server**; **unranked**; 13 IDEs; no mistakes-memory |
+| **codegraph** (colbymchenry, MIT) | markets ~16% cheaper / ~58% fewer tool calls; star count shows **bot-inflation signals** (40K★ / 98 watchers) | query-based **MCP server**; **unranked**; no mistakes-memory |
 | Cursor / Cody (Sourcegraph) | scale + cross-repo accuracy (RAG) | cloud-leaning, enterprise-priced |
 | Claude Code (agentic search) | zero-setup + freshness | pays in tool-call fan-out |
 
-**The two incumbents already own — and over-claim — the cost lane engram honestly can't enter.** Do not
-price-fight. engram's three honest, defensible moats (none of them have any):
+The cost lane is **contested but modestly** (codegraph ~16%, CodeGraphContext nothing) — and engram
+honestly *can't* claim cost at all (caching owns it). Don't price-fight; differentiate on architecture.
+engram's three honest, defensible moats (verified absent in both local-graph tools above):
 
 1. **PageRank ranking** — returns the *important* code, not just the *linked* code.
 2. **Hook-boundary auto-interception** — answers Read/Grep *automatically*; MCP-server rivals depend on
