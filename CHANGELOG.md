@@ -7,6 +7,14 @@ All notable changes to engram are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **`engram measure` — the honest, user-runnable saving on YOUR repo.** Auto-
+  discovers your repo's highest-fan-out symbols (PageRank god-nodes, bare-
+  identifier-resolved), runs the REAL `handleGrep` on each, and reports the live
+  structural context-token reduction (grep-flood → ranked call-site packet) with
+  every disclosure computed per-repo: the reduction is a CEILING, live recall-
+  coverage, the real intercept rate, and "structural tokens, not your bill." It
+  only counts genuine reductions as wins — symbols where the packet comes out
+  larger than the raw grep are reported honestly, never folded into the headline.
 - **Honest before/after demo (`npm run demo`, ADR-0006).** A deterministic,
   asciinema-recordable demo that runs the **real** `handleGrep` on engram's own
   repo and shows the structural context-token collapse on real symbol searches

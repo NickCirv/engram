@@ -628,6 +628,16 @@ program
   );
 
 program
+  .command("measure")
+  .description("Honest structural context-token reduction on YOUR repo (auto-discovers top symbols)")
+  .option("-p, --project <path>", "Project directory", ".")
+  .option("-t, --top <n>", "How many top symbols to sample (1-50)", (v) => parseInt(v, 10))
+  .action(async (opts: { project: string; top?: number }) => {
+    const { runMeasure } = await import("./commands/measure.js");
+    await runMeasure({ project: opts.project, top: opts.top });
+  });
+
+program
   .command("bench")
   .description("Run token reduction benchmark")
   .option("-p, --project <path>", "Project directory", ".")
