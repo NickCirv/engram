@@ -304,6 +304,30 @@ export function installEngramHooks(
 }
 
 /**
+ * The ENGRAM_HOOK_EVENTS this version supports that are NOT yet registered in
+ * `settings` (no `engram intercept` entry on that event). On upgrade to a
+ * release that adds a NEW event (e.g. v4.3's SubagentStart), these are the
+ * events the user won't get until they re-run `engram install-hook` — `engram
+ * update` only bumps the binary, it never touches settings.json, and the
+ * SessionStart auto-init reconcile only fires for repos without a graph. So an
+ * existing user silently misses the new event. `doctor` surfaces this. Read-only;
+ * never mutates. (Engram installs all its events to one settings file, so a
+ * per-file check is correct.)
+ */
+export function missingHookEvents(settings: {
+  readonly hooks?: Readonly<Record<string, unknown>>;
+}): EngramHookEvent[] {
+  const hooks = settings.hooks ?? {};
+  return ENGRAM_HOOK_EVENTS.filter((event) => {
+    const arr = hooks[event];
+    return (
+      !Array.isArray(arr) ||
+      !arr.some((e) => entryContainsCommand(e as HookEntry, "engram intercept"))
+    );
+  });
+}
+
+/**
  * True when any of the entry's commands contains the given substring.
  * Used for targeted idempotence checks in `installEngramHooks` — each
  * engram-owned entry has a distinguishing command, so substring match

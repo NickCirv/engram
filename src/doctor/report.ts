@@ -10,6 +10,7 @@
  */
 import chalk from "chalk";
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { missingHookEvents } from "../intercept/installer.js";
 import { join } from "node:path";
 import { homedir, platform, release } from "node:os";
 import {
@@ -81,6 +82,25 @@ function checkHook(projectRoot: string): DoctorCheck {
     try {
       const content = readFileSync(path, "utf-8");
       if (content.includes("engram intercept")) {
+        // Engram is wired — but a binary-only upgrade (`engram update` / npm)
+        // does NOT register NEW hook events (e.g. v4.3's SubagentStart), so an
+        // existing user silently misses them. Surface any this version supports
+        // that the settings lack, so they re-run install-hook.
+        let missing: string[] = [];
+        try {
+          missing = missingHookEvents(JSON.parse(content));
+        } catch {
+          /* unparseable settings — still report the hook as active */
+        }
+        if (missing.length > 0) {
+          return {
+            name: "hook",
+            severity: "warn",
+            detail: `Sentinel hook active, but ${missing.length} newer event(s) not registered: ${missing.join(", ")} (via ${path.replace(homedir(), "~")})`,
+            remediation:
+              "Run `engram install-hook` to register them (e.g. the v4.3 sub-agent context broker + compaction ledger).",
+          };
+        }
         return {
           name: "hook",
           severity: "ok",
