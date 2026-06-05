@@ -23,3 +23,4 @@ bench/results/real-world-2*.md
 docs/demos/work-*/
 dist-extensions/
 bench/results/session-level-2*.md
+.claude/
