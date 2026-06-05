@@ -6,6 +6,17 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+## [4.3.0] — 2026-06-05 — "Proof"
+
+**Why "Proof":** this release makes engram's saving real and *provable*. `engram measure` shows the
+structural reduction on your own repo; the recall-coverage benchmark proves engram surfaces the right
+code (reproducibly, decomposed, un-inflated); the never-worse gate guarantees engram never makes a search
+worse; the sub-agent broker targets the one regime prompt caching can't help (fan-out); and the
+compaction ledger keeps the agent from re-exploring after `/compact`. Every number is a measured fact or
+a labelled bet — no cost claims. Bash-grep extends interception to the shell-only IDEs (Aider/Codex/Cline).
+Decisions: ADR-0005…0011 (incl. ADR-0011 = the honest decision *not* to intercept directory listings —
+the graph is a code-symbol graph, not a file index).
+
 ### Added
 - **Compaction session ledger (ADR-0010).** After an explicit `/compact`, engram's
   PreCompact hook now appends a "Previously read this session" block — a path-only
