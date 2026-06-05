@@ -63,7 +63,8 @@ function goldCommits(root: string, limit: number): Array<{ hash: string; files: 
 
 function main(): void {
   const root = resolve(arg("--project", "."));
-  const limit = parseInt(arg("--limit", "60"), 10);
+  const limitRaw = parseInt(arg("--limit", "60"), 10);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 60;
   const K1 = 5, K2 = 10;
 
   getStore(root).then((store) => {
@@ -149,6 +150,12 @@ function main(): void {
       if (commitR10.length > 0) perCommitWorst.push(Math.min(...commitR10));
     }
 
+    if (trials === 0) {
+      console.log(
+        `\n  recall-coverage: no eligible trials — needs commits with ≥2 known source files (no merges/renames).\n  Found ${commits.length} candidate commit(s) at --limit ${limit}; none had ≥2 graph-known files.\n  Try a repo with more history, re-run \`engram init\`, or raise --limit.\n`
+      );
+      return;
+    }
     const pct = (x: number): string => (100 * x).toFixed(1) + "%";
     const chance5 = K1 / totalSourceFiles, chance10 = K2 / totalSourceFiles;
     console.log("");

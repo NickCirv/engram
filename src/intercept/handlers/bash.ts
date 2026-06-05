@@ -163,29 +163,39 @@ export function parseGrepBashCommand(command: string): string | null {
   if (tokens.length < 2) return null;
   if (!GREP_COMMANDS.has(tokens[0])) return null;
 
+  // Scan EVERY token — do not break on the pattern. An output-mode flag placed
+  // AFTER the pattern (`rg init -l`, `grep init -c`) still changes the result, so
+  // it must reach the reject gate; breaking early would model a files/count grep
+  // as a content search and intercept dishonestly (BUG-1/2). Trailing non-flag
+  // tokens after the pattern are file paths — they don't change mode, so ignore.
   let pattern: string | null = null;
   for (let i = 1; i < tokens.length; i++) {
     const t = tokens[i];
     if (t.startsWith("--")) {
       if (GREP_REJECT_FLAGS.has(t)) return null;
       if (t === "--regexp") {
-        pattern = tokens[i + 1] ?? null;
-        break;
+        const arg = tokens[i + 1] ?? null;
+        if (arg === null || arg.startsWith("-")) return null; // smuggled flag
+        if (pattern === null) pattern = arg;
+        i++; // consume the arg
+        continue;
       }
       if (GREP_SAFE_LONG.has(t)) continue;
       return null; // unknown / arg-taking long flag → bail
     }
-    if (t.startsWith("-")) {
+    if (t.startsWith("-") && t.length > 1) {
       if (GREP_REJECT_FLAGS.has(t)) return null;
       if (t === "-e") {
-        pattern = tokens[i + 1] ?? null;
-        break;
+        const arg = tokens[i + 1] ?? null;
+        if (arg === null || arg.startsWith("-")) return null; // smuggled flag
+        if (pattern === null) pattern = arg;
+        i++; // consume the arg
+        continue;
       }
       if (GREP_SAFE_SHORT.test(t.slice(1))) continue;
       return null; // reject/arg-taking short flag or bundle → bail
     }
-    pattern = t; // first non-flag token is the pattern
-    break;
+    if (pattern === null) pattern = t; // first non-flag token is the pattern
   }
   if (pattern === null) return null;
   // Strip one layer of surrounding matching quotes.

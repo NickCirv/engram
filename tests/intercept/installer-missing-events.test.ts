@@ -35,4 +35,14 @@ describe("missingHookEvents", () => {
     };
     expect(missingHookEvents(settings)).toContain("SubagentStart");
   });
+
+  it("never throws on a malformed, hand-edited settings.json (BUG-4)", () => {
+    // The doctor wraps this in try/catch, but a throw there silently drops the
+    // missing-event warning — so the function itself must tolerate junk.
+    expect(() => missingHookEvents({ hooks: { PreToolUse: [null] } as never })).not.toThrow();
+    expect(missingHookEvents({ hooks: { PreToolUse: [null] } as never })).toContain("PreToolUse");
+    expect(() => missingHookEvents(null as never)).not.toThrow();
+    expect(missingHookEvents(null as never).length).toBe(ENGRAM_HOOK_EVENTS.length);
+    expect(() => missingHookEvents({ hooks: { PreToolUse: "nope" } as never })).not.toThrow();
+  });
 });

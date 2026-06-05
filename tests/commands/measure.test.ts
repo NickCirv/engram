@@ -50,6 +50,12 @@ describe("fileLineSet", () => {
     expect(s.size).toBe(0);
   });
 
+  it("keeps Windows drive-letter paths intact (BUG-5)", () => {
+    const s = fileLineSet("C:\\src\\a.ts:5: const x = 1;");
+    expect(s.has("C:\\src\\a.ts:5")).toBe(true);
+    expect(s.size).toBe(1);
+  });
+
   it("normalises rg and packet forms so they're comparable", () => {
     const rg = fileLineSet("./src/a.ts:12: x");
     const pkt = fileLineSet("  src/a.ts:12: x();");

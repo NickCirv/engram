@@ -60,7 +60,9 @@ export function fileLineSet(text: string): Set<string> {
   const s = new Set<string>();
   for (const raw of text.split("\n")) {
     const line = raw.trimStart().replace(/^\.\//, "");
-    const m = line.match(/^([^:\s][^:]*):(\d+):/);
+    // Anchor the `:line:` from the RIGHT (greedy path) so a Windows drive-letter
+    // colon (`C:\src\a.ts:5:`) doesn't truncate the path at the first colon.
+    const m = line.match(/^(\S.*):(\d+):/);
     if (m) s.add(`${m[1]}:${m[2]}`);
   }
   return s;

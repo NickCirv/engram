@@ -317,7 +317,7 @@ export function installEngramHooks(
 export function missingHookEvents(settings: {
   readonly hooks?: Readonly<Record<string, unknown>>;
 }): EngramHookEvent[] {
-  const hooks = settings.hooks ?? {};
+  const hooks = settings?.hooks ?? {};
   return ENGRAM_HOOK_EVENTS.filter((event) => {
     const arr = hooks[event];
     return (
@@ -334,7 +334,9 @@ export function missingHookEvents(settings: {
  * is sufficient.
  */
 function entryContainsCommand(entry: HookEntry, substring: string): boolean {
-  if (!Array.isArray(entry.hooks)) return false;
+  // entry may be null / a primitive in a hand-edited settings.json (e.g.
+  // `"PreToolUse": [null]`) — never throw; an unrecognised entry just isn't ours.
+  if (!entry || typeof entry !== "object" || !Array.isArray(entry.hooks)) return false;
   for (const h of entry.hooks) {
     if (h === null || typeof h !== "object") continue;
     const cmd = (h as HookCommand).command;

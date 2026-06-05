@@ -233,6 +233,29 @@ describe("parseGrepBashCommand", () => {
     expect(parseGrepBashCommand("")).toBe(null);
     expect(parseGrepBashCommand(null as unknown as string)).toBe(null);
   });
+
+  it("rejects output-mode flags placed AFTER the pattern (BUG-1)", () => {
+    // The agent asked 'which files / how many', not for call-site lines —
+    // intercepting these as a content search would answer the wrong question.
+    expect(parseGrepBashCommand("rg init -l")).toBe(null);
+    expect(parseGrepBashCommand("grep init -c")).toBe(null);
+    expect(parseGrepBashCommand("rg handleAuth -o")).toBe(null);
+    expect(parseGrepBashCommand("grep handleAuth -v")).toBe(null);
+    expect(parseGrepBashCommand("rg handleAuth -A 3")).toBe(null); // arg-flag after pattern
+    expect(parseGrepBashCommand("rg handleAuth --files-with-matches")).toBe(null);
+  });
+
+  it("rejects -e/--regexp when the next token is itself a flag (BUG-2)", () => {
+    expect(parseGrepBashCommand("rg -e -l")).toBe(null);
+    expect(parseGrepBashCommand("grep --regexp -c")).toBe(null);
+    expect(parseGrepBashCommand("grep -e")).toBe(null); // dangling
+  });
+
+  it("still accepts a content grep with trailing file-path args", () => {
+    expect(parseGrepBashCommand("grep -rn handleAuth src/")).toBe("handleAuth");
+    expect(parseGrepBashCommand("rg handleAuth src/a.ts")).toBe("handleAuth");
+    expect(parseGrepBashCommand("grep -e handleAuth src/a.ts")).toBe("handleAuth");
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────
