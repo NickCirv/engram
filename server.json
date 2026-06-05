@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.NickCirv/engram",
-  "description": "Ranked local code-graph context for AI coding tools — intercepts file reads, symbol greps, and re-reads. Works in 8 IDEs. Up to ~89% structural context reduction (varies by repo). Local SQLite, zero cloud, Apache 2.0.",
+  "description": "Ranked local code-graph context for AI coding agents. Intercepts reads + greps. Apache-2.0.",
   "repository": {
     "url": "https://github.com/NickCirv/engram",
     "source": "github"
