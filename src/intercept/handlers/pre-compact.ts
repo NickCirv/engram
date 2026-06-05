@@ -18,7 +18,7 @@ import { godNodes, mistakes, stats } from "../../core.js";
 import { findProjectRoot, isValidCwd } from "../context.js";
 import { isHookDisabled, PASSTHROUGH, type HandlerResult } from "../safety.js";
 import { buildSessionContextResponse } from "../formatter.js";
-import { clearServedReads } from "../served-reads.js";
+import { clearServedReads, exploredFiles } from "../served-reads.js";
 
 export interface PreCompactHookPayload {
   readonly hook_event_name: "PreCompact" | string;
@@ -30,6 +30,27 @@ export interface PreCompactHookPayload {
 /** Compact survival payload — fewer nodes than SessionStart, just essentials. */
 const MAX_GOD_NODES_COMPACT = 5;
 const MAX_LANDMINES_COMPACT = 3;
+/** Most-recently-read files to remind the agent of post-compaction (#84). */
+const MAX_EXPLORED = 8;
+
+/**
+ * Build the "previously read this session" block (#84) — a tight list of the
+ * files this session read, so the post-compaction agent re-reads only what
+ * changed instead of re-deriving structure it already saw.
+ *
+ * Path-only on purpose (adversarial review): if the agent re-reads, its OWN Read
+ * interception gives the CURRENT structural summary — listing graph symbols here
+ * would assert as-of-last-index facts as current (an over-claim), and the
+ * arbitrary top-N added noise, not signal. "read", not "explored": these are
+ * files read, not greps (grep isn't tracked). "" if no files.
+ */
+function formatExplored(files: readonly string[]): string {
+  if (files.length === 0) return "";
+  return [
+    "Previously read this session (re-read if changed):",
+    ...files.map((f) => `  - ${f}`),
+  ].join("\n");
+}
 
 /**
  * Format a compact survival brief — tighter than the SessionStart brief
@@ -92,6 +113,15 @@ export async function handlePreCompact(
   const projectRoot = findProjectRoot(cwd);
   if (projectRoot === null) return PASSTHROUGH;
 
+  // #84: read the session exploration ledger BEFORE clearServedReads wipes it,
+  // so we can remind the post-compaction agent what it already explored. Opt-out
+  // via ENGRAM_COMPACT_LEDGER=0. (Only explicit /compact fires PreCompact —
+  // silent volume overflow does not, so this covers explicit compaction only.)
+  const explored =
+    process.env.ENGRAM_COMPACT_LEDGER === "0" || typeof payload.session_id !== "string"
+      ? []
+      : exploredFiles(projectRoot, payload.session_id, MAX_EXPLORED);
+
   // ADR-0003: compaction evicts the content a read-dedup pointer refers to, so
   // reset this session's served-read set — post-compaction reads must re-serve.
   // Done before the kill-switch check: the reset is a correctness operation,
@@ -139,9 +169,15 @@ export async function handlePreCompact(
       })),
     });
 
+    // #84: append the "previously read" ledger block (built from the files
+    // captured before the wipe above) so the post-compaction agent re-reads only
+    // what changed.
+    const exploredBlock = formatExplored(explored);
+    const fullText = exploredBlock ? text + "\n" + exploredBlock : text;
+
     // Use SessionStart response shape — PreCompact uses the same
     // additionalContext mechanism.
-    return buildSessionContextResponse("SessionStart", text);
+    return buildSessionContextResponse("SessionStart", fullText);
   } catch {
     return PASSTHROUGH;
   }

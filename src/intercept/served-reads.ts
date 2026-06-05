@@ -97,6 +97,25 @@ function pruneStale(dir: string): void {
 }
 
 /**
+ * The relative paths this session has read, most-recent first (by `at`), capped
+ * to `limit`. Used by the PreCompact ledger (#84) to remind the post-compaction
+ * agent what it already explored — MUST be read BEFORE `clearServedReads` wipes
+ * the set. Never throws; empty on any error or unknown session.
+ */
+export function exploredFiles(
+  projectRoot: string,
+  sessionId: string,
+  limit: number
+): string[] {
+  const session = safeSession(sessionId);
+  if (!session) return [];
+  const map = load(storePath(projectRoot, session));
+  return Object.keys(map)
+    .sort((a, b) => map[b].at - map[a].at)
+    .slice(0, Math.max(0, limit));
+}
+
+/**
  * Record a full read; return `true` iff this is a repeat read of an unchanged,
  * non-trivial file already seen this session (the caller should dedup). On a
  * first read (or a changed/tiny file) it records and returns `false`.

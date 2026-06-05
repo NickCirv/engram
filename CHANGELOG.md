@@ -7,6 +7,18 @@ All notable changes to engram are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Compaction session ledger (ADR-0010).** After an explicit `/compact`, engram's
+  PreCompact hook now appends a "Previously read this session" block — a path-only
+  list of the top-8 most-recently-read files — so the post-compaction agent
+  re-reads only what changed instead of re-deriving structure it already saw.
+  (Path-only by design: listing stale graph symbols would assert as-of-last-index
+  facts as current; if the agent re-reads, its own Read interception gives the
+  current summary.) The backtest found the served-reads ledger is *wiped*
+  on the post-compaction SessionStart, so engram reads it at PreCompact (before
+  the wipe) and injects a derived summary via the additionalContext that survives
+  compaction. Honest: a small bet (not "never worse"), explicit-`/compact` only
+  (silent overflow doesn't fire PreCompact), files-read only. Opt-out
+  `ENGRAM_COMPACT_LEDGER=0`; the ADR-0003 dedup reset still runs after.
 - **Recall-coverage benchmark (`npm run bench:recall`, ADR-0009).** The honesty
   moat: a deterministic, reproducible measure of whether engram's ranked answer
   surfaces the files a real change actually touched. For each historical commit
