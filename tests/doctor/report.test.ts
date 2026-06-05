@@ -38,6 +38,26 @@ describe("doctor/report.ts", () => {
     expect(text).toContain("graph");
   });
 
+  it("reports the hook as DISABLED, not active, when the kill switch is set (C3)", () => {
+    const dir = join(tmpdir(), "engram-doctor-disabled-" + Date.now());
+    mkdirSync(join(dir, ".claude"), { recursive: true });
+    mkdirSync(join(dir, ".engram"), { recursive: true });
+    writeFileSync(
+      join(dir, ".claude", "settings.json"),
+      JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: "command", command: "engram intercept" }] }] } })
+    );
+    writeFileSync(join(dir, ".engram", "hook-disabled"), "");
+    try {
+      const hook = buildReport(dir, "4.3.1").checks.find((c) => c.name === "hook");
+      expect(hook).toBeDefined();
+      expect(hook!.severity).toBe("warn");
+      expect(hook!.detail).toContain("DISABLED");
+      expect(hook!.remediation).toContain("hook-enable");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("formatReport --verbose includes remediation hints for non-ok", () => {
     const report = buildReport(fx, "2.0.2");
     const text = formatReport(report, true);

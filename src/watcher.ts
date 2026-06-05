@@ -17,6 +17,7 @@
 import { watch, existsSync, statSync } from "node:fs";
 import { resolve, relative, extname, join, sep } from "node:path";
 import { extractFile } from "./miners/ast-miner.js";
+import { buildReferenceEdges } from "./miners/reference-miner.js";
 import { toPosixPath } from "./graph/path-utils.js";
 import { getStore, getDbPath } from "./core.js";
 import { formatThousands } from "./graph/render-utils.js";
@@ -79,6 +80,10 @@ export async function syncFile(
       const prior = store.countBySourceFile(relPath);
       if (prior === 0) return { action: "skipped", count: 0 };
       store.deleteBySourceFile(relPath);
+      // Rebuild name-resolved `calls` edges so callers of the now-deleted
+      // file's symbols don't dangle (see indexed-branch note below).
+      const refEdges = await buildReferenceEdges(projectRoot, store.getAllNodes());
+      store.replaceEdgesByRelation("calls", refEdges);
       return { action: "pruned", count: prior };
     } finally {
       store.close();
@@ -98,6 +103,13 @@ export async function syncFile(
     if (nodes.length > 0 || edges.length > 0) {
       store.bulkUpsert(nodes, edges);
     }
+    // Cross-file `calls` edges are name-resolved over the WHOLE node set, so a
+    // single-file delete+upsert leaves them stale (a renamed/moved/added symbol
+    // changes callers elsewhere). Rebuild the calls relation over the current
+    // graph — the same step `init` runs — so reindex / watch / the reindex-hook
+    // don't silently drift after each edit (closes the #69 gap on this path).
+    const refEdges = await buildReferenceEdges(projectRoot, store.getAllNodes());
+    store.replaceEdgesByRelation("calls", refEdges);
     return { action: "indexed", count: nodes.length };
   } finally {
     store.close();

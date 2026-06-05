@@ -732,3 +732,16 @@ export async function benchmark(
     store.close();
   }
 }
+
+/**
+ * Honest phrasing for a packet/baseline ratio. A ratio > 1 is a genuine
+ * reduction ("Nx smaller packet"); a ratio < 1 means the packet is LARGER than
+ * the baseline it would replace — engram passes through rather than shipping it,
+ * so saying "0.2x smaller" would be a backwards (over-)claim. Centralised so the
+ * CLI, the older bench print, and the HTTP server can't drift.
+ */
+export function packetRatioPhrase(ratio: number): string {
+  if (!Number.isFinite(ratio) || ratio <= 0) return "n/a";
+  if (ratio >= 1) return `${ratio}x smaller packet`;
+  return `${Math.round((1 / ratio) * 10) / 10}x LARGER — engram passes through`;
+}

@@ -3,7 +3,7 @@
  * MCP stdio server — exposes engram knowledge graph to Claude Code and other MCP clients.
  * Tools: query_graph, god_nodes, graph_stats, shortest_path, benchmark
  */
-import { query, path, godNodes, stats, benchmark, mistakes } from "./core.js";
+import { query, path, godNodes, stats, benchmark, mistakes, packetRatioPhrase } from "./core.js";
 import { truncateGraphemeSafe, formatThousands } from "./graph/render-utils.js";
 import { MAX_MISTAKE_LABEL_CHARS } from "./graph/query.js";
 
@@ -137,8 +137,8 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
       return [
         `Full corpus: ~${formatThousands(b.naiveFullCorpus)} tokens`,
         `Avg graph query: ~${formatThousands(b.avgQueryTokens)} tokens`,
-        `Reduction vs full corpus: ${b.reductionVsFull}x`,
-        `Reduction vs relevant files: ${b.reductionVsRelevant}x`,
+        `Reduction vs full corpus: ${packetRatioPhrase(b.reductionVsFull)}`,
+        `Reduction vs relevant files: ${packetRatioPhrase(b.reductionVsRelevant)}`,
         "",
         ...b.perQuestion.map((pq) => `[${pq.reductionFull}x full / ${pq.reductionRelevant}x relevant] ${pq.question}`),
       ].join("\n");

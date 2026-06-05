@@ -25,6 +25,7 @@ import {
   benchmark,
   learn,
   mistakes,
+  packetRatioPhrase,
 } from "./core.js";
 import { install as installHooks, uninstall as uninstallHooks, status as hooksStatus } from "./hooks.js";
 import { formatThousands } from "./graph/render-utils.js";
@@ -586,8 +587,8 @@ program
       console.log(`\n  ${chalk.cyan("Context reduction:")} ${chalk.dim("(structural packet size, not a bill saving)")}`);
       console.log(`    Full corpus:   ~${formatThousands(bench.naiveFullCorpus)} tokens`);
       console.log(`    Avg query:     ~${formatThousands(bench.avgQueryTokens)} tokens`);
-      console.log(`    vs relevant:   ${chalk.bold.cyan(bench.reductionVsRelevant + "x")} smaller packet`);
-      console.log(`    vs full:       ${chalk.bold.cyan(bench.reductionVsFull + "x")} smaller packet`);
+      console.log(`    vs relevant:   ${chalk.bold.cyan(packetRatioPhrase(bench.reductionVsRelevant))}`);
+      console.log(`    vs full:       ${chalk.bold.cyan(packetRatioPhrase(bench.reductionVsFull))}`);
       console.log(chalk.dim(`    Baseline = reading files raw, uncached; cost saving depends on your caching + workload.`));
     }
     console.log();
@@ -646,8 +647,8 @@ program
     console.log(chalk.bold("\n⚡ engram token reduction benchmark\n"));
     console.log(`  Full corpus:     ~${formatThousands(result.naiveFullCorpus)} tokens`);
     console.log(`  Avg graph query: ~${formatThousands(result.avgQueryTokens)} tokens`);
-    console.log(`  vs relevant:     ${chalk.bold.green(result.reductionVsRelevant + "x")} fewer tokens`);
-    console.log(`  vs full corpus:  ${chalk.bold.green(result.reductionVsFull + "x")} fewer tokens\n`);
+    console.log(`  vs relevant:     ${chalk.bold.green(packetRatioPhrase(result.reductionVsRelevant))}`);
+    console.log(`  vs full corpus:  ${chalk.bold.green(packetRatioPhrase(result.reductionVsFull))}\n`);
     for (const pq of result.perQuestion) {
       console.log(`  ${chalk.dim(`[${pq.reductionRelevant}x relevant / ${pq.reductionFull}x full]`)} ${pq.question}`);
     }
@@ -805,7 +806,7 @@ program
         const result = cost.writeWeeklyDigest(roots);
         console.log(
           chalk.green(
-            `wrote ${result.isoWeek} digest → ${result.path} (${result.rows.length} project${result.rows.length === 1 ? "" : "s"})`,
+            `wrote ${result.isoWeek} digest → ${result.path.replace(homedir(), "~")} (${result.rows.length} project${result.rows.length === 1 ? "" : "s"})`,
           ),
         );
         return;
@@ -828,9 +829,14 @@ program
       );
       console.log(
         chalk.dim(
-          `\ntotal: ${cost.formatNumber(totalSaved)} tokens saved · ` +
-            `${cost.formatUsd(totalUsd)} · ` +
-            `${totalEvents} events\n`,
+          `\ntotal: ${cost.formatNumber(totalSaved)} tokens fewer in context · ` +
+            `~${cost.formatUsd(totalUsd)} list-price value · ` +
+            `${totalEvents} events`,
+        ),
+      );
+      console.log(
+        chalk.dim(
+          `⚠ structural token reduction vs raw uncached reads — NOT a bill saving; real $ ≈ caching-dominated.\n`,
         ),
       );
     },
@@ -875,13 +881,20 @@ program
   .action(
     async (opts: { project: string; target?: string; task?: string }) => {
       const target = opts.target as "claude" | "cursor" | "agents" | undefined;
-      const result = await autogen(opts.project, target, opts.task);
-      const fileList = result.files.map((f) => chalk.bold(f)).join(", ");
-      console.log(
-        chalk.green(
-          `✅ Updated ${fileList} (${result.nodesIncluded} nodes, view: ${result.view})`
-        )
-      );
+      try {
+        const result = await autogen(opts.project, target, opts.task);
+        const fileList = result.files.map((f) => chalk.bold(f)).join(", ");
+        console.log(
+          chalk.green(
+            `✅ Updated ${fileList} (${result.nodesIncluded} nodes, view: ${result.view})`
+          )
+        );
+      } catch (err) {
+        // autogen throws a clear message on an unknown --task / bad target;
+        // surface it cleanly instead of a raw stacktrace.
+        console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+        process.exit(1);
+      }
     }
   );
 

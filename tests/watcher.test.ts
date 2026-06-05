@@ -19,6 +19,7 @@ import {
   watchProject,
   formatReindexLine,
   runReindexHook,
+  syncFile,
   type SyncResult,
 } from "../src/watcher.js";
 
@@ -645,5 +646,58 @@ describe("runReindexHook — Claude Code PostToolUse stdin handler (#8)", () => 
     } finally {
       store.close();
     }
+  }, 30_000);
+});
+
+describe("syncFile incremental cross-file edges (G1)", () => {
+  it("rebuilds name-resolved `calls` edges after a single-file reindex", async () => {
+    const dir = join(tmpdir(), `engram-g1-${Date.now()}`);
+    const src = join(dir, "src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "a.js"),
+      "export function alpha(x){ return beta(x); }\nexport function beta(x){ return x + 1; }\n"
+    );
+    writeFileSync(
+      join(src, "b.js"),
+      'import { beta } from "./a.js";\nexport function gamma(x){ return beta(x); }\n'
+    );
+    await init(dir);
+
+    // Files (the caller node) whose `calls` edge targets a symbol with `label`.
+    const callerFilesOf = async (label: string): Promise<string[]> => {
+      const store = await getStore(dir);
+      try {
+        const nodes = store.getAllNodes();
+        const byId = new Map(nodes.map((n) => [n.id, n] as const));
+        const targets = new Set(
+          nodes.filter((n) => n.label.replace(/\(\)$/, "") === label).map((n) => n.id)
+        );
+        return store
+          .getAllEdges()
+          .filter((e) => e.relation === "calls" && targets.has(e.target))
+          .map((e) => byId.get(e.source)?.sourceFile)
+          .filter((f): f is string => Boolean(f));
+      } finally {
+        store.close();
+      }
+    };
+
+    // Baseline: b.js calls beta cross-file.
+    expect((await callerFilesOf("beta")).some((f) => f.includes("b.js"))).toBe(true);
+
+    // Edit b.js so gamma calls alpha instead, then reindex ONLY b.js.
+    writeFileSync(
+      join(src, "b.js"),
+      'import { alpha } from "./a.js";\nexport function gamma(x){ return alpha(x); }\n'
+    );
+    await syncFile(resolve(src, "b.js"), dir);
+
+    // The stale beta edge must be gone and the new alpha edge present — proving
+    // syncFile rebuilt the cross-file calls relation instead of drifting (G1).
+    expect((await callerFilesOf("beta")).some((f) => f.includes("b.js"))).toBe(false);
+    expect((await callerFilesOf("alpha")).some((f) => f.includes("b.js"))).toBe(true);
+
+    rmSync(dir, { recursive: true, force: true });
   }, 30_000);
 });

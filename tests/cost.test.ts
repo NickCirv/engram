@@ -146,6 +146,10 @@ describe("cost.formatter", () => {
     );
     expect(md).toContain("# Engram Cost Digest — 2026-W18");
     expect(md).toContain("| Project |");
+    // Honesty (S1): the public-publication digest must carry the structural-
+    // not-cost caveat — it's literally built for Substack/LinkedIn/Telegram.
+    expect(md).toContain("Not a bill saving");
+    expect(md.toLowerCase()).toContain("prompt caching");
   });
 });
 

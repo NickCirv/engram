@@ -82,6 +82,17 @@ function checkHook(projectRoot: string): DoctorCheck {
     try {
       const content = readFileSync(path, "utf-8");
       if (content.includes("engram intercept")) {
+        // Kill switch takes precedence: if `.engram/hook-disabled` exists, every
+        // handler passes through, so reporting "active" would be a false green.
+        if (existsSync(join(projectRoot, ".engram", "hook-disabled"))) {
+          return {
+            name: "hook",
+            severity: "warn",
+            detail:
+              "Sentinel hook installed but DISABLED — kill switch .engram/hook-disabled is active (every handler passes through)",
+            remediation: "Run `engram hook-enable` to re-activate interception.",
+          };
+        }
         // Engram is wired — but a binary-only upgrade (`engram update` / npm)
         // does NOT register NEW hook events (e.g. v4.3's SubagentStart), so an
         // existing user silently misses them. Surface any this version supports

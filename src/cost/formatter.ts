@@ -57,9 +57,14 @@ export function formatMarkdownDigest(
   const lines: string[] = [];
   lines.push(`# Engram Cost Digest — ${isoWeek}`);
   lines.push("");
-  lines.push(`**Total tokens saved:** ${formatNumber(totals.tokensSaved)} `
-    + `(${formatPct(totals.reductionRatio)} reduction, `
-    + `~${formatUsd(totals.approxUsdSaved)})`);
+  lines.push(`**Total structural token reduction:** ${formatNumber(totals.tokensSaved)} `
+    + `(${formatPct(totals.reductionRatio)} fewer tokens entering context, `
+    + `~${formatUsd(totals.approxUsdSaved)} list-price value)`);
+  lines.push("");
+  lines.push("> ⚠️ **Not a bill saving.** This is the structural reduction in tokens "
+    + "*entering the model's context* vs raw, uncached reads — measured at the hook boundary. "
+    + "Your actual dollar bill is dominated by prompt caching; engram's net effect on cost ≈ 0. "
+    + "The USD figure is `list input price × tokens`, illustrative only — not a cost saving you can bank.");
   lines.push("");
   lines.push("## Per-project");
   lines.push("");
