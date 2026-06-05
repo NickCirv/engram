@@ -42,7 +42,12 @@ memory, audit). "Ranked" refers only to the **PageRank query ordering**, never t
 | **Compaction session ledger** (#84) | `src/intercept/handlers/pre-compact.ts` — after explicit `/compact`, a path-only "Previously read this session" list (top-8 recent files) so the agent doesn't re-explore. Honest (a bet; path-only after adversarial caught stale/arbitrary symbols); opt-out `ENGRAM_COMPACT_LEDGER=0` | **0010** |
 | Master plan + Frontier research | `docs/PLAN.md` (four tracks + §9 frontier) · `docs/FRONTIER.md` (5-front pioneer research) · `docs/COMPARISON.md` honesty fix (Aider ranks too) · README cost-claim scrub | — |
 
-**All three frontier moves (F1 #83, F2 #84, F3 #85) are shipped.** Next code task: **#72** (Bash-explore intercept — the last open token-loop bypass) or the **README hero-asset embed** (cast + COMPARISON, where evaluators land). Gated/Nick: **#86** (real-Claude-Code smoke of the #83 slice), **#87** (live resolve-rate A/B), **#65** (LEAK-P2 force-push). **v4.3 release (#74, Nick 2FA)** now bundles a lot: Bash-grep, `engram measure`, never-worse gate, sub-agent broker, recall bench, compaction ledger. Frontier: `docs/FRONTIER.md` §5.
+**Inflection point: the feature-build runway for this arc is complete + verified RELEASE-READY** (fresh-clone audit 2026-06-05: npm ci 2.82s, tsc clean, full suite 1128/0, all new commands run with honest disclosures, never-worse holds, zero leak hits across 18 public files, no cost claims). Token-loop closed (Read/Grep/Bash-grep shipped; **#72 Bash-explore DEFERRED — ADR-0011**, graph is code-only); frontier F1/F2/F3 shipped.
+
+**Next is strategic + Nick-gated, not more features:**
+- **v4.3 release (#74, Nick 2FA)** — bundles Bash-grep + `engram measure` + never-worse gate + sub-agent broker + recall bench + compaction ledger. Highest-leverage: ships the honest improvements to users. Ready for the ship-hygiene run on Nick's go.
+- **Distribution (#79 launch / #80 marketplace)** — FRONTIER's binding constraint.
+- Gated: **#86** (smoke #83 in real Claude Code), **#87** (live resolve-rate A/B, budget), **#65** (LEAK-P2 force-push).
 
 ### Measurement (how we keep ourselves honest)
 
