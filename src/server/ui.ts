@@ -253,7 +253,7 @@ const HTML_BODY = `
     <section class="tab active" id="tab-overview">
       <div class="grid grid-4">
         <div class="card"><h3>Tokens Saved</h3><div class="big-number accent" id="ov-tokens">&mdash;</div><div class="subtext" id="ov-tokens-sub">cumulative</div></div>
-        <div class="card"><h3>Cost Saved</h3><div class="big-number" id="ov-cost">&mdash;</div><div class="subtext">at $3/M tokens</div></div>
+        <div class="card"><h3>List-price value</h3><div class="big-number" id="ov-cost">&mdash;</div><div class="subtext">illustrative @ $3/M &middot; not a bill saving (net over caching &asymp; 0)</div></div>
         <div class="card"><h3>Hit Rate</h3><div class="big-number" id="ov-hitrate">&mdash;</div><div class="subtext" id="ov-hitrate-sub">hook interceptions</div></div>
         <div class="card"><h3>Sessions</h3><div class="big-number" id="ov-sessions">&mdash;</div><div class="subtext">tracked</div></div>
       </div>
@@ -444,7 +444,7 @@ async function loadSessions() {
     ["Total Graph Tokens", formatNumber(tokens.totalGraphTokens)],
     ["Total Saved", formatNumber(tokens.totalSaved)],
     ["Avg Reduction", (Number(tokens.avgReduction ?? 0).toFixed(1) + "%")],
-    ["Estimated Cost Saved", formatCost(tokens.totalSaved ?? 0)],
+    ["List-price value (illustrative, not a bill saving)", formatCost(tokens.totalSaved ?? 0)],
   ];
 
   const html = '<table><thead><tr><th>Metric</th><th style="text-align:right">Value</th></tr></thead><tbody>' +
