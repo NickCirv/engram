@@ -24,6 +24,20 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
 
+      # ripgrep is required by the grep "never-worse" gate (ADR-0007): the
+      # handler shells out to `rg` to size the agent's raw grep before deciding
+      # to intercept. Without it the gate can't measure and passes through, so
+      # the deny-path integration tests (bash/grep) see null instead of a packet.
+      # Runners don't ship rg by default, so install it per-OS.
+      - name: Install ripgrep (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - name: Install ripgrep (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ripgrep -y --no-progress
+      - name: Verify ripgrep
+        run: rg --version
+
       - name: Install dependencies
         run: npm ci
 

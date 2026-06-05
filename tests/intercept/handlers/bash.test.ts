@@ -26,6 +26,14 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
+
+// The Bash→Grep delegation goes through the grep never-worse gate (ADR-0007),
+// which shells out to `rg`. Without ripgrep the gate passes through, so the
+// deny-path delegation test can't run — skip it cleanly rather than fail with a
+// cryptic null. CI installs ripgrep so it runs there. The pure parser tests
+// below need no rg.
+const HAS_RG = spawnSync("rg", ["--version"], { stdio: "ignore" }).status === 0;
 
 // ────────────────────────────────────────────────────────────────────────
 // Parser layer — pure function tests, no graph involvement
@@ -388,7 +396,7 @@ export function hashPassword(p: string): string {
     expect(result).toBe(PASSTHROUGH);
   });
 
-  it("delegates a Bash 'rg <symbol>' to handleGrep — call-site packet (ADR-0005)", async () => {
+  it.skipIf(!HAS_RG)("delegates a Bash 'rg <symbol>' to handleGrep — call-site packet (ADR-0005)", async () => {
     // Many caller files, two calls each, so the raw grep is genuinely larger
     // than engram's packet — a real win that clears the ADR-0007 never-worse
     // size gate (not just MIN_CALLER_FILES).

@@ -18,6 +18,14 @@ import { _resetCacheForTests } from "../../../src/intercept/context.js";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
+
+// The grep never-worse gate (ADR-0007) shells out to `rg` to size the agent's
+// raw grep before deciding to deny. Without ripgrep the gate can't measure and
+// passes through, so the deny-path tests below can't exercise the money path —
+// skip them cleanly instead of failing with a cryptic "expected null not to be
+// null". CI installs ripgrep so they DO run there.
+const HAS_RG = spawnSync("rg", ["--version"], { stdio: "ignore" }).status === 0;
 
 describe("handleGrep — integration tests", () => {
   let projectRoot: string;
@@ -133,7 +141,7 @@ export function lookup(name: string): number {
     }
   });
 
-  it("denies + answers from the reference graph for a known symbol (money path)", async () => {
+  it.skipIf(!HAS_RG)("denies + answers from the reference graph for a known symbol (money path)", async () => {
     const r = (await handleGrep(grepPayload("hashToken"))) as Record<
       string,
       unknown
@@ -198,7 +206,7 @@ export function lookup(name: string): number {
     expect(r).toBe(PASSTHROUGH);
   });
 
-  it("caps the call-site list for a heavily-used symbol", async () => {
+  it.skipIf(!HAS_RG)("caps the call-site list for a heavily-used symbol", async () => {
     // a caller file with far more than MAX_SITES (25) references to hashToken
     const many = Array.from(
       { length: 60 },
