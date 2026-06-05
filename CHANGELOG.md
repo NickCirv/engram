@@ -6,6 +6,38 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+## [4.3.1] — 2026-06-06 — "Proof" (patch)
+
+**Why:** a two-pass execution-swarm audit (agents that *ran* engram end-to-end, not just read it)
+plus a perf self-audit hardened the 4.3.0 release. All fixes, no new features, no change to the
+honest claim. 1144 tests.
+
+### Fixed
+- **Honesty — `engram cost` digest:** the weekly digest (built for Substack/LinkedIn/Telegram) printed
+  an unqualified `Total tokens saved: … (100% reduction, ~$3.60)`. It now carries the full
+  "structural reduction, **not a bill saving** — net over prompt caching ≈ 0; USD is illustrative
+  list-price only" caveat. The cost module predated the honesty pass.
+- **Honesty — `bench`/`stats` ratio:** a packet *larger* than the relevant files printed as
+  "0.2x smaller packet" (a sub-1 ratio shown as a win). New `packetRatioPhrase()` centralises honest
+  wording across the CLI, bench, and HTTP server: "5x LARGER — engram passes through".
+- **Graph drift — incremental reindex:** single-file `reindex` / `watch` / the reindex-hook (fires on
+  every edit) deleted + re-extracted a file but never rebuilt the name-resolved cross-file `calls`
+  relation, so ranking/callers/callees drifted until the next full `init`. Now rebuilt on both the
+  index and prune paths.
+- **Perf:** that rebuild re-parsed every file on disk (~330ms on a 1k-node graph) on the hot path. An
+  mtime-keyed per-file refs cache (`file_refs_cache`) makes a single-file reindex re-parse only the
+  changed file — measured **328ms → ~1ms** warm, identical edges (equivalence-tested).
+- **MCP server:** `serverInfo.version` was hardcoded to `0.2.1` (clients/registry saw the wrong
+  version); now reads the real package version (4.3.1).
+- **`engram doctor`:** reported a green "hook active" even with the `.engram/hook-disabled` kill switch
+  set; now warns "installed but DISABLED".
+- **`engram gen --task <bad>`:** threw a raw stacktrace; now prints the clear "unknown task" message and
+  exits 1.
+- **Robustness:** grep-family Bash parser no longer mis-intercepts output-mode flags placed after the
+  pattern (`rg sym -l`/`-c`/`-A 3`); `missingHookEvents` no longer throws on a hand-edited
+  `settings.json`; Windows drive-letter paths survive `measure`'s recall set; recall bench guards
+  `trials === 0` (no `NaN%`).
+
 ## [4.3.0] — 2026-06-05 — "Proof"
 
 **Why "Proof":** this release makes engram's saving real and *provable*. `engram measure` shows the

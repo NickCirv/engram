@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v4.3 'Proof')" width="100%">
+  <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v4.3.1 'Proof')" width="100%">
 </p>
 
 <p align="center">
@@ -58,7 +58,7 @@
   <a href="https://open-vsx.org/extension/nickcirv/engram-vscode"><img src="https://img.shields.io/open-vsx/v/nickcirv/engram-vscode?color=blue&label=OpenVSX" alt="OpenVSX engram-vscode"></a>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node">
-  <img src="https://img.shields.io/badge/tests-1128%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-1144%20passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/per--file%20reduction-53--89%25-orange" alt="53-89% per-file structural reduction">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
   <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
@@ -86,8 +86,8 @@ mkdir -p /tmp/engram-demo && cd /tmp/engram-demo && \
   echo "export const buggy = () => null;" > src.ts && \
   git add -A && git commit -q -m "feat: add buggy helper returning null causing form crashes" && \
   git revert --no-edit HEAD > /dev/null && \
-  npx --yes engramx@4.3.0 init . && \
-  npx --yes engramx@4.3.0 mistakes
+  npx --yes engramx@4.3.1 init . && \
+  npx --yes engramx@4.3.1 mistakes
 ```
 
 You should see, within 30 seconds, the **bi-temporal pre-mortem** engram auto-captured from your revert:
@@ -121,7 +121,9 @@ Works in 8 IDEs and counting — Claude Code, Cursor, Cline, Continue.dev, Aider
 
 > **v4.3 "Proof" shipped 2026-06-05 — engram's saving is now real *and provable*.** Run **`engram measure`** in your own repo to see the honest structural context-token reduction on **your** code — every disclosure computed live: it's a ceiling, here's the recall, here's the intercept rate, "structural tokens, not your bill." Run **`npm run bench:recall`** for the reproducible proof that engram surfaces the files a change actually touches (recall@10 33% on engram's own repo, decomposed honestly: candidate generation reaches 43%, the PageRank ranker adds +3.2pp over random-within-candidate; 10.4% blind chance).
 >
-> New this release: a **never-worse gate** on Grep (engram passes through whenever its packet isn't actually smaller — sized to your grep's exact `cwd`/`path`/`glob` scope), **Bash-grep interception** (the shell-only IDEs — Aider, Codex CLI, Cline — now get the call-site packet too), a **sub-agent context broker** (a tight ~100-token ranked slice into each spawned Claude Code sub-agent — the one regime prompt caching can't help), and a **compaction ledger** (a "previously read" list injected at `/compact` so the agent doesn't re-explore). Every number is a measured fact or a labelled bet — **no cost claims**; a *structural* context reduction, not a bill saving (engram's net over prompt caching ≈ 0). 1128 tests. See [CHANGELOG.md](CHANGELOG.md), `docs/COMPARISON.md` (vs the other local code-graph tools — ranking isn't unique, the *combination* is), and `docs/FRONTIER.md`.
+> New this release: a **never-worse gate** on Grep (engram passes through whenever its packet isn't actually smaller — sized to your grep's exact `cwd`/`path`/`glob` scope), **Bash-grep interception** (the shell-only IDEs — Aider, Codex CLI, Cline — now get the call-site packet too), a **sub-agent context broker** (a tight ~100-token ranked slice into each spawned Claude Code sub-agent — the one regime prompt caching can't help), and a **compaction ledger** (a "previously read" list injected at `/compact` so the agent doesn't re-explore). Every number is a measured fact or a labelled bet — **no cost claims**; a *structural* context reduction, not a bill saving (engram's net over prompt caching ≈ 0). 1144 tests. See [CHANGELOG.md](CHANGELOG.md), `docs/COMPARISON.md` (vs the other local code-graph tools — ranking isn't unique, the *combination* is), and `docs/FRONTIER.md`.
+>
+> **v4.3.1 (patch) — 2026-06-06:** a two-swarm execution audit hardened the release. Fixes: the `engram cost` digest no longer prints an unqualified dollar/"% saved" figure (it now carries the structural-not-a-bill-saving caveat); `bench`/`stats` state "Nx LARGER — passes through" instead of a backwards "0.2x smaller" on tiny repos; the incremental reindex now rebuilds cross-file `calls` edges (no graph drift between full re-indexes) **and** does so in ~1ms via an mtime-keyed refs cache instead of re-parsing every file on each edit; the MCP server reports its real version; `doctor` flags a disabled kill-switch; `gen --task <bad>` errors cleanly. No new features, no behaviour change to the honest claim.
 
 <details>
 <summary><strong>Earlier release notes (v4.2 "Loop", June 3)</strong></summary>
