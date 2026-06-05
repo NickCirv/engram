@@ -38,11 +38,16 @@ Links to PRs, commits, related ADRs, prior art.
 
 ## Index
 
-(Retrofit existing decisions here as you have time. Don't block on backfill — new decisions land in `docs/adr/` from this point forward.)
-
-Suggested retrofits when convenient:
-- 0001 — Bi-temporal mistakes (schema v9)
-- 0002 — Universal Spine architecture (v3.4)
-- 0003 — Mesh: ed25519 + JCS + append-only audit
-- 0004 — MCP plugin contract (no custom protocol)
-- 0005 — Auto-install hook default-on
+| ADR | Decision | Status |
+|----|----------|--------|
+| [0001](0001-grep-symbol-intercept.md) | Intercept symbol-search Grep with the reference graph (recall-safe) | Accepted (evolved by 0004) |
+| [0002](0002-session-level-bench.md) | Session-level token bench (deterministic trace replay) | Accepted |
+| [0003](0003-same-session-read-dedup.md) | Same-session read dedup | Accepted |
+| [0004](0004-grep-richer-find-usages.md) | Richer find-usages in the Grep packet (call-site lines) | Accepted |
+| [0005](0005-bash-grep-interception.md) | Intercept Bash `rg`/`grep` via the Grep handler | Accepted |
+| [0006](0006-honest-before-after-demo.md) | The honest before/after demo | Accepted |
+| [0007](0007-grep-never-worse-gate.md) | A measured "never worse" gate for grep interception | Accepted |
+| [0008](0008-subagent-context-broker.md) | Sub-agent context broker (the SubagentStart slice) | Accepted |
+| [0009](0009-recall-coverage-benchmark.md) | Recall-coverage benchmark (deterministic half of #85) | Accepted |
+| [0010](0010-compaction-session-ledger.md) | Compaction session ledger — "previously explored" at PreCompact | Accepted |
+| [0011](0011-defer-bash-explore-interception.md) | Defer Bash directory-exploration interception (#72) | Accepted (do not build) |

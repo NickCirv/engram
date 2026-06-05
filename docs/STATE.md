@@ -2,7 +2,7 @@
 
 _Single source of truth for "where we are / what's next." Update at the end of each arc._
 
-**Last updated:** 2026-06-04 · **Live:** `engramx@4.2.0` "Loop" on npm · **main:** green (1100 tests, 0 vulns, tsc clean, fresh-clone verified)
+**Last updated:** 2026-06-05 · **Live:** `engramx@4.3.0` "Proof" on npm · **main:** green (1137 tests, 0 vulns, tsc clean, fresh-clone verified)
 
 ---
 

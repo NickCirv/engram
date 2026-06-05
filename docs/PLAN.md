@@ -3,7 +3,7 @@
 _The full-goal form. Strategy, tracks, task lists, and the way we operate. Pairs with
 `docs/STATE.md` (tactical "where we are / next") and `docs/adr/` (decisions)._
 
-**Last updated:** 2026-06-04 · **Live:** `engramx@4.2.0` "Loop" on npm · **main:** green (1110 tests, tsc clean)
+**Last updated:** 2026-06-05 · **Live:** `engramx@4.3.0` "Proof" on npm · **main:** green (1137 tests, tsc clean)
 
 ---
 
