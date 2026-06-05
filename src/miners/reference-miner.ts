@@ -228,3 +228,52 @@ export async function buildReferenceEdges(
   }
   return resolveCallEdges(nodes, fileRefs);
 }
+
+/** Per-file reference cache entry: the file's mtime + the names it references. */
+export interface RefCacheEntry {
+  readonly mtime: number;
+  readonly names: string[];
+}
+export type RefCache = Record<string, RefCacheEntry>;
+
+/**
+ * Incremental form of {@link buildReferenceEdges}: reuses cached per-file
+ * reference names when a file's mtime is unchanged, so a single-file reindex
+ * re-parses ONE file instead of every file on disk. This matters because the
+ * full rebuild now runs on the reindex-hook hot path (fires on every edit) —
+ * profiled at ~270ms / 1k nodes when re-parsing everything. With a warm cache
+ * the same call drops to a single parse + the (cheap, in-memory) resolve pass.
+ *
+ * Correctness is identical to a full rebuild: every file with a stale/missing
+ * mtime is re-parsed, and the returned cache contains ONLY current file nodes
+ * (deleted files drop out). Returns the edges plus the fresh cache to persist.
+ */
+export async function buildReferenceEdgesCached(
+  projectRoot: string,
+  nodes: readonly GraphNode[],
+  prevCache: RefCache
+): Promise<{ edges: GraphEdge[]; cache: RefCache }> {
+  const fileRefs = new Map<string, readonly string[]>();
+  const cache: RefCache = {};
+  for (const n of nodes) {
+    if (n.kind !== "file") continue;
+    const sf = n.sourceFile;
+    try {
+      const abs = join(projectRoot, sf);
+      const st = statSync(abs);
+      if (st.size > MAX_REF_FILE_BYTES) continue;
+      const mtime = st.mtimeMs;
+      const prev = prevCache[sf];
+      // Cache hit: same path, same mtime → the references are unchanged.
+      const names =
+        prev && prev.mtime === mtime
+          ? prev.names
+          : await extractFileReferences(sf, readFileSync(abs, "utf-8"));
+      cache[sf] = { mtime, names }; // record even when names=[] so we don't re-parse it every time
+      if (names.length > 0) fileRefs.set(sf, names);
+    } catch {
+      /* unreadable / binary — skip (and drop from the fresh cache) */
+    }
+  }
+  return { edges: resolveCallEdges(nodes, fileRefs), cache };
+}

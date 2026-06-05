@@ -6,6 +6,12 @@
 import { query, path, godNodes, stats, benchmark, mistakes, packetRatioPhrase } from "./core.js";
 import { truncateGraphemeSafe, formatThousands } from "./graph/render-utils.js";
 import { MAX_MISTAKE_LABEL_CHARS } from "./graph/query.js";
+import { createRequire } from "node:module";
+// serverInfo.version must match the package — a hardcoded literal drifts (it was
+// stuck at 0.2.1 while the package shipped 4.3.x, so MCP clients saw the wrong
+// version). Read it from package.json, the same way the CLI does.
+const require = createRequire(import.meta.url);
+const { version: PKG_VERSION } = require("../package.json");
 
 // ─── Numeric arg coercion ───────────────────────────────────────────────────
 // MCP tool arguments arrive as `unknown` from JSON. `args.limit as number`
@@ -221,7 +227,7 @@ async function handleRequest(req: McpRequest): Promise<McpResponse> {
         result: {
           protocolVersion: "2024-11-05",
           capabilities: { tools: {} },
-          serverInfo: { name: "engram", version: "0.2.1" },
+          serverInfo: { name: "engram", version: PKG_VERSION },
         },
       };
 

@@ -12,7 +12,7 @@ import { extractDirectory } from "./miners/ast-miner.js";
 import { mineGitHistory } from "./miners/git-miner.js";
 import { mineGitReverts } from "./miners/git-revert-miner.js";
 import { mineBugFixCommits } from "./miners/git-bugfix-miner.js";
-import { buildReferenceEdges } from "./miners/reference-miner.js";
+import { buildReferenceEdgesCached, type RefCache } from "./miners/reference-miner.js";
 import { findCallers, findCallees, findImpact } from "./graph/traversal.js";
 import { mineSessionHistory, learnFromSession } from "./miners/session-miner.js";
 import { mineSkills } from "./miners/skills-miner.js";
@@ -177,10 +177,22 @@ export async function init(
       // degree on failure. Perf: re-parses files each init; a mtime-keyed refs
       // cache is the tracked optimization for very large repos.
       try {
-        const refEdges = await buildReferenceEdges(root, store.getAllNodes());
+        let prevRefCache: RefCache = {};
+        try {
+          prevRefCache = JSON.parse(store.getStat("file_refs_cache") ?? "{}") as RefCache;
+        } catch {
+          /* corrupt/absent cache → cold rebuild (still correct) */
+        }
+        const { edges: refEdges, cache: refCache } = await buildReferenceEdgesCached(
+          root,
+          store.getAllNodes(),
+          prevRefCache
+        );
         // Atomic: rolls back on failure so a partial rebuild can't persist a
         // calls-less graph via the finally-driven close()/save().
         store.replaceEdgesByRelation("calls", refEdges);
+        // Persist the refs cache so the first post-init reindex is already warm.
+        store.setStat("file_refs_cache", JSON.stringify(refCache));
       } catch (err) {
         // Non-fatal: the atomic replace rolled back, so the prior reference
         // graph is intact; ranking is unaffected. Surface it (the repo's

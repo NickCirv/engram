@@ -17,9 +17,35 @@
 import { watch, existsSync, statSync } from "node:fs";
 import { resolve, relative, extname, join, sep } from "node:path";
 import { extractFile } from "./miners/ast-miner.js";
-import { buildReferenceEdges } from "./miners/reference-miner.js";
+import { buildReferenceEdgesCached, type RefCache } from "./miners/reference-miner.js";
 import { toPosixPath } from "./graph/path-utils.js";
 import { getStore, getDbPath } from "./core.js";
+
+/**
+ * Rebuild the name-resolved cross-file `calls` relation after a single-file
+ * change, reusing the persisted per-file refs cache so only the changed file is
+ * re-parsed (the reindex-hook fires on every edit — a full re-parse there is a
+ * hot-path regression). Correctness matches a full rebuild; the cache is just a
+ * parse-skip for unchanged files.
+ */
+async function rebuildCallsEdges(
+  store: Awaited<ReturnType<typeof getStore>>,
+  projectRoot: string
+): Promise<void> {
+  let prev: RefCache = {};
+  try {
+    prev = JSON.parse(store.getStat("file_refs_cache") ?? "{}") as RefCache;
+  } catch {
+    /* corrupt cache → cold rebuild (still correct) */
+  }
+  const { edges, cache } = await buildReferenceEdgesCached(
+    projectRoot,
+    store.getAllNodes(),
+    prev
+  );
+  store.replaceEdgesByRelation("calls", edges);
+  store.setStat("file_refs_cache", JSON.stringify(cache));
+}
 import { formatThousands } from "./graph/render-utils.js";
 import { findProjectRoot, isValidCwd } from "./intercept/context.js";
 
@@ -82,8 +108,7 @@ export async function syncFile(
       store.deleteBySourceFile(relPath);
       // Rebuild name-resolved `calls` edges so callers of the now-deleted
       // file's symbols don't dangle (see indexed-branch note below).
-      const refEdges = await buildReferenceEdges(projectRoot, store.getAllNodes());
-      store.replaceEdgesByRelation("calls", refEdges);
+      await rebuildCallsEdges(store, projectRoot);
       return { action: "pruned", count: prior };
     } finally {
       store.close();
@@ -108,8 +133,8 @@ export async function syncFile(
     // changes callers elsewhere). Rebuild the calls relation over the current
     // graph — the same step `init` runs — so reindex / watch / the reindex-hook
     // don't silently drift after each edit (closes the #69 gap on this path).
-    const refEdges = await buildReferenceEdges(projectRoot, store.getAllNodes());
-    store.replaceEdgesByRelation("calls", refEdges);
+    // Uses the mtime-keyed refs cache so only the changed file is re-parsed.
+    await rebuildCallsEdges(store, projectRoot);
     return { action: "indexed", count: nodes.length };
   } finally {
     store.close();
