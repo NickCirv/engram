@@ -261,6 +261,20 @@ function extractWithPatterns(
       }
     }
 
+    // Type declarations (TS interface / type alias / enum) — keyword in group 1
+    // gives the kind so an interface isn't mislabelled as a class.
+    for (const pat of patterns.types ?? []) {
+      const match = line.match(pat);
+      if (match?.[1] && match?.[2]) {
+        const name = match[2];
+        const id = makeId(stem, name);
+        const kind: GraphNode["kind"] =
+          match[1] === "interface" ? "interface" : "type";
+        addNode(id, name, kind, lineNum);
+        addEdge(fileId, id, "contains", lineNum);
+      }
+    }
+
     // Functions
     for (const pat of patterns.functions) {
       const match = line.match(pat);
@@ -441,6 +455,9 @@ interface LangPatterns {
   functions: RegExp[];
   imports: RegExp[];
   exports: RegExp[];
+  /** Optional: declarations captured WITH their keyword (group 1) so the loop
+   *  can assign a kind from it — used for TS interface/type/enum. */
+  types?: RegExp[];
 }
 
 function getPatterns(lang: string): LangPatterns {
@@ -470,6 +487,10 @@ function getPatterns(lang: string): LangPatterns {
         exports: [
           /^\s*export\s+(?:default\s+)?(?:class|function|const|let|var|interface|type|enum)\s+(\w+)/,
         ],
+        // TS-only: interface / type-alias / enum declarations become first-class
+        // nodes (kind interface|type) so they resolve as reference targets,
+        // instead of a dangling export edge to a node that was never created.
+        types: [/^\s*(?:export\s+)?(interface|type|enum)\s+(\w+)/],
       };
     case "python":
       return {

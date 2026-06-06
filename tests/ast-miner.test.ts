@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { extractFile, extractDirectory, SUPPORTED_EXTENSIONS } from "../src/miners/ast-miner.js";
 import { join } from "node:path";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 const FIXTURES = join(import.meta.dirname, "fixtures");
 
@@ -81,6 +83,31 @@ describe("AST Miner", () => {
       const funcNodes = nodes.filter((n) => n.kind === "function");
       for (const fn of funcNodes) {
         expect(fn.sourceLocation).toMatch(/^L\d+$/);
+      }
+    });
+
+    it("extracts interface / type-alias / enum with correct kinds (#91)", () => {
+      // Regression: the regex miner only made `class` nodes, so an interface or
+      // type alias produced no node (just a dangling export edge) — making them
+      // dead reference targets. Now they are first-class interface/type nodes.
+      const dir = mkdtempSync(join(tmpdir(), "engram-ts-types-"));
+      const f = join(dir, "types.ts");
+      writeFileSync(
+        f,
+        "export interface User { id: string; }\n" +
+          "export type ID = string;\n" +
+          "enum Color { Red, Blue }\n" +
+          "export class Svc {}\n"
+      );
+      try {
+        const { nodes } = extractFile(f, dir);
+        const byLabel = new Map(nodes.map((n) => [n.label, n]));
+        expect(byLabel.get("User")?.kind).toBe("interface");
+        expect(byLabel.get("ID")?.kind).toBe("type");
+        expect(byLabel.get("Color")?.kind).toBe("type"); // enum → type
+        expect(byLabel.get("Svc")?.kind).toBe("class"); // class still a class
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
       }
     });
   });
