@@ -127,6 +127,11 @@ export function mineGitHistory(
         const confidence = Math.min(0.95, 0.5 + count * 0.05);
         const stemA = makeId(fileA.split("/").pop()?.replace(/\.\w+$/, "") ?? fileA);
         const stemB = makeId(fileB.split("/").pop()?.replace(/\.\w+$/, "") ?? fileB);
+        // Distinct files can share a basename stem (e.g. src/index.ts and
+        // src/miners/index.ts both reduce to "index"), collapsing to the same
+        // node id — which would emit a file that "co-changes with itself".
+        // Drop the self-edge; a depends_on edge to oneself is meaningless.
+        if (stemA === stemB) continue;
 
         edges.push({
           source: stemA,
