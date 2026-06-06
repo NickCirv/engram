@@ -6,6 +6,41 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+## [4.3.2] — 2026-06-06 — "Proof" (patch)
+
+**Why:** 4.3.1 shipped from a staging snapshot and missed a batch of fixes made
+right after — most importantly a **broken MCP-setup command in the README**.
+This patch ships them. All fixes, no new features, no change to the honest claim.
+1149 tests.
+
+### Fixed
+- **MCP setup (README):** the documented config told MCP clients (Cline, Cursor,
+  Claude Desktop) to run `npx -y engramx serve <path>` — but there is no `serve`
+  subcommand (cli has `server` = the HTTP API; the MCP stdio server is the
+  separate `engram-serve` bin), so the server failed to start with
+  `error: unknown command 'serve'`. Corrected to `npx -y -p engramx engram-serve
+  <path>` (verified against the MCP initialize handshake).
+- **`gen-ccs`:** on a fresh repo it wrote an empty file and reported a false
+  "✅ Generated"; now falls back to the top code entities by graph degree (and
+  warns honestly when there is genuinely nothing to export).
+- **AST extraction:** TS `interface` / `type` alias / `enum` declarations are now
+  extracted as first-class nodes (kinds `interface`/`type`) instead of being
+  dropped — they were dead reference targets before.
+- **git co-change miner:** no longer emits a self-edge when two distinct files
+  share a basename stem (e.g. `src/index.ts` + `src/miners/index.ts`).
+- **Providers:** the mempalace/context7 warmup + availability probes now `unref`
+  their child processes, so a slow/absent backend can't keep the engram process
+  alive for seconds after a session's context bundle was already delivered.
+
+### Added
+- `llms-install.md` — an agent-readable setup guide (global install, `engram
+  init`, the `mcpServers` config block) so tools like Cline can configure engram
+  autonomously.
+
+### Internal
+- CI installs ripgrep (best-effort) so the grep never-worse-gate tests run on the
+  runners; first dedicated tests for the git-miner and the refs cache.
+
 ## [4.3.1] — 2026-06-06 — "Proof" (patch)
 
 **Why:** a two-pass execution-swarm audit (agents that *ran* engram end-to-end, not just read it)
