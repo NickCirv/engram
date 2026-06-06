@@ -151,7 +151,8 @@ function buildQuery(filePath: string, context: NodeContext): string {
 function searchMempalace(query: string): Promise<string | null> {
   return new Promise((resolve) => {
     const timeout = setTimeout(() => resolve(null), 3000);
-    execFile(
+    timeout.unref();
+    const child = execFile(
       "mcp-mempalace",
       ["mempalace-search", "--query", query],
       { encoding: "utf-8", timeout: 3000, maxBuffer: 1024 * 1024 },
@@ -164,6 +165,10 @@ function searchMempalace(query: string): Promise<string | null> {
         resolve(stdout.trim());
       }
     );
+    // A slow/hung backend must not keep the engram process (or a fire-and-forget
+    // SessionStart warmup) alive after the caller's withTimeout has given up on
+    // the result — unref so the process can exit and the OS reaps the child.
+    child.unref();
   });
 }
 
@@ -200,7 +205,7 @@ function formatResults(raw: string): string | null {
 
 function execFilePromise(cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(
+    const child = execFile(
       cmd,
       args,
       { encoding: "utf-8", timeout: 3000 },
@@ -209,5 +214,8 @@ function execFilePromise(cmd: string, args: string[]): Promise<string> {
         else resolve(stdout.trim());
       }
     );
+    // Availability-probe result is discarded by the caller's withTimeout (~500ms);
+    // don't let the child hold the event loop for the full 3s timeout.
+    child.unref();
   });
 }

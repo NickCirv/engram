@@ -188,7 +188,8 @@ function isExternalPackage(name: string): boolean {
 function queryContext7(packageName: string): Promise<string | null> {
   return new Promise((resolve) => {
     const timeout = setTimeout(() => resolve(null), 5000);
-    execFile(
+    timeout.unref();
+    const child = execFile(
       "mcp-context7",
       [
         "query-docs",
@@ -207,6 +208,9 @@ function queryContext7(packageName: string): Promise<string | null> {
         resolve(stdout.trim());
       }
     );
+    // A slow/hung backend must not keep the engram process (or a fire-and-forget
+    // SessionStart warmup) alive after the caller's withTimeout has given up.
+    child.unref();
   });
 }
 
@@ -225,7 +229,7 @@ function formatDocs(pkg: string, raw: string): string | null {
 
 function execFilePromise(cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(
+    const child = execFile(
       cmd,
       args,
       { encoding: "utf-8", timeout: 3000 },
@@ -234,5 +238,8 @@ function execFilePromise(cmd: string, args: string[]): Promise<string> {
         else resolve(stdout.trim());
       }
     );
+    // Availability-probe result is discarded by the caller's withTimeout (~500ms);
+    // don't let the child hold the event loop for the full timeout.
+    child.unref();
   });
 }
