@@ -15,5 +15,5 @@ Hooks at the boundary.
 Returns a context packet, not the file.
 
 00:00:18.000 --> 00:00:24.000
-88.1% measured savings.
+88.1% fewer context tokens.
 $0 cloud. Persistent memory.

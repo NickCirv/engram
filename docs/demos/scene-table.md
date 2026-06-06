@@ -14,7 +14,7 @@
 | 1 | Context (Problem) | 0–5s | Claude Code session: agent re-reads `auth.ts` for the 4th time. Token counter ticks: 5,400 → 10,800 → 16,200 → 21,600. Red diff strikethrough on identical re-reads. | "Your AI agent re-reads the same files. Every session. Every time." |
 | 2 | Action (Install) | 5–11s | Terminal types `npm install -g engramx` → `engram init` → `engram install-hook`. Output streams: 451 nodes, 7 hooks installed. Amber ✓ checks land in sequence. | "Three commands. No accounts. No cloud." |
 | 3 | Action (Intercept) | 11–18s | Same Claude session: agent calls `Read(auth.ts)`. PreToolUse hook fires (amber pulse). Context packet (~500 tokens) replaces raw file. Token counter ticks down: 21,600 → 2,400. | "Hooks at the boundary. Returns a context packet, not the file." |
-| 4 | Payoff (Results) | 18–24s | Dashboard tab: 88.1% saved · $0.26 saved · 451 nodes · 1005 edges. Mistake memory ⚠ chip surfaces a prior bug. | "88.1% measured savings. $0 cloud. Persistent memory." |
+| 4 | Payoff (Results) | 18–24s | Dashboard tab: 88.1% fewer context tokens (structural) · $0 cloud · 451 nodes · 1005 edges. Mistake memory ⚠ chip surfaces a prior bug. | "88.1% fewer context tokens. $0 cloud. Persistent memory." |
 
 ---
 
