@@ -2,7 +2,7 @@
   "name": "engram-vscode",
   "displayName": "engram — context spine for AI coding",
   "description": "Local-first knowledge graph that 10x's your AI coding sessions. Works in Cursor, VS Code, and any VS Code fork. Wraps the engramx CLI.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "nickcirv",
   "license": "Apache-2.0",
   "engines": {

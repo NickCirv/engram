@@ -36,7 +36,7 @@ Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and type `Engram:`:
 
 ## Why use it
 
-If you're already using Cursor or VS Code with an AI agent (Cline, Continue, GitHub Copilot, Claude in a terminal), engram cuts the tokens they consume by ~89% on real codebases. The graph is local SQLite. Nothing leaves your machine.
+If you're already using Cursor or VS Code with an AI agent (Cline, Continue, GitHub Copilot, Claude in a terminal), engram replaces whole-file reads with a compact structural summary from a local graph — a **per-file context-token reduction** (typically 50–90%, ~89% on engram's own large-file code; structural, varies by repo). It's a reduction in tokens *entering the model's context*, **not** a guaranteed bill saving — prompt caching dominates the dollar cost. The graph is local SQLite. Nothing leaves your machine.
 
 ## License
 
