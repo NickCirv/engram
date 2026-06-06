@@ -703,7 +703,7 @@ All responses are JSON. The server is local-only by default — bind address is 
   "mcpServers": {
     "engram": {
       "command": "npx",
-      "args": ["-y", "engramx", "serve", "/path/to/your/project"]
+      "args": ["-y", "-p", "engramx", "engram-serve", "/path/to/your/project"]
     }
   }
 }

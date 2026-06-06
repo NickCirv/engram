@@ -35,7 +35,7 @@ Add this to the MCP settings (in Cline: **MCP Servers → Configure**, i.e.
   "mcpServers": {
     "engram": {
       "command": "npx",
-      "args": ["-y", "engramx", "serve", "/absolute/path/to/the/project"]
+      "args": ["-y", "-p", "engramx", "engram-serve", "/absolute/path/to/the/project"]
     }
   }
 }
