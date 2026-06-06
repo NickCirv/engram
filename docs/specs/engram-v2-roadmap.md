@@ -1,5 +1,12 @@
 # engram v2.0 Roadmap — "Ecosystem"
 
+> **⚠ Historical (v2.0 era) — superseded; kept for archaeology.** The "saves 88.1% of session
+> tokens" / "88% of Claude Code's token budget" framing in this doc predates the honesty pass.
+> That ~88% figure is a **per-file structural** context-token reduction measured on engram's own
+> repo — **not** a session-loop or bill saving. Engram's net effect on the dollar bill over prompt
+> caching is ≈ 0 (see the W1.x findings). For current, honest claims see the README and
+> `docs/COMPARISON.md`. Do not quote the numbers below.
+
 > Post-v1.0 strategy for market dominance. Informed by competitive analysis of
 > Continue.dev, Cursor, Mem0, Aider, Zed, Cody, Copilot, Supermaven, and CCS.
 
