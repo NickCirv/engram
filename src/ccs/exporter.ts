@@ -4,7 +4,7 @@
  */
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import type { GraphNode } from "../graph/schema.js";
+import type { GraphNode, GraphEdge } from "../graph/schema.js";
 
 export interface CcsExportResult {
   readonly filePath: string;
@@ -26,6 +26,34 @@ function buildSection(heading: string, nodes: GraphNode[]): string {
   if (nodes.length === 0) return "";
   const bullets = nodes.map((n) => bullet(n.label));
   return [`## ${heading}`, "", ...bullets, ""].join("\n");
+}
+
+/** Code node kinds usable as a structural fallback when no semantic nodes exist. */
+const CODE_KINDS = new Set(["function", "class", "method", "interface", "type"]);
+
+/**
+ * Top code entities by connection count (graph degree). Used as a structural
+ * fallback so CCS isn't empty on a fresh repo — patterns/decisions/mistakes/
+ * concepts are mined over time, but the call graph exists at install time, the
+ * same signal gen-mdc/gen-aider/gen-windsurfrules export.
+ */
+function topCodeEntities(
+  nodes: readonly GraphNode[],
+  edges: readonly GraphEdge[]
+): GraphNode[] {
+  const degree = new Map<string, number>();
+  for (const e of edges) {
+    degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
+    degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
+  }
+  return nodes
+    .filter((n) => CODE_KINDS.has(n.kind))
+    .sort(
+      (a, b) =>
+        (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0) ||
+        a.label.localeCompare(b.label)
+    )
+    .slice(0, 20);
 }
 
 export async function exportCcs(projectRoot: string): Promise<CcsExportResult> {
@@ -61,12 +89,25 @@ export async function exportCcs(projectRoot: string): Promise<CcsExportResult> {
       .sort((a, b) => b.queryCount - a.queryCount)
       .slice(0, 10);
 
-    const sections = [
+    const semanticSections = [
       buildSection("Architecture Patterns", patternNodes),
       buildSection("Decisions", decisionNodes),
       buildSection("Known Issues", mistakeNodes),
       buildSection("Key Concepts", conceptNodes),
     ].filter((s) => s.length > 0);
+
+    // Fresh repo: no semantic nodes mined yet → fall back to the call graph so
+    // the file is useful at install time rather than an empty header.
+    const fallbackEntities =
+      semanticSections.length === 0
+        ? topCodeEntities(allNodes, store.getAllEdges())
+        : [];
+    const sections =
+      semanticSections.length > 0
+        ? semanticSections
+        : [buildSection("Key Code Entities", fallbackEntities)].filter(
+            (s) => s.length > 0
+          );
 
     const content = [HEADER, ...sections].join("\n");
 
@@ -78,7 +119,8 @@ export async function exportCcs(projectRoot: string): Promise<CcsExportResult> {
       patternNodes.length +
       decisionNodes.length +
       mistakeNodes.length +
-      conceptNodes.length;
+      conceptNodes.length +
+      fallbackEntities.length;
 
     return {
       filePath: outPath,

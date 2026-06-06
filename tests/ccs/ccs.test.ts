@@ -175,6 +175,46 @@ describe("CCS exporter", () => {
     expect(result.nodesExported).toBeGreaterThanOrEqual(3);
     expect(result.filePath).toMatch(/\.context[\\/]index\.md$/);
   });
+
+  it("falls back to top code entities when no semantic nodes exist (fresh repo)", async () => {
+    // A fresh repo has only code nodes (function/class/…), no mined patterns/
+    // decisions/mistakes/concepts. Before the fix this wrote an empty header +
+    // reported "0 nodes"; now it exports the call graph so CCS is useful.
+    const fresh = mkdtempSync(join(tmpdir(), "engram-ccs-fallback-"));
+    mkdirSync(join(fresh, ".engram"), { recursive: true });
+    const s = await GraphStore.open(getDbPath(fresh));
+    try {
+      const now = Date.now();
+      for (const [id, label] of [
+        ["fn-a", "alpha()"],
+        ["fn-b", "beta()"],
+      ] as const) {
+        s.upsertNode({
+          id,
+          label,
+          kind: "function",
+          sourceFile: "src/a.ts",
+          sourceLocation: null,
+          confidence: "EXTRACTED",
+          confidenceScore: 0.85,
+          lastVerified: now,
+          queryCount: 0,
+          metadata: {},
+        });
+      }
+      s.save();
+      s.close();
+
+      const result = await exportCcs(fresh);
+      const content = readFileSync(result.filePath, "utf-8");
+      expect(content).toContain("## Key Code Entities");
+      expect(content).toContain("- alpha()");
+      expect(content).toContain("- beta()");
+      expect(result.nodesExported).toBeGreaterThan(0);
+    } finally {
+      rmSync(fresh, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("CCS round-trip", () => {

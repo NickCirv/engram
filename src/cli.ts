@@ -938,9 +938,13 @@ program
     const { exportCcs } = await import("./ccs/exporter.js");
     const result = await exportCcs(pathResolve(opts.project));
     console.log(
-      chalk.green(
-        `✅ Generated ${result.filePath} (${result.sectionsWritten} sections, ${result.nodesExported} nodes)`
-      )
+      result.nodesExported > 0
+        ? chalk.green(
+            `✅ Generated ${result.filePath} (${result.sectionsWritten} sections, ${result.nodesExported} nodes)`
+          )
+        : chalk.yellow(
+            `⚠ Wrote ${result.filePath} but found no exportable entities — run \`engram init\` first, or this repo has no indexed code yet.`
+          )
     );
   });
 
