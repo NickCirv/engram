@@ -61,6 +61,19 @@ export interface HookLogEntry {
   /** v3.3 Cost Lens: tokens engram actually injected (deny reason or additional context). */
   readonly injected?: number;
   readonly reason?: string;
+  /**
+   * v4.4 Token-loop C: the harness session id, if the hook payload carried one.
+   * Lets `engram measure --session` segment a log into real sessions instead of
+   * a time-gap guess. Optional — old logs and harnesses without it still parse.
+   */
+  readonly sessionId?: string;
+  /**
+   * v4.4 Token-loop C: the raw Bash command string (Bash tool only). Lets the
+   * replay MEASURE the shell-grep arm directly instead of inferring it. Only set
+   * for Bash events; omitted (and the arm excluded) for everything else and for
+   * old logs. NEVER carries user-prompt content — it is the tool's own command.
+   */
+  readonly command?: string;
 }
 
 /**

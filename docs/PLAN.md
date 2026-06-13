@@ -68,7 +68,7 @@ Track D's before/after demo.** Don't let interception polish crowd out distribut
 |---|---|---|---|
 | A (#71) | Bash-grep interception | **done, audited** (commit pending) | reuses `handleGrep` + all gates; ADR-0005; 51/51 bash tests; adversarial SHIP |
 | B (#72) | Bash exploration intercept (`ls`/`find`/`tree`/Glob) | next (P) | directory floods → graph file-tree, gated |
-| C (#73) | Cumulative session measurement (replay/live) | blocked by B | feeds Track M |
+| C (#73) | Cumulative session measurement (replay) | ✅ SHIPPED (replay; live deferred, ADR-0012) | feeds Track M; `engram measure --session` |
 | D (#74) | Release **v4.3** (Bash bundle) | blocked by B | Nick 2FA |
 | E (#75) | git-bugfix-miner hardening | backlog | non-blocking |
 | F (#76) | Workload router | **PARKED** | N=3 evidence too weak; gates already route |

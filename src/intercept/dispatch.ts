@@ -72,6 +72,8 @@ interface MinimalHookPayload {
   readonly tool_name?: unknown;
   readonly tool_input?: unknown;
   readonly cwd?: unknown;
+  /** v4.4 Token-loop C: harness session id, when the payload carries one. */
+  readonly session_id?: unknown;
 }
 
 /**
@@ -235,12 +237,24 @@ async function dispatchPreToolUse(
             ? handlerPayload.tool_input.file_path
             : undefined;
         const cost = composeCostFields(tool, filePath, result);
+        // v4.4 Token-loop C: carry the session id (when the harness sends one)
+        // and the Bash command string (Bash only) so a later replay can segment
+        // sessions and MEASURE the shell-grep arm instead of inferring it.
+        const sessionId =
+          typeof payload.session_id === "string" ? payload.session_id : undefined;
+        const command =
+          tool === "Bash" &&
+          typeof handlerPayload.tool_input?.command === "string"
+            ? handlerPayload.tool_input.command
+            : undefined;
         logHookEvent(projectRoot, {
           event: "PreToolUse",
           tool,
           path: filePath,
           decision,
           ...cost,
+          ...(sessionId ? { sessionId } : {}),
+          ...(command ? { command } : {}),
         });
       }
     }

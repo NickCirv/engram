@@ -74,7 +74,7 @@ before/after demo (#77)**, not more interception — distribution is the binding
 |---|---|---|---|
 | **A (#71)** | **Bash-grep interception** | **done, audited** (commit pending) | agents `rg`/`grep` via the **Bash** tool, bypassing the v4.2 Grep-tool win entirely. Reuses `handleGrep` + all gates; ADR-0005; 51/51 bash tests; full suite 1110; adversarial SHIP. Net-new coverage for shell-only IDEs (Aider/Codex/Cline). |
 | B (#72) | Bash exploration intercept (`ls`/`find`/`tree`/Glob) | blocked by A | directory listings flood context; answer from the graph's file tree, gated. |
-| C (#73) | Cumulative session measurement (replay/live) | blocked by A,B | prove the *combined* saving end-to-end (transcript replay over real logs), not per-mechanism. |
+| C (#73) | Cumulative session measurement (replay) | ✅ SHIPPED (replay; live deferred) — ADR-0012 | `engram measure --session [--replay <log>]`: per-session break-even-P curve over real hook-logs. Was "blocked by A,B"; B=#72 deferred (ADR-0011), so C depended only on A. |
 | D (#74) | Release **v4.3** (Bash bundle) | blocked by A,B | ship the Bash interceptions to users (else stranded on main). Nick 2FA. |
 | E (#75) | git-bugfix-miner hardening | backlog | perf/robustness, non-blocking. |
 | F (#76) | Workload router | **PARKED** | built on N=3 (weakest evidence); the per-call gates are already a better router. Revisit only if the evidence firms up. |

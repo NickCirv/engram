@@ -633,7 +633,14 @@ program
   .description("Honest structural context-token reduction on YOUR repo (auto-discovers top symbols)")
   .option("-p, --project <path>", "Project directory", ".")
   .option("-t, --top <n>", "How many top symbols to sample (1-50)", (v) => parseInt(v, 10))
-  .action(async (opts: { project: string; top?: number }) => {
+  .option("--session", "Cumulative session replay: re-account a recorded hook-log as a per-session break-even-P curve")
+  .option("--replay <path>", "Hook-log path for --session (default: the project's .engram/hook-log.jsonl)")
+  .action(async (opts: { project: string; top?: number; session?: boolean; replay?: string }) => {
+    if (opts.session || opts.replay) {
+      const { runMeasureSession } = await import("./commands/measure-session.js");
+      await runMeasureSession({ project: opts.project, replay: opts.replay });
+      return;
+    }
     const { runMeasure } = await import("./commands/measure.js");
     await runMeasure({ project: opts.project, top: opts.top });
   });

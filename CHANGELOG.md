@@ -6,6 +6,15 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+### Added
+- **`engram measure --session [--replay <log>]`** (Token-loop C, replay mode) — proves the
+  *combined* whole-session structural reduction by replaying `.engram/hook-log.jsonl` through
+  the deterministic recall-recovery P-model (ADR-0012). Reports a per-session **break-even-P
+  curve** (never a single "X% saved"), framed as a structural context-token reduction (not a
+  $ saving), with the whole-session figure disclosed as a same-epoch ceiling. Hook-log gains
+  two optional fields — `sessionId` (honest session boundaries) and `command` (Bash only, so
+  the shell-grep arm is measured, not inferred). Old logs still parse.
+
 ## [4.3.2] — 2026-06-06 — "Proof" (patch)
 
 **Why:** 4.3.1 shipped from a staging snapshot and missed a batch of fixes made
