@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Engram makes your AI coding agent stop re-reading the same files — and stop repeating mistakes your repo already fixed.</strong><br>
-  <sub>One install. 8 IDEs. <strong>Up to ~89% fewer context tokens</strong> vs reading whole files — typically 50–90%, strongest on large-file codebases (Python/Go), lower on many-small-file repos. Structural packet size, not a bill saving; run <code>engram bench</code> on yours. Bi-temporal mistakes auto-captured from git revert history. Local SQLite, zero cloud, Apache 2.0.</sub>
+  <sub>One install. 8 IDEs. Your agent works from a structural map of your repo instead of re-reading whole files — so sessions run longer before the context wall — and <strong>bi-temporal mistakes are auto-captured from your git revert history</strong>, so it stops repeating fixes that already failed. Context packets run ~50–90% smaller per file (structural size, not a bill saving — run <code>engram bench</code> on yours). Local SQLite, zero cloud, Apache 2.0.</sub>
 </p>
 
 <p align="center">
@@ -58,10 +58,10 @@
   <a href="https://open-vsx.org/extension/nickcirv/engram-vscode"><img src="https://img.shields.io/open-vsx/v/nickcirv/engram-vscode?color=blue&label=OpenVSX" alt="OpenVSX engram-vscode"></a>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node">
-  <img src="https://img.shields.io/badge/tests-1149%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-1167%20passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/per--file%20reduction-53--89%25-orange" alt="53-89% per-file structural reduction">
   <img src="https://img.shields.io/badge/native%20deps-zero-green" alt="Zero native deps">
-  <img src="https://img.shields.io/badge/LLM%20cost-$0-green" alt="Zero LLM cost">
+  <img src="https://img.shields.io/badge/LLM%20calls-0-green" alt="engram makes zero LLM calls">
 </p>
 
 ---
