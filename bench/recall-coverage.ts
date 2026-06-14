@@ -26,6 +26,7 @@ import { resolve } from "node:path";
 import { getStore } from "../src/core.js";
 import { findCallers, findCallees } from "../src/graph/traversal.js";
 import { pageRank } from "../src/graph/pagerank.js";
+import { clusterBootstrapCI, mean as avg } from "./stats.js";
 
 interface Node { id: string; label: string; kind: string; sourceFile: string }
 interface Edge { source: string; target: string; relation: string }
@@ -117,6 +118,10 @@ function main(): void {
     // from ranking, expose the method's own reachable ceiling, disclose exclusions.
     let randW5 = 0, randW10 = 0, ceilingSum = 0, allGoldFiles = 0, noSymGoldFiles = 0;
     const perCommitWorst: number[] = [];
+    // Per-commit means for the cluster bootstrap. The COMMIT is the independent
+    // unit — trials within a commit are correlated — so the CI resamples commits.
+    const perCommitEngram: number[] = [];
+    const perCommitRandom: number[] = [];
 
     for (const c of commits) {
       allGoldFiles += c.files.length;
@@ -125,6 +130,7 @@ function main(): void {
       const gold = c.files.filter((f) => fileSyms.has(f));
       if (gold.length < 2) continue;
       const commitR10: number[] = [];
+      const commitRand10: number[] = [];
       for (const f1 of gold) {
         const others = gold.filter((g) => g !== f1);
         const ranked = rankedRelated(f1);
@@ -144,10 +150,18 @@ function main(): void {
         ceilingSum += reachable / others.length;
         if (C > 0) {
           randW5 += (reachable * Math.min(K1, C)) / C / others.length;
-          randW10 += (reachable * Math.min(K2, C)) / C / others.length;
+          const randTrial10 = (reachable * Math.min(K2, C)) / C / others.length;
+          randW10 += randTrial10;
+          commitRand10.push(randTrial10);
+        } else {
+          commitRand10.push(0); // no candidates → random recall is 0 (stays aligned with commitR10)
         }
       }
-      if (commitR10.length > 0) perCommitWorst.push(Math.min(...commitR10));
+      if (commitR10.length > 0) {
+        perCommitWorst.push(Math.min(...commitR10));
+        perCommitEngram.push(avg(commitR10));
+        perCommitRandom.push(avg(commitRand10));
+      }
     }
 
     if (trials === 0) {
@@ -172,6 +186,22 @@ function main(): void {
     console.log(`  • candidate generation (callers∪callees) reaches ${pct(ceiling)} of co-changed files;`);
     console.log(`    PageRank ranking then captures ${pct((r10 / trials) / (ceiling || 1))} of that reachable set at @10`);
     console.log(`    (vs ${pct(randW10 / trials)} for random ordering of the same candidates — the ranker's own lift).`);
+    console.log("");
+    // Cluster bootstrap (resampling COMMITS — the independent unit) → honest error
+    // bars on the headline, and whether the ranker's lift is distinguishable from random.
+    const recCI = clusterBootstrapCI(perCommitEngram, { seed: 1 });
+    const liftCI = clusterBootstrapCI(
+      perCommitEngram.map((e, i) => e - perCommitRandom[i]),
+      { seed: 2 }
+    );
+    const pp = (x: number): string => (x >= 0 ? "+" : "") + (100 * x).toFixed(1) + "pp";
+    console.log(`  recall@10 (per-commit macro, 95% CI over ${recCI.n} commits): ${pct(recCI.mean)} [${pct(recCI.lo)}, ${pct(recCI.hi)}]`);
+    console.log(
+      `  ranker lift vs random-order (95% CI): ${pp(liftCI.mean)} [${pp(liftCI.lo)}, ${pp(liftCI.hi)}]` +
+        (liftCI.lo > 0
+          ? "  — excludes 0 → real"
+          : "  — includes 0 → NOT distinguishable from random")
+    );
     console.log("");
     console.log("  Honest caveats:");
     console.log(`  • ${pct(noSymGoldFiles / (allGoldFiles || 1))} of co-changed source files have no extracted symbols and are`);
