@@ -21,7 +21,15 @@ import type { GraphStats } from "./graph/schema.js";
 const ENGRAM_DIR = ".engram";
 const DB_FILE = "graph.db";
 const LOCK_FILE = "init.lock";
-const DEFAULT_SKILLS_DIR = join(homedir(), ".claude", "skills");
+/**
+ * Default skills dir for `withSkills: true`, resolved at CALL time (not module
+ * load) so it honours an `ENGRAM_SKILLS_DIR` override. Production default is
+ * unchanged (`~/.claude/skills`); the override keeps tests hermetic instead of
+ * mining the developer's live skills dir (non-deterministic + can throw mid-scan).
+ */
+function defaultSkillsDir(): string {
+  return process.env.ENGRAM_SKILLS_DIR || join(homedir(), ".claude", "skills");
+}
 
 export function getDbPath(projectRoot: string): string {
   return join(projectRoot, ENGRAM_DIR, DB_FILE);
@@ -117,7 +125,7 @@ export async function init(
       const skillsDir =
         typeof options.withSkills === "string"
           ? options.withSkills
-          : DEFAULT_SKILLS_DIR;
+          : defaultSkillsDir();
       const skillsResult = mineSkills(skillsDir);
       skillCount = skillsResult.skillCount;
       skillNodes = skillsResult.nodes;

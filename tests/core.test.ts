@@ -193,12 +193,21 @@ describe("Core — init with skills (v0.2)", () => {
     expect(result.nodes).toBeGreaterThan(2); // code nodes + 2 skills + keyword nodes
   });
 
-  it("withSkills: true → resolves to ~/.claude/skills (may be empty in CI)", async () => {
-    // This test only verifies the flag is honored and doesn't crash when the
-    // default path doesn't exist. We can't assert skillCount because CI may
-    // or may not have a ~/.claude/skills dir.
-    const result = await init(tmpDir, { withSkills: true });
-    expect(result.skillCount).toBeGreaterThanOrEqual(0);
+  it("withSkills: true → resolves the default skills dir (hermetic via ENGRAM_SKILLS_DIR)", async () => {
+    // Point the `true` default at an isolated EMPTY dir so the test is
+    // deterministic and never mines the developer's live ~/.claude/skills
+    // (which is large + concurrently modified → could throw mid-scan, #137).
+    const emptySkills = mkdtempSync(join(tmpdir(), "engram-empty-skills-"));
+    const prev = process.env.ENGRAM_SKILLS_DIR;
+    process.env.ENGRAM_SKILLS_DIR = emptySkills;
+    try {
+      const result = await init(tmpDir, { withSkills: true });
+      expect(result.skillCount).toBe(0);
+    } finally {
+      if (prev === undefined) delete process.env.ENGRAM_SKILLS_DIR;
+      else process.env.ENGRAM_SKILLS_DIR = prev;
+      rmSync(emptySkills, { recursive: true, force: true });
+    }
   });
 
   it("skill nodes do not appear as god nodes (kind=concept excluded)", async () => {
