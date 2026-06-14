@@ -6,6 +6,13 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+## [4.4.0] — 2026-06-14 — "Curve"
+
+**Why:** honest whole-session measurement, statistical error bars, and a front
+door that leads with what's true. Token-loop C lands `engram measure --session`;
+the recall bench now ships confidence intervals; the README leads with the
+caveat-free differentiator instead of a number.
+
 ### Added
 - **`engram measure --session [--replay <log>]`** (Token-loop C, replay mode) — proves the
   *combined* whole-session structural reduction by replaying `.engram/hook-log.jsonl` through
@@ -14,6 +21,27 @@ All notable changes to engram are documented here. Format based on
   $ saving), with the whole-session figure disclosed as a same-epoch ceiling. Hook-log gains
   two optional fields — `sessionId` (honest session boundaries) and `command` (Bash only, so
   the shell-grep arm is measured, not inferred). Old logs still parse.
+- **Cluster-bootstrap confidence intervals on the recall bench** (`bench/stats.ts`) — recall@10
+  (per-commit macro) and the ranker's lift over a random-order baseline now report a 95% CI with
+  an explicit "excludes 0 → real" verdict. On engram's own repo: lift **+5.0pp [+1.7, +8.5]**
+  (excludes 0); recall@10 macro 45.1% [36.4, 54.0]. The reusable stats engine the resolve-rate
+  A/B will consume.
+
+### Changed
+- **README front door** now leads with the caveat-free differentiator (bi-temporal mistakes from
+  git reverts) + capacity, demoting the per-file structural % into its caveat; the `LLM cost $0`
+  badge → `LLM calls 0` (true + not misreadable as a cost claim).
+
+### Fixed
+- **`query` / `gen` now fail loudly on a path with no graph** (#92) — exit 1 with "run engram
+  init" instead of silently printing "no nodes" and exiting 0 on a missing/typo'd `--project`.
+- **Hermetic skills test** (#137) — the `withSkills: true` test resolves its default via
+  `ENGRAM_SKILLS_DIR` at call time instead of mining the developer's live `~/.claude/skills`,
+  removing a CI flake.
+
+### Security
+- Added `.gitleaks.toml` allowlisting the synthetic PII-gate test fixture
+  (`tests/fixtures/pii-zoo.json`) — fake tokens by design, not real secrets.
 
 ## [4.3.2] — 2026-06-06 — "Proof" (patch)
 

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v4.3.2 'Proof')" width="100%">
+  <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v4.4.0 'Curve')" width="100%">
 </p>
 
 <p align="center">
@@ -86,8 +86,8 @@ mkdir -p /tmp/engram-demo && cd /tmp/engram-demo && \
   echo "export const buggy = () => null;" > src.ts && \
   git add -A && git commit -q -m "feat: add buggy helper returning null causing form crashes" && \
   git revert --no-edit HEAD > /dev/null && \
-  npx --yes engramx@4.3.2 init . && \
-  npx --yes engramx@4.3.2 mistakes
+  npx --yes engramx@4.4.0 init . && \
+  npx --yes engramx@4.4.0 mistakes
 ```
 
 You should see, within 30 seconds, the **bi-temporal pre-mortem** engram auto-captured from your revert:
@@ -119,6 +119,8 @@ On engramx's own repo the **per-file structural context reduction is ~89%** (89.
 
 Works in 8 IDEs and counting — Claude Code, Cursor, Cline, Continue.dev, Aider, Windsurf, Zed, OpenAI Codex CLI. One install, one graph, every tool benefits. Apache 2.0. Local SQLite. Nothing leaves your machine.
 
+> **v4.4.0 "Curve" — 2026-06-14.** New: **`engram measure --session`** proves the *combined* whole-session structural reduction by replaying your hook-log as an honest per-session break-even-P curve (Token-loop C). The recall bench now ships **confidence intervals** — on engram's own repo the PageRank ranker's lift over random ordering is **+5.0pp, 95% CI [+1.7, +8.5]** (excludes 0 → real); recall@10 macro 45.1% [36.4, 54.0]. Plus: `query`/`gen` fail loudly on a bad `--project`, a hermetic skills test, and a front door that leads with the differentiator, not the number. Still no cost claims — a structural reduction, not a bill saving.
+>
 > **v4.3 "Proof" shipped 2026-06-05 — engram's saving is now real *and provable*.** Run **`engram measure`** in your own repo to see the honest structural context-token reduction on **your** code — every disclosure computed live: it's a ceiling, here's the recall, here's the intercept rate, "structural tokens, not your bill." Run **`npm run bench:recall`** for the reproducible proof that engram surfaces the files a change actually touches (recall@10 33% on engram's own repo, decomposed honestly: candidate generation reaches 43%, the PageRank ranker adds +3.2pp over random-within-candidate; 10.4% blind chance).
 >
 > New this release: a **never-worse gate** on Grep (engram passes through whenever its packet isn't actually smaller — sized to your grep's exact `cwd`/`path`/`glob` scope), **Bash-grep interception** (the shell-only IDEs — Aider, Codex CLI, Cline — now get the call-site packet too), a **sub-agent context broker** (a tight ~100-token ranked slice into each spawned Claude Code sub-agent — the one regime prompt caching can't help), and a **compaction ledger** (a "previously read" list injected at `/compact` so the agent doesn't re-explore). Every number is a measured fact or a labelled bet — **no cost claims**; a *structural* context reduction, not a bill saving (engram's net over prompt caching ≈ 0). 1149 tests. See [CHANGELOG.md](CHANGELOG.md), `docs/COMPARISON.md` (vs the other local code-graph tools — ranking isn't unique, the *combination* is), and `docs/FRONTIER.md`.

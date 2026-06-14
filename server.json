@@ -6,12 +6,12 @@
     "url": "https://github.com/NickCirv/engram",
     "source": "github"
   },
-  "version": "4.3.2",
+  "version": "4.4.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "engramx",
-      "version": "4.3.2",
+      "version": "4.4.0",
       "transport": {
         "type": "stdio"
       },
