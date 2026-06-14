@@ -31,6 +31,18 @@ function callsEdges(edges: readonly GraphEdge[]): GraphEdge[] {
   return edges.filter((e) => e.relation === "calls");
 }
 
+function importsEdges(edges: readonly GraphEdge[]): GraphEdge[] {
+  return edges.filter((e) => e.relation === "imports");
+}
+
+/** Resolve a file argument (source path or label) to its file node. */
+function resolveFileNode(
+  nodes: readonly GraphNode[],
+  file: string
+): GraphNode | undefined {
+  return nodes.find((n) => n.kind === "file" && (n.sourceFile === file || n.label === file));
+}
+
 /**
  * Files that call a symbol (incoming `calls` edges to defs named `name`).
  * Returns sorted, de-duplicated caller file paths.
@@ -91,6 +103,56 @@ export function findCallees(
     if (def) out.push({ name: bareName(def.label), file: def.sourceFile });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Files that import `file` (incoming `imports` edges to `file`'s node).
+ *
+ * Edge model (from ast-miner): an `imports` edge goes
+ *   importer FILE node  ──imports──▶  imported FILE node (local) | module id (external)
+ * so "importers of a file" are the source FILE nodes of import edges whose
+ * target is `file`'s node. External-module import edges (target is a synthetic
+ * module id, not a file node) never match here. Returns sorted, de-duplicated
+ * importer file paths (excluding `file` itself).
+ */
+export function findImporters(
+  nodes: readonly GraphNode[],
+  edges: readonly GraphEdge[],
+  file: string
+): string[] {
+  const target = resolveFileNode(nodes, file);
+  if (!target) return [];
+  const fileById = new Map(nodes.filter((n) => n.kind === "file").map((n) => [n.id, n.sourceFile]));
+  const importers = new Set<string>();
+  for (const e of importsEdges(edges)) {
+    if (e.target !== target.id) continue;
+    const src = fileById.get(e.source);
+    if (src && src !== target.sourceFile) importers.add(src);
+  }
+  return [...importers].sort();
+}
+
+/**
+ * Files that `file` imports (outgoing `imports` edges from `file`'s node,
+ * resolved to local file nodes). External-module imports (target is a synthetic
+ * module id, not a file node) are excluded — they have no in-repo file to
+ * surface. Returns sorted, de-duplicated imported file paths (excluding `file`).
+ */
+export function findImports(
+  nodes: readonly GraphNode[],
+  edges: readonly GraphEdge[],
+  file: string
+): string[] {
+  const origin = resolveFileNode(nodes, file);
+  if (!origin) return [];
+  const fileById = new Map(nodes.filter((n) => n.kind === "file").map((n) => [n.id, n.sourceFile]));
+  const imported = new Set<string>();
+  for (const e of importsEdges(edges)) {
+    if (e.source !== origin.id) continue;
+    const tgt = fileById.get(e.target); // undefined for external-module targets
+    if (tgt && tgt !== origin.sourceFile) imported.add(tgt);
+  }
+  return [...imported].sort();
 }
 
 /**
