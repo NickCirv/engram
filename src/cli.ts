@@ -502,6 +502,10 @@ program
   .argument("<target>", "Target concept")
   .option("-p, --project <path>", "Project directory", ".")
   .action(async (source: string, target: string, opts: { project: string }) => {
+    if (!hasGraph(opts.project)) {
+      console.error(noGraphMessage(opts.project));
+      process.exit(1);
+    }
     const result = await path(opts.project, source, target);
     console.log(result.text);
   });
@@ -512,6 +516,10 @@ program
   .option("-n, --top <n>", "Number of nodes", "10")
   .option("-p, --project <path>", "Project directory", ".")
   .action(async (opts: { top: string; project: string }) => {
+    if (!hasGraph(opts.project)) {
+      console.error(noGraphMessage(opts.project));
+      process.exit(1);
+    }
     const gods = await godNodes(opts.project, Number(opts.top));
     if (gods.length === 0) {
       console.log(chalk.yellow("No nodes found. Run `engram init` first."));
@@ -531,6 +539,10 @@ program
   .description("List files that call a symbol (over the reference graph)")
   .option("-p, --project <path>", "Project directory", ".")
   .action(async (symbol: string, opts: { project: string }) => {
+    if (!hasGraph(opts.project)) {
+      console.error(noGraphMessage(opts.project));
+      process.exit(1);
+    }
     const files = await callers(opts.project, symbol);
     if (files.length === 0) {
       console.log(chalk.yellow(`No callers found for "${symbol}". (Run \`engram init\` to build the reference graph.)`));
@@ -545,6 +557,10 @@ program
   .description("List definitions that a symbol's file calls")
   .option("-p, --project <path>", "Project directory", ".")
   .action(async (symbol: string, opts: { project: string }) => {
+    if (!hasGraph(opts.project)) {
+      console.error(noGraphMessage(opts.project));
+      process.exit(1);
+    }
     const out = await callees(opts.project, symbol);
     if (out.length === 0) {
       console.log(chalk.yellow(`No callees found for "${symbol}".`));
@@ -559,6 +575,10 @@ program
   .description("Show files transitively affected if you change a symbol")
   .option("-p, --project <path>", "Project directory", ".")
   .action(async (symbol: string, opts: { project: string }) => {
+    if (!hasGraph(opts.project)) {
+      console.error(noGraphMessage(opts.project));
+      process.exit(1);
+    }
     const files = await impact(opts.project, symbol);
     if (files.length === 0) {
       console.log(chalk.yellow(`No downstream impact found for "${symbol}".`));
