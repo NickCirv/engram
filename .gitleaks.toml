@@ -1,0 +1,15 @@
+# engram gitleaks config.
+# Extends the default ruleset and allowlists INTENTIONAL synthetic secrets that
+# live in test fixtures — engram's own PII-gate / redaction tests feed it fake
+# tokens on purpose. These are not real credentials. Scoped narrowly to the
+# fixture file so a genuinely leaked secret anywhere else is still caught.
+title = "engram"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic PII-gate test fixtures (engram redaction tests) — not real secrets"
+paths = [
+  '''tests/fixtures/pii-zoo\.json''',
+]
