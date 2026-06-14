@@ -30,6 +30,7 @@ import {
 import { install as installHooks, uninstall as uninstallHooks, status as hooksStatus } from "./hooks.js";
 import { formatThousands } from "./graph/render-utils.js";
 import { autogen } from "./autogen.js";
+import { hasGraph, noGraphMessage } from "./cli-guards.js";
 import { dispatchHook } from "./intercept/dispatch.js";
 import {
   watchProject,
@@ -477,6 +478,10 @@ program
   .option("-b, --budget <n>", "Token budget", "2000")
   .option("-p, --project <path>", "Project directory", ".")
   .action(async (question: string, opts: { dfs: boolean; depth: string; budget: string; project: string }) => {
+    if (!hasGraph(opts.project)) {
+      console.error(noGraphMessage(opts.project));
+      process.exit(1);
+    }
     const result = await query(opts.project, question, {
       mode: opts.dfs ? "dfs" : "bfs",
       depth: Number(opts.depth),
@@ -887,6 +892,10 @@ program
   )
   .action(
     async (opts: { project: string; target?: string; task?: string }) => {
+      if (!hasGraph(opts.project)) {
+        console.error(noGraphMessage(opts.project));
+        process.exit(1);
+      }
       const target = opts.target as "claude" | "cursor" | "agents" | undefined;
       try {
         const result = await autogen(opts.project, target, opts.task);
