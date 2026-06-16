@@ -24,7 +24,7 @@
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { getStore } from "../src/core.js";
-import { findCallers, findCallees } from "../src/graph/traversal.js";
+import { findCallers, findCallees, findImporters, findImports } from "../src/graph/traversal.js";
 import { pageRank } from "../src/graph/pagerank.js";
 import { clusterBootstrapCI, mean as avg } from "./stats.js";
 
@@ -97,6 +97,9 @@ function main(): void {
       const cand = new Set<string>();
       for (const name of f1sym.names) for (const cf of findCallers(nodes as never, edges as never, name)) if (cf !== f1) cand.add(cf);
       for (const c of findCallees(nodes as never, edges as never, f1)) if (c.file !== f1) cand.add(c.file);
+      // #138: widen reach with import edges (file→file) — non-circular vs the co-change gold.
+      for (const f of findImporters(nodes as never, edges as never, f1)) if (f !== f1) cand.add(f);
+      for (const f of findImports(nodes as never, edges as never, f1)) if (f !== f1) cand.add(f);
       if (cand.size === 0) return [];
 
       // PageRank over the f1 + candidate-file subgraph, personalized on f1's symbols.
@@ -183,7 +186,7 @@ function main(): void {
     console.log(`  worst-case recall@10 (mean of per-commit minimums): ${pct(perCommitWorst.reduce((a, b) => a + b, 0) / (perCommitWorst.length || 1))}`);
     console.log("");
     console.log(`  Where the signal comes from (honest decomposition):`);
-    console.log(`  • candidate generation (callers∪callees) reaches ${pct(ceiling)} of co-changed files;`);
+    console.log(`  • candidate generation (callers∪callees∪imports) reaches ${pct(ceiling)} of co-changed files;`);
     console.log(`    PageRank ranking then captures ${pct((r10 / trials) / (ceiling || 1))} of that reachable set at @10`);
     console.log(`    (vs ${pct(randW10 / trials)} for random ordering of the same candidates — the ranker's own lift).`);
     console.log("");
