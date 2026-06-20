@@ -19,6 +19,8 @@ import type {
   ProviderResult,
 } from "./types.js";
 import { PROVIDER_PRIORITY } from "./types.js";
+import { applyDisplacement } from "./dedup.js";
+import { blendSort } from "./ranking.js";
 import { astProvider } from "./ast.js";
 import { structureProvider } from "./engram-structure.js";
 import { mistakesProvider } from "./engram-mistakes.js";
@@ -104,6 +106,11 @@ const ALL_PROVIDERS: readonly ContextProvider[] = BUILTIN_PROVIDERS;
 /** Maximum total tokens for the assembled rich packet. */
 const TOTAL_TOKEN_BUDGET = 600;
 
+/** Phase A blend weight: score = W·confidence + (1-W)·priorityWeight. 0.6 lets a
+ *  high-confidence low-priority result outrank a low-confidence high-priority one,
+ *  while priority still contributes via the (1-W) term. */
+const RANK_CONFIDENCE_WEIGHT = 0.6;
+
 /** Rough token estimate: ~4 chars per token. */
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
@@ -120,6 +127,11 @@ export interface RichPacket {
   readonly estimatedTokens: number;
   /** Total resolution time in ms. */
   readonly durationMs: number;
+  /** Phase A — tokens removed by cross-provider dedup. Honest: "redundancy
+   *  eliminated", never "cost saved". */
+  readonly redundantTokensEliminated: number;
+  /** Phase A — content tokens displaced before budgeting (baseline − final). */
+  readonly tokensDisplaced: number;
 }
 
 /**
@@ -191,17 +203,21 @@ export async function resolveRichPacket(
   // structural context of equal priority.
   const boosted = boostByMistakes(budgetedResults);
 
-  // Sort by (priority index, boosted confidence desc). Priority is the
-  // primary axis — boost only breaks ties within the same priority tier.
-  // Unknown providers sort last (priority index 99).
-  const sorted = [...boosted].sort((a, b) => {
-    const aIdx = PROVIDER_PRIORITY.indexOf(a.provider);
-    const bIdx = PROVIDER_PRIORITY.indexOf(b.provider);
-    const pa = aIdx === -1 ? 99 : aIdx;
-    const pb = bIdx === -1 ? 99 : bIdx;
-    if (pa !== pb) return pa - pb;
-    return b.confidence - a.confidence;
-  });
+  // Phase A — blend confidence + priority into one score (replaces the old
+  // priority-primary / confidence-tiebreak). A high-confidence low-priority
+  // result can now out-rank a low-confidence high-priority one; priority still
+  // contributes via the (1 - W) term. Pure + unit-tested in ranking.ts.
+  const sorted = blendSort(boosted, PROVIDER_PRIORITY, RANK_CONFIDENCE_WEIGHT);
+
+  // Phase A — DISPLACEMENT: collapse cross-provider redundancy AFTER ranking so the
+  // highest-scored member of each duplicate cluster survives. Pure + unit-tested
+  // (dedup.ts applyDisplacement): monotonic (only removes content) with a
+  // never-worse backstop. The AST/structure special-case above stays as a
+  // deterministic fast path; this generalizes dedup to every other provider pair.
+  // NOTE: `tokensDisplaced` measures CANDIDATE-SET redundancy removed pre-budget,
+  // not the final emitted-packet delta. Honest framing: redundancy eliminated.
+  const displacement = applyDisplacement(sorted, estimateTokens);
+  const displaceResults = displacement.kept;
 
   // Assemble within budget (config-driven, falls back to compile-time constant)
   const config = readConfig(context.projectRoot);
@@ -209,7 +225,7 @@ export async function resolveRichPacket(
   const sections: string[] = [];
   let totalTokens = 0;
 
-  for (const result of sorted) {
+  for (const result of displaceResults) {
     const sectionTokens = estimateTokens(result.content);
     if (totalTokens + sectionTokens > budget) {
       // Budget exceeded — skip remaining providers
@@ -227,7 +243,7 @@ export async function resolveRichPacket(
 
   if (sections.length === 0) return null;
 
-  const providerNames = sorted
+  const providerNames = displaceResults
     .filter((_, i) => i < sections.length)
     .map((r) => r.provider);
 
@@ -244,6 +260,8 @@ export async function resolveRichPacket(
     providers: providerNames,
     estimatedTokens: totalTokens + estimateTokens(header),
     durationMs: Date.now() - start,
+    redundantTokensEliminated: displacement.redundantTokens,
+    tokensDisplaced: displacement.tokensDisplaced,
   };
 }
 
@@ -273,6 +291,14 @@ export type StreamEvent =
  * event IDs) — the HTTP /context/stream endpoint wraps each event in
  * an SSE frame with an incrementing `id` so clients reconnecting via
  * `Last-Event-ID` can skip already-delivered providers.
+ *
+ * Phase A NOTE (deliberate): streaming is arrival-order and does NOT apply
+ * cross-provider displacement (blend-rank + dedup + never-worse gate) — those
+ * need the full result set, which contradicts incremental emission. So the
+ * displacement guarantee holds for `resolveRichPacket()` (the hook path 99% of
+ * usage takes), NOT for the SSE stream. Buffer-then-displace for streaming is a
+ * tracked follow-up; until then a streaming consumer gets raw per-provider
+ * sections and must not be marketed as deduped.
  */
 export async function* resolveRichPacketStreaming(
   filePath: string,

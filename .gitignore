@@ -24,3 +24,9 @@ docs/demos/work-*/
 dist-extensions/
 bench/results/session-level-2*.md
 .claude/
+
+# Private keys / secrets — NEVER commit. (An ed25519 .pem was once generated
+# here by accident during a go-live runbook; gitleaks caught it pre-commit.)
+*.pem
+*.key
+.engram-secrets/
