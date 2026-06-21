@@ -22,6 +22,7 @@ import {
   isContentUnsafeForIntercept,
 } from "../context.js";
 import { isHookDisabled, PASSTHROUGH, type HandlerResult } from "../safety.js";
+import { packetBeatsRawFile } from "../never-worse.js";
 import { buildDenyResponse } from "../formatter.js";
 import { dedupOrRecord } from "../served-reads.js";
 import { resolveRichPacket } from "../../providers/resolver.js";
@@ -158,19 +159,22 @@ export async function handleRead(
   // to trust the summary as a full-file replacement.
   if (fileCtx.confidence < READ_CONFIDENCE_THRESHOLD) return PASSTHROUGH;
 
-  // (10) Token-saving gate — only intercept when engram's structural summary
+  // (10) Never-worse gate — only intercept when engram's structural summary
   // is genuinely SMALLER than the file. On a small file the packet floor
-  // exceeds the raw file, so replacing the Read would ADD tokens, not save
-  // them. PASSTHROUGH lets the cheap Read run; this makes "engram saves
-  // tokens" true on every intercepted Read. (Mistakes still surface via the
-  // SessionStart brief and the Edit/Write landmine.)
+  // exceeds the raw file, so replacing the Read would ADD tokens. PASSTHROUGH
+  // lets the cheap Read run; this keeps the injected packet structurally
+  // smaller than the file on every intercepted Read (a structural guarantee,
+  // not a cost claim). (Mistakes still surface via the SessionStart brief and
+  // the Edit/Write landmine.)
+  let fileTokens: number;
   try {
-    const fileTokens = Math.ceil(statSync(ctx.absPath).size / 4);
-    const summaryTokens = Math.ceil(fileCtx.summary.length / 4);
-    if (summaryTokens >= fileTokens) return PASSTHROUGH;
+    fileTokens = Math.ceil(statSync(ctx.absPath).size / 4);
   } catch {
     return PASSTHROUGH;
   }
+  // The graph SUMMARY must be strictly smaller than the raw file, else replacing
+  // the Read would ADD tokens. The ENRICHED packet is gated separately below.
+  if (!packetBeatsRawFile(fileCtx.summary, fileTokens)) return PASSTHROUGH;
 
   // Enrich the graph summary with additional providers (Context Spine).
   // Structure is already computed in fileCtx.summary — we resolve the
@@ -199,14 +203,22 @@ export async function handleRead(
     if (richPacket && richPacket.providerCount > 0) {
       // Combine: graph summary + enrichment sections
       const enrichedText = `${fileCtx.summary}\n\n${richPacket.text}`;
-      const resp = buildDenyResponse(enrichedText);
-      // Internal telemetry (Phase C): cross-provider redundancy displaced. Read by
-      // composeCostFields, then STRIPPED in the dispatcher before the result is
-      // emitted to Claude Code — never part of the hook protocol output.
-      if (richPacket.tokensDisplaced > 0 && resp && typeof resp === "object") {
-        (resp as Record<string, unknown>).__engramDisplaced = richPacket.tokensDisplaced;
+      // Phase B — never-worse gate on the ENRICHED packet. The gate above only
+      // proved the summary < file; the enrichment adds richPacket.text on top,
+      // which could push the total past the raw file. Only emit the enriched
+      // packet when it's STILL strictly smaller than the file; otherwise fall
+      // through to the graph-only summary (already proven < file) so an
+      // intercepted Read never injects more than the file it replaces.
+      if (packetBeatsRawFile(enrichedText, fileTokens)) {
+        const resp = buildDenyResponse(enrichedText);
+        // Internal telemetry (Phase C): cross-provider redundancy displaced. Read
+        // by composeCostFields, then STRIPPED in the dispatcher before the result
+        // is emitted to Claude Code — never part of the hook protocol output.
+        if (richPacket.tokensDisplaced > 0 && resp && typeof resp === "object") {
+          (resp as Record<string, unknown>).__engramDisplaced = richPacket.tokensDisplaced;
+        }
+        return resp;
       }
-      return resp;
     }
   } catch {
     // Enrichment failed or timed out — serve graph-only
