@@ -34,6 +34,8 @@ export function sameDirSiblings(file: string, allFiles: readonly string[]): stri
 
 /** Matches a test/spec file by its filename suffix. */
 const TEST_SUFFIX_RE = /\.(test|spec)\.[cm]?[jt]sx?$/i;
+/** A path segment that marks a test-mirror directory (tests/, __tests__/, spec/). */
+const TEST_DIR_RE = /(^|\/)(tests?|__tests__|spec)(\/|$)/i;
 
 /** Reduce a path to a comparable base key: filename minus any test/spec marker and
  *  extension. `src/foo.ts` and `tests/foo.test.ts` both → `foo`. */
@@ -53,11 +55,17 @@ function baseKey(path: string): string {
 export function testImplCounterparts(file: string, allFiles: readonly string[]): string[] {
   const fileIsTest = TEST_SUFFIX_RE.test(file);
   const key = baseKey(file);
+  const fileDir = dirOf(file);
   const out: string[] = [];
   for (const f of allFiles) {
     if (f === file) continue;
     if (TEST_SUFFIX_RE.test(f) === fileIsTest) continue; // need the opposite test-ness
-    if (baseKey(f) === key) out.push(f);
+    if (baseKey(f) !== key) continue;
+    // Require directory proximity so `src/a/index.ts` does NOT match an unrelated
+    // `src/b/index.test.ts`: accept only co-located counterparts, or the
+    // mirror-located case where the TEST side sits in a tests/__tests__/spec dir.
+    const testSide = fileIsTest ? file : f;
+    if (dirOf(f) === fileDir || TEST_DIR_RE.test(testSide)) out.push(f);
   }
   return out;
 }

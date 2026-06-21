@@ -324,6 +324,24 @@ export class GraphStore {
     return results;
   }
 
+  /**
+   * Lightweight node-id → source_file map (2 columns, no GraphNode hydration).
+   * For callers that only need file membership/adjacency at scale (the sub-agent
+   * broker, #139) without paying full getAllNodes() materialization.
+   */
+  getNodeFileMap(): Map<string, string> {
+    const out = new Map<string, string>();
+    const stmt = this.db.prepare("SELECT id, source_file FROM nodes");
+    while (stmt.step()) {
+      const row = stmt.getAsObject() as { id?: string; source_file?: string };
+      if (typeof row.id === "string" && typeof row.source_file === "string") {
+        out.set(row.id, row.source_file);
+      }
+    }
+    stmt.free();
+    return out;
+  }
+
   incrementQueryCount(nodeId: string): void {
     this.db.run(
       "UPDATE nodes SET query_count = query_count + 1 WHERE id = ?",

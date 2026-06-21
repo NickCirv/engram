@@ -14,6 +14,7 @@ import { mineGitReverts } from "./miners/git-revert-miner.js";
 import { mineBugFixCommits } from "./miners/git-bugfix-miner.js";
 import { buildReferenceEdgesCached, type RefCache } from "./miners/reference-miner.js";
 import { findCallers, findCallees, findImpact } from "./graph/traversal.js";
+import { relatedFiles } from "./graph/related-files.js";
 import { mineSessionHistory, learnFromSession } from "./miners/session-miner.js";
 import { mineSkills } from "./miners/skills-miner.js";
 import type { GraphStats } from "./graph/schema.js";
@@ -283,6 +284,53 @@ export async function stats(projectRoot: string): Promise<GraphStats> {
   const store = await getStore(projectRoot);
   try {
     return store.getStats();
+  } finally {
+    store.close();
+  }
+}
+
+/**
+ * Tiered related-files for a focal file (#139), for the sub-agent broker. Graph
+ * adjacency (files sharing an edge with focal, degree-ranked) FIRST, path-reach
+ * (test↔impl, then same-dir siblings) APPENDED — never-worse by construction.
+ * `focal` is project-relative POSIX (as stored on nodes). Empty on any miss so
+ * the broker never injects noise.
+ */
+export async function relatedFilesFor(
+  projectRoot: string,
+  focal: string,
+  limit = 5
+): Promise<string[]> {
+  const store = await getStore(projectRoot);
+  try {
+    // Lightweight id→file map (2 cols, no node hydration) — bounded by node count.
+    const idToFile = store.getNodeFileMap();
+    const allFilesSet = new Set<string>();
+    const focalIds = new Set<string>();
+    for (const [id, file] of idToFile) {
+      allFilesSet.add(file);
+      if (file === focal) focalIds.add(id);
+    }
+    // Never-worse / no-noise: only suggest related files for a file engram
+    // actually understands (has graph nodes for). A non-code focal (a .md/config
+    // the parent happened to read last) has no nodes → we have no real signal and
+    // must not guess from path siblings. Returning [] degrades to the god-node
+    // slice unchanged.
+    if (focalIds.size === 0) return [];
+    // Graph-adjacent files, ranked by how many edges connect them to focal.
+    const adjCount = new Map<string, number>();
+    if (focalIds.size > 0) {
+      for (const e of store.getEdgesForNodes([...focalIds])) {
+        const other = focalIds.has(e.source) ? e.target : e.source;
+        if (focalIds.has(other)) continue; // intra-file edge
+        const f = idToFile.get(other);
+        if (f && f !== focal) adjCount.set(f, (adjCount.get(f) ?? 0) + 1);
+      }
+    }
+    const graphAdjacent = [...adjCount.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([f]) => f);
+    return relatedFiles(focal, graphAdjacent, [...allFilesSet], limit);
   } finally {
     store.close();
   }

@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { init } from "../../../src/core.js";
 import { handleSubagentStart } from "../../../src/intercept/handlers/subagent-start.js";
+import { dedupOrRecord } from "../../../src/intercept/served-reads.js";
 import { PASSTHROUGH } from "../../../src/intercept/safety.js";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -71,5 +72,39 @@ describe("handleSubagentStart", () => {
     } finally {
       rmSync(empty, { recursive: true, force: true });
     }
+  });
+
+  // --- #139 focal-reach block ---
+
+  it("appends the parent's recent-focus related files when a session id resolves a read", async () => {
+    const session = "sess-focus-1";
+    // Parent read c0.ts this session (c0 imports u.ts → u is graph-adjacent).
+    dedupOrRecord(projectRoot, session, join(projectRoot, "src", "c0.ts"));
+    const r = (await handleSubagentStart(payload({ session_id: session }))) as Record<string, unknown>;
+    const ctx = (r.hookSpecificOutput as Record<string, unknown>).additionalContext as string;
+    expect(ctx).toContain("Related to the parent's recent focus (src/c0.ts)");
+    expect(ctx).toContain("src/u.ts"); // the import-edge neighbour surfaces
+  });
+
+  it("renders NO focus block without a session id (never-worse: god-node slice unchanged)", async () => {
+    const r = (await handleSubagentStart(payload())) as Record<string, unknown>;
+    const ctx = (r.hookSpecificOutput as Record<string, unknown>).additionalContext as string;
+    expect(ctx).toContain("Top entities");
+    expect(ctx).not.toContain("recent focus");
+  });
+
+  it("renders NO focus block when the session has no recorded reads", async () => {
+    const r = (await handleSubagentStart(payload({ session_id: "sess-empty" }))) as Record<string, unknown>;
+    const ctx = (r.hookSpecificOutput as Record<string, unknown>).additionalContext as string;
+    expect(ctx).not.toContain("recent focus");
+  });
+
+  it("renders NO focus block when the parent's last read is a non-code file (no graph nodes → no noise)", async () => {
+    const session = "sess-md";
+    writeFileSync(join(projectRoot, "README.md"), "# project\n");
+    dedupOrRecord(projectRoot, session, join(projectRoot, "README.md"));
+    const r = (await handleSubagentStart(payload({ session_id: session }))) as Record<string, unknown>;
+    const ctx = (r.hookSpecificOutput as Record<string, unknown>).additionalContext as string;
+    expect(ctx).not.toContain("recent focus"); // a .md focal has no graph nodes → no sibling noise
   });
 });

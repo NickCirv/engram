@@ -49,6 +49,16 @@ describe("testImplCounterparts", () => {
   it("no counterpart → empty", () => {
     expect(testImplCounterparts("src/b/baz.ts", ALL)).toEqual([]);
   });
+
+  it("does NOT match a same-basename test in an unrelated directory (cross-dir collision guard)", () => {
+    const files = ["src/a/index.ts", "src/b/index.test.ts"]; // different dirs, not a test-mirror
+    expect(testImplCounterparts("src/a/index.ts", files)).toEqual([]);
+  });
+
+  it("DOES match a mirror-located test (test side under a tests/ dir)", () => {
+    const files = ["src/a/index.ts", "tests/index.test.ts"];
+    expect(testImplCounterparts("src/a/index.ts", files)).toEqual(["tests/index.test.ts"]);
+  });
 });
 
 describe("pathReach", () => {
