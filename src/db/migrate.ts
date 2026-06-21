@@ -15,7 +15,7 @@ export interface MigrationResult {
 }
 
 /** Current schema version — bump this when adding new migrations. */
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 export interface RollbackResult {
   readonly fromVersion: number;
@@ -34,6 +34,9 @@ export interface RollbackResult {
  * automatic. Forward migrations are append-only and idempotent.
  */
 const DOWN_MIGRATIONS: Record<number, string> = {
+  // v4.5 (#143): path-keyed co-change table. Cleanly droppable.
+  10: `DROP INDEX IF EXISTS idx_co_change_b;
+       DROP TABLE IF EXISTS co_change;`,
   // v4.0: bi-temporal mistake fields (then_believed, found_false_at,
   // truth_now, applies_to). SQLite pre-3.35 cannot DROP COLUMN cleanly;
   // leaving the columns in place is safe and we don't depend on their
@@ -206,6 +209,20 @@ CREATE INDEX IF NOT EXISTS idx_query_cache_file ON query_cache(file_path);`,
     addColumnIfMissing(db, "nodes", "truth_now", "truth_now TEXT");
     addColumnIfMissing(db, "nodes", "applies_to", "applies_to TEXT");
   },
+
+  // v4.5 (#143): path-keyed co-change table for the reach tier. Keyed by real
+  // file paths (not node ids), so it reaches cross-dir / non-code targets (e.g.
+  // a route co-changing with schema.prisma) that the node-bound edges miss. Full
+  // CREATE TABLE IF NOT EXISTS so it's safe on fresh AND existing databases.
+  10: `
+    CREATE TABLE IF NOT EXISTS co_change (
+      file_a TEXT NOT NULL,
+      file_b TEXT NOT NULL,
+      count INTEGER NOT NULL,
+      PRIMARY KEY (file_a, file_b)
+    );
+    CREATE INDEX IF NOT EXISTS idx_co_change_b ON co_change(file_b);
+  `,
 };
 
 type ExecDb = { exec: (sql: string) => Array<{ values: unknown[][] }> };

@@ -172,6 +172,10 @@ export async function init(
         store.clearAll();
       }
       store.bulkUpsert(allNodes, allEdges);
+      // #143 — persist path-keyed co-change for the reach tier. Recomputed from
+      // the full git history each mine (it's global, not per-changed-file), so a
+      // full replace is correct on both full and incremental init.
+      store.replaceCoChange(gitResult.coChange);
       store.setStat("last_mined", String(Date.now()));
       store.setStat("project_root", root);
       // Persist mtimes for next incremental run
@@ -330,7 +334,10 @@ export async function relatedFilesFor(
     const graphAdjacent = [...adjCount.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map(([f]) => f);
-    return relatedFiles(focal, graphAdjacent, [...allFilesSet], limit);
+    // Tier 2 (#143) — git co-change neighbours, count-ranked. Path-keyed, so it
+    // reaches cross-dir / non-code files (config, schema) the graph tier can't.
+    const coChange = store.getCoChangeNeighbors(focal, limit);
+    return relatedFiles(focal, graphAdjacent, coChange, [...allFilesSet], limit);
   } finally {
     store.close();
   }

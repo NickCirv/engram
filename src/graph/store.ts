@@ -342,6 +342,55 @@ export class GraphStore {
     return out;
   }
 
+  /**
+   * Replace the entire co_change table with `pairs` (#143). Full replace because
+   * co-change is recomputed from the complete git history on each mine. Pairs are
+   * stored once under the (file_a, file_b) sorted key the miner produced; the
+   * neighbour query reads both columns. INSERT OR REPLACE keeps it idempotent.
+   */
+  replaceCoChange(pairs: ReadonlyArray<{ a: string; b: string; count: number }>): void {
+    this.db.run("BEGIN TRANSACTION");
+    try {
+      this.db.run("DELETE FROM co_change");
+      for (const p of pairs) {
+        if (p.a && p.b && p.a !== p.b) {
+          this.db.run(
+            "INSERT OR REPLACE INTO co_change (file_a, file_b, count) VALUES (?, ?, ?)",
+            [p.a, p.b, p.count]
+          );
+        }
+      }
+      this.db.run("COMMIT");
+    } catch (err) {
+      this.db.run("ROLLBACK");
+      throw err;
+    }
+    this.save();
+  }
+
+  /**
+   * Files that historically co-changed with `filePath`, most-frequent first,
+   * capped to `limit`. Reads both columns since a pair is stored once under the
+   * sorted key. Returns paths (which may be non-code files like config/schema).
+   */
+  getCoChangeNeighbors(filePath: string, limit = 10): string[] {
+    const stmt = this.db.prepare(
+      `SELECT other, count FROM (
+         SELECT file_b AS other, count FROM co_change WHERE file_a = ?
+         UNION ALL
+         SELECT file_a AS other, count FROM co_change WHERE file_b = ?
+       ) ORDER BY count DESC, other ASC LIMIT ?`
+    );
+    stmt.bind([filePath, filePath, Math.max(0, limit)]);
+    const out: string[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject() as { other?: string };
+      if (typeof row.other === "string" && row.other !== filePath) out.push(row.other);
+    }
+    stmt.free();
+    return out;
+  }
+
   incrementQueryCount(nodeId: string): void {
     this.db.run(
       "UPDATE nodes SET query_count = query_count + 1 WHERE id = ?",

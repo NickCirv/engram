@@ -6,10 +6,25 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import type { GraphEdge, GraphNode } from "../graph/schema.js";
 
+/** A path-keyed co-change pair: files `a` and `b` changed together `count` times.
+ *  Unlike the stem-collapsed `depends_on` edges, this keeps the real file paths
+ *  (incl. non-code files like config/schema) so it can drive cross-dir reach (#143). */
+export interface CoChangePair {
+  a: string;
+  b: string;
+  count: number;
+}
+
 interface GitMineResult {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  /** Path-keyed co-change pairs with count ≥ CO_CHANGE_MIN_COUNT (file→file). */
+  coChange: CoChangePair[];
 }
+
+/** Min commits two files must co-change before the pair is persisted. 1 = noise,
+ *  so require a repeated signal; ranking by count handles the rest at query time. */
+const CO_CHANGE_MIN_COUNT = 2;
 
 function runGit(args: string[], cwd: string): string {
   try {
@@ -52,7 +67,7 @@ export function mineGitHistory(
 
   // Check if this is a git repo
   const isGit = runGit(["rev-parse", "--git-dir"], root);
-  if (!isGit) return { nodes, edges };
+  if (!isGit) return { nodes, edges, coChange: [] };
 
   // Get recent commits with files changed
   const log = runGit(
@@ -65,7 +80,7 @@ export function mineGitHistory(
     root
   );
 
-  if (!log) return { nodes, edges };
+  if (!log) return { nodes, edges, coChange: [] };
 
   // Parse commits into file groups
   const coChangeMap = new Map<string, Map<string, number>>();
@@ -170,5 +185,16 @@ export function mineGitHistory(
     });
   }
 
-  return { nodes, edges };
+  // Path-keyed co-change pairs (#143). coChangeMap stores each unordered pair once
+  // under the sorted key, so this is already de-duplicated. Unlike the stem-
+  // collapsed depends_on edges above, these keep the real file paths — including
+  // non-code files (config, schema, css) — so they can drive cross-dir reach.
+  const coChange: CoChangePair[] = [];
+  for (const [a, neighbours] of coChangeMap) {
+    for (const [b, count] of neighbours) {
+      if (count >= CO_CHANGE_MIN_COUNT) coChange.push({ a, b, count });
+    }
+  }
+
+  return { nodes, edges, coChange };
 }
