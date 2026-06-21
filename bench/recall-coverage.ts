@@ -25,6 +25,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { getStore } from "../src/core.js";
 import { findCallers, findCallees, findImporters, findImports } from "../src/graph/traversal.js";
+import { pathReach, sameDirSiblings, testImplCounterparts } from "../src/graph/reach.js";
 import { pageRank } from "../src/graph/pagerank.js";
 import { clusterBootstrapCI, mean as avg } from "./stats.js";
 
@@ -88,6 +89,11 @@ function main(): void {
       }
     }
     const totalSourceFiles = [...knownFiles].filter(IS_SOURCE).length || 1;
+    // Path-based reach (ENGRAM_BENCH_PATHREACH=1): measure whether same-dir
+    // siblings + test↔impl pairs raise the candidate ceiling beyond the call/
+    // import graph. Off by default so the baseline number is unchanged.
+    const PATHREACH = process.env.ENGRAM_BENCH_PATHREACH === "1";
+    const allFiles = [...knownFiles];
 
     // Candidate related files for f1 (callers ∪ callees), ranked by personalized
     // PageRank seeded on f1's symbols. impact() deliberately excluded.
@@ -100,7 +106,7 @@ function main(): void {
       // #138: widen reach with import edges (file→file) — non-circular vs the co-change gold.
       for (const f of findImporters(nodes as never, edges as never, f1)) if (f !== f1) cand.add(f);
       for (const f of findImports(nodes as never, edges as never, f1)) if (f !== f1) cand.add(f);
-      if (cand.size === 0) return [];
+      if (cand.size === 0 && !PATHREACH) return [];
 
       // PageRank over the f1 + candidate-file subgraph, personalized on f1's symbols.
       const scope = new Set<string>([f1, ...cand]);
@@ -112,7 +118,23 @@ function main(): void {
         const f = sourceFileById.get(id)!;
         if (cand.has(f)) fileScore.set(f, (fileScore.get(f) ?? 0) + (scores.get(id) ?? 0));
       }
-      return [...cand].sort((a, b) => (fileScore.get(b) ?? 0) - (fileScore.get(a) ?? 0) || a.localeCompare(b));
+      // Tier 1 — graph candidates ranked by PageRank (the proven +6.6pp signal,
+      // unchanged from baseline).
+      const graphRanked = [...cand].sort(
+        (a, b) => (fileScore.get(b) ?? 0) - (fileScore.get(a) ?? 0) || a.localeCompare(b)
+      );
+      if (!PATHREACH) return graphRanked;
+      // Tier 2 — path-only candidates the graph never reached, APPENDED after the
+      // graph tier (never displacing a graph hit → recall is never-worse by
+      // construction). Ranked by path-proximity prior: test↔impl (strong
+      // co-change signal) above same-dir siblings.
+      const ti = new Set(testImplCounterparts(f1, allFiles));
+      const sib = new Set(sameDirSiblings(f1, allFiles));
+      const prior = (f: string): number => (ti.has(f) ? 1 : sib.has(f) ? 0.4 : 0);
+      const pathOnly = [...new Set([...ti, ...sib])]
+        .filter((f) => f !== f1 && fileSyms.has(f) && !cand.has(f))
+        .sort((a, b) => prior(b) - prior(a) || a.localeCompare(b));
+      return [...graphRanked, ...pathOnly];
     }
 
     const commits = goldCommits(root, limit);
