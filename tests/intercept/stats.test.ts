@@ -164,3 +164,23 @@ describe("formatStatsSummary", () => {
     expect(text).toContain("no PreToolUse:Read denies");
   });
 });
+
+describe("summarizeHookLog — Phase C displacement", () => {
+  it("sums entry.displaced into tokensDisplaced", () => {
+    const entries: HookLogEntry[] = [
+      { event: "PreToolUse", tool: "Read", decision: "deny", displaced: 120 },
+      { event: "PreToolUse", tool: "Read", decision: "deny", displaced: 80 },
+      { event: "PreToolUse", tool: "Read", decision: "deny" }, // no displaced field
+    ];
+    expect(summarizeHookLog(entries).tokensDisplaced).toBe(200);
+  });
+
+  it("ignores missing / zero / negative displaced; empty → 0", () => {
+    expect(summarizeHookLog([]).tokensDisplaced).toBe(0);
+    const entries: HookLogEntry[] = [
+      { event: "PreToolUse", tool: "Read", decision: "deny", displaced: 0 },
+      { event: "PreToolUse", tool: "Read", decision: "deny", displaced: -5 },
+    ];
+    expect(summarizeHookLog(entries).tokensDisplaced).toBe(0);
+  });
+});

@@ -262,6 +262,25 @@ async function dispatchPreToolUse(
     // Logging failure is never surfaced.
   }
 
+  // Phase C: strip internal telemetry so it never reaches Claude Code's emitted
+  // hook output. composeCostFields already consumed it for the log above.
+  return stripInternalTelemetry(result);
+}
+
+/**
+ * Remove engram-internal telemetry keys (e.g. `__engramDisplaced`, set by read.ts
+ * for the cost lens) from a handler result before it is serialized to Claude
+ * Code. Mutates + returns the result; null/non-object passes through untouched.
+ * Exported so the no-leak invariant can be regression-tested directly — a future
+ * `return result` added inside the dispatch switch would otherwise reintroduce
+ * the leak silently.
+ */
+export function stripInternalTelemetry(
+  result: HandlerResult | Passthrough
+): HandlerResult | Passthrough {
+  if (result && typeof result === "object") {
+    delete (result as Record<string, unknown>).__engramDisplaced;
+  }
   return result;
 }
 

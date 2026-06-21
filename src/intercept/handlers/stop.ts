@@ -63,9 +63,10 @@ export function buildStopSummary(
   const summary = summarizeHookLog(entries);
   const reads = summary.readDenyCount;
   const tokens = summary.estimatedTokensSaved;
+  const displaced = summary.tokensDisplaced;
 
   // Nothing engram visibly did → stay silent (don't write a marker either).
-  if (reads === 0 && tokens === 0) return null;
+  if (reads === 0 && tokens === 0 && displaced === 0) return null;
 
   const parts: string[] = [];
   if (reads > 0) {
@@ -81,6 +82,11 @@ export function buildStopSummary(
   }
   if (tokens > 0) {
     parts.push(`~${formatThousands(tokens)} tokens kept out of context`);
+  }
+  if (displaced > 0) {
+    parts.push(
+      `~${formatThousands(displaced)} redundant tokens displaced across providers`
+    );
   }
 
   return `⚡ engram so far: ${parts.join(" · ")} (structural — not a bill saving)`;

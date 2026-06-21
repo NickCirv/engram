@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { init } from "../../src/core.js";
-import { dispatchHook } from "../../src/intercept/dispatch.js";
+import { dispatchHook, stripInternalTelemetry } from "../../src/intercept/dispatch.js";
 import { PASSTHROUGH } from "../../src/intercept/safety.js";
 import { _resetCacheForTests } from "../../src/intercept/context.js";
 import {
@@ -15,6 +15,28 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+
+describe("stripInternalTelemetry — no-leak invariant (Phase C)", () => {
+  it("removes __engramDisplaced, preserves everything else", () => {
+    const r = {
+      hookSpecificOutput: { permissionDecision: "deny" },
+      __engramDisplaced: 1200,
+    } as Record<string, unknown>;
+    const out = stripInternalTelemetry(r) as Record<string, unknown>;
+    expect(out.__engramDisplaced).toBeUndefined();
+    expect(out.hookSpecificOutput).toEqual({ permissionDecision: "deny" });
+  });
+
+  it("no-op when the key is absent", () => {
+    expect(stripInternalTelemetry({ hookSpecificOutput: {} } as Record<string, unknown>)).toEqual({
+      hookSpecificOutput: {},
+    });
+  });
+
+  it("is passthrough-safe", () => {
+    expect(stripInternalTelemetry(PASSTHROUGH)).toBe(PASSTHROUGH);
+  });
+});
 
 describe("dispatchHook — validation", () => {
   it("returns PASSTHROUGH for null payload", async () => {

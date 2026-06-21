@@ -199,7 +199,14 @@ export async function handleRead(
     if (richPacket && richPacket.providerCount > 0) {
       // Combine: graph summary + enrichment sections
       const enrichedText = `${fileCtx.summary}\n\n${richPacket.text}`;
-      return buildDenyResponse(enrichedText);
+      const resp = buildDenyResponse(enrichedText);
+      // Internal telemetry (Phase C): cross-provider redundancy displaced. Read by
+      // composeCostFields, then STRIPPED in the dispatcher before the result is
+      // emitted to Claude Code — never part of the hook protocol output.
+      if (richPacket.tokensDisplaced > 0 && resp && typeof resp === "object") {
+        (resp as Record<string, unknown>).__engramDisplaced = richPacket.tokensDisplaced;
+      }
+      return resp;
     }
   } catch {
     // Enrichment failed or timed out — serve graph-only

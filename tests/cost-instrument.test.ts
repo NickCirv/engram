@@ -16,6 +16,7 @@ import {
   extractInjectedTokens,
   estimateWouldHaveReadTokens,
   composeCostFields,
+  extractDisplacedTokens,
 } from "../src/cost/instrument.js";
 
 describe("cost.instrument.tokensFromChars", () => {
@@ -163,5 +164,25 @@ describe("cost.instrument.composeCostFields", () => {
     expect(fields.injected).toBe(200);
     expect(fields.wouldHaveRead).toBeUndefined();
     expect(fields.tokensSaved).toBeUndefined();
+  });
+});
+
+describe("cost.instrument — Phase C displacement", () => {
+  it("extractDisplacedTokens reads __engramDisplaced (rounds; guards bad input)", () => {
+    expect(extractDisplacedTokens({ __engramDisplaced: 1500 })).toBe(1500);
+    expect(extractDisplacedTokens({ __engramDisplaced: 12.6 })).toBe(13);
+    expect(extractDisplacedTokens({ __engramDisplaced: 0 })).toBe(0);
+    expect(extractDisplacedTokens({ __engramDisplaced: -5 })).toBe(0);
+    expect(extractDisplacedTokens({ __engramDisplaced: "x" })).toBe(0);
+    expect(extractDisplacedTokens({ __engramDisplaced: Infinity })).toBe(0);
+    expect(extractDisplacedTokens({})).toBe(0);
+    expect(extractDisplacedTokens(null)).toBe(0);
+  });
+
+  it("composeCostFields emits `displaced` when present, omits it when absent", () => {
+    const withD = composeCostFields("Read", undefined, { __engramDisplaced: 800 });
+    expect(withD.displaced).toBe(800);
+    const without = composeCostFields("Read", undefined, { hookSpecificOutput: {} });
+    expect(without.displaced).toBeUndefined();
   });
 });

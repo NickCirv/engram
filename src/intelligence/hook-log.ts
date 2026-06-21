@@ -60,6 +60,9 @@ export interface HookLogEntry {
   readonly wouldHaveRead?: number;
   /** v3.3 Cost Lens: tokens engram actually injected (deny reason or additional context). */
   readonly injected?: number;
+  /** Phase C: tokens of cross-provider REDUNDANCY displaced before budgeting
+   *  (RichPacket.tokensDisplaced). Honest: redundancy eliminated, never "saved". */
+  readonly displaced?: number;
   readonly reason?: string;
   /**
    * v4.4 Token-loop C: the harness session id, if the hook payload carried one.

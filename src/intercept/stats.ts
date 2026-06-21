@@ -33,6 +33,9 @@ export interface HookStatsSummary {
   readonly readDenyCount: number;
   /** Rough context-token reduction estimate (tokens not sent) from Read denies. */
   readonly estimatedTokensSaved: number;
+  /** Phase C: total cross-provider redundancy displaced (sum of entry.displaced).
+   *  Honest: redundancy eliminated, never a cost saving. */
+  readonly tokensDisplaced: number;
   /** Earliest entry timestamp, or null if log is empty. */
   readonly firstEntry: string | null;
   /** Latest entry timestamp, or null if log is empty. */
@@ -53,6 +56,7 @@ export function summarizeHookLog(
   const byTool: Record<string, number> = {};
   const byDecision: Record<string, number> = {};
   let readDenyCount = 0;
+  let tokensDisplaced = 0;
   let firstEntryTs: string | null = null;
   let lastEntryTs: string | null = null;
 
@@ -76,6 +80,11 @@ export function summarizeHookLog(
       readDenyCount += 1;
     }
 
+    // Phase C: accumulate cross-provider redundancy displaced.
+    if (typeof entry.displaced === "number" && entry.displaced > 0) {
+      tokensDisplaced += entry.displaced;
+    }
+
     // Track time range. We don't assume the log is sorted.
     const ts = (entry as HookLogEntry & { ts?: string }).ts;
     if (typeof ts === "string") {
@@ -91,6 +100,7 @@ export function summarizeHookLog(
     byDecision: Object.freeze(byDecision),
     readDenyCount,
     estimatedTokensSaved: readDenyCount * ESTIMATED_TOKENS_PER_READ_DENY,
+    tokensDisplaced,
     firstEntry: firstEntryTs,
     lastEntry: lastEntryTs,
   };

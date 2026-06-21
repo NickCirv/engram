@@ -53,6 +53,18 @@ export function extractInjectedTokens(result: unknown): number {
 }
 
 /**
+ * Phase C: read the internal `__engramDisplaced` telemetry (cross-provider
+ * redundancy tokens displaced) that read.ts attaches to its result. Reserved
+ * key — the dispatcher strips it before emitting the result to Claude Code, so
+ * it is internal-only. Honest: redundancy eliminated, never "saved".
+ */
+export function extractDisplacedTokens(result: unknown): number {
+  if (!result || typeof result !== "object") return 0;
+  const v = (result as { __engramDisplaced?: unknown }).__engramDisplaced;
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
+}
+
+/**
  * Estimate the tokens the agent would have read if engram had not
  * intercepted. For the Read tool, this is the file size on disk
  * divided by 4. For other tools (Edit, Write, Bash), there's no
@@ -100,17 +112,21 @@ export function composeCostFields(
   readonly wouldHaveRead?: number;
   readonly injected?: number;
   readonly tokensSaved?: number;
+  readonly displaced?: number;
 } {
   const injected = extractInjectedTokens(result);
   const wouldHaveRead = estimateWouldHaveReadTokens(tool, filePath);
   const tokensSaved = Math.max(0, wouldHaveRead - injected);
+  const displaced = extractDisplacedTokens(result);
   const out: {
     wouldHaveRead?: number;
     injected?: number;
     tokensSaved?: number;
+    displaced?: number;
   } = {};
   if (wouldHaveRead > 0) out.wouldHaveRead = wouldHaveRead;
   if (injected > 0) out.injected = injected;
   if (tokensSaved > 0) out.tokensSaved = tokensSaved;
+  if (displaced > 0) out.displaced = displaced;
   return out;
 }

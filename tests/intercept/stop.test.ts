@@ -97,3 +97,25 @@ describe("handleStop (debounce + safety)", () => {
     expect(r).toBeNull();
   });
 });
+
+describe("buildStopSummary — Phase C displacement", () => {
+  it("renders the displaced part when redundancy was eliminated", () => {
+    const line = buildStopSummary([
+      { event: "PreToolUse", tool: "Read", decision: "deny", displaced: 1500 } as HookLogEntry,
+    ]);
+    expect(line).toContain("redundant tokens displaced across providers");
+    expect(line).toContain("structural — not a bill saving"); // honesty tag intact
+  });
+
+  it("displacement alone (no Read-denies) still surfaces a summary (not null)", () => {
+    const line = buildStopSummary([
+      { event: "PostToolUse", tool: "Read", displaced: 300 } as HookLogEntry,
+    ]);
+    expect(line).not.toBeNull();
+    expect(line).toContain("displaced");
+  });
+
+  it("no activity incl. zero displaced → null", () => {
+    expect(buildStopSummary([{ event: "SessionStart" } as HookLogEntry])).toBeNull();
+  });
+});
