@@ -6,6 +6,39 @@ All notable changes to engram are documented here. Format based on
 
 ## [Unreleased]
 
+## [4.5.0] — 2026-06-21 — "Reach"
+
+**Why:** two ways to put the *right* context in front of an agent with less
+waste — displace redundant context across providers instead of concatenating it,
+and point a spawned sub-agent at the files most likely related to the one it is
+working on. Both are structural and never-worse by construction; neither is a
+cost/bill claim.
+
+### Added
+- **Sub-agent focal reach** (#139) — when a sub-agent starts, the context broker
+  now appends the files most likely related to the parent's most-recently-read
+  file: graph-adjacent files first (real call/import edges), then path-based
+  reach (same-directory siblings, test↔implementation counterparts). Tiered so a
+  real graph hit is never displaced by a weaker path guess; de-duplicated;
+  capped. Lets a sub-agent skip the grep-around discovery step. Degrades silently
+  to the existing top-entities map when no focal file can be inferred.
+- **Reach benchmarks** — `bench/recall-coverage` gains a path-reach mode
+  (`ENGRAM_BENCH_PATHREACH=1`); new `bench/cochange-holdout` is a non-circular
+  temporal-holdout test (learn co-change from past commits, predict held-out
+  future co-change) against a popularity baseline. Honest result in the output:
+  co-change alone is weak, but combined with path-reach it beats the baseline.
+
+### Changed
+- **Cross-provider displacement** — the resolver now de-duplicates and
+  blend-ranks context *across* providers and discards the redundancy, instead of
+  concatenating each provider's section. The Stop summary reports `~N redundant
+  tokens displaced across providers` (structural — not a bill saving).
+- **Never-worse gate on the enriched Read packet** — an intercepted Read only
+  serves the enriched (structure + provider) packet when it is strictly smaller
+  than the raw file; otherwise engram falls back to the graph-only summary
+  (already proven smaller). Guarantees an intercepted Read never injects more
+  tokens than the file it replaces.
+
 ## [4.4.0] — 2026-06-14 — "Curve"
 
 **Why:** honest whole-session measurement, statistical error bars, and a front

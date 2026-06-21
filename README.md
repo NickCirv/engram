@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v4.4.0 'Curve')" width="100%">
+  <img src="assets/banner-v3.png" alt="engramx — the universal context spine for AI coding tools (v4.5.0 'Reach')" width="100%">
 </p>
 
 <p align="center">
@@ -86,8 +86,8 @@ mkdir -p /tmp/engram-demo && cd /tmp/engram-demo && \
   echo "export const buggy = () => null;" > src.ts && \
   git add -A && git commit -q -m "feat: add buggy helper returning null causing form crashes" && \
   git revert --no-edit HEAD > /dev/null && \
-  npx --yes engramx@4.4.0 init . && \
-  npx --yes engramx@4.4.0 mistakes
+  npx --yes engramx@4.5.0 init . && \
+  npx --yes engramx@4.5.0 mistakes
 ```
 
 You should see, within 30 seconds, the **bi-temporal pre-mortem** engram auto-captured from your revert:
@@ -119,7 +119,7 @@ On engramx's own repo the **per-file structural context reduction is ~89%** (89.
 
 Works in 8 IDEs and counting — Claude Code, Cursor, Cline, Continue.dev, Aider, Windsurf, Zed, OpenAI Codex CLI. One install, one graph, every tool benefits. Apache 2.0. Local SQLite. Nothing leaves your machine.
 
-> **v4.4.0 "Curve" — 2026-06-14.** New: **`engram measure --session`** proves the *combined* whole-session structural reduction by replaying your hook-log as an honest per-session break-even-P curve (Token-loop C). The recall bench now ships **confidence intervals** and counts import edges (it was under-measuring). Honest, repo-dependent numbers: **recall@10 ≈ 43% / 17% / 25%** (own repo / a mature external library / an app), with the ranker beating random ordering by **+5.6pp / +4.4pp / ~0** respectively. Run `engram bench` on yours — and note the durable wins are the **mistakes memory + capacity**, not a recall number. Plus: `query`/`gen` fail loudly on a bad `--project`, a hermetic skills test, and a front door that leads with the differentiator, not the number. Still no cost claims — a structural reduction, not a bill saving.
+> **v4.5.0 "Reach" — 2026-06-21.** New: the **sub-agent broker** now points a spawned agent at the files most likely related to the one it is working on — graph-adjacent files first (real call/import edges), then same-directory siblings and test↔implementation counterparts — so it can skip the grep-around discovery step (tiered so a real graph hit is never displaced by a weaker path guess; de-duplicated; never-worse). And the resolver now **displaces redundant context across providers** (de-dupe + blend-rank + discard) instead of concatenating it, with the Stop line reporting `~N redundant tokens displaced`. An intercepted Read's enriched packet is served only when it is strictly smaller than the raw file, else it falls back to the graph-only summary. Both are structural — never a bill/cost claim. Still: local SQLite, nothing leaves your machine.
 >
 > **v4.3 "Proof" shipped 2026-06-05 — engram's saving is now real *and provable*.** Run **`engram measure`** in your own repo to see the honest structural context-token reduction on **your** code — every disclosure computed live: it's a ceiling, here's the recall, here's the intercept rate, "structural tokens, not your bill." Run **`npm run bench:recall`** for the reproducible proof that engram surfaces the files a change actually touches (recall@10 33% on engram's own repo, decomposed honestly: candidate generation reaches 43%, the PageRank ranker adds +3.2pp over random-within-candidate; 10.4% blind chance).
 >
