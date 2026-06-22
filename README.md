@@ -12,23 +12,15 @@
 </p>
 
 <!-- ============================================================
-     24-second product showcase (Hyperframes-rendered MP4 + WebM).
-     Source: docs/demos/showcase.html · scenes drive both the
-     live HTML player and this MP4. Edit scene-table.md to change.
-     If the MP4 isn't rendered yet, GitHub gracefully shows the
-     poster image and links to the live HTML player.
+     Product showcase — static poster (tracked SVG, always renders
+     on GitHub) linking to the live HTML player. Source scenes:
+     docs/demos/showcase.html · edit scene-table.md to change.
+     (An MP4 render is optional; the poster never 404s.)
      ============================================================ -->
 <p align="center">
-  <video src="https://raw.githubusercontent.com/NickCirv/engram/main/docs/demos/showcase.mp4"
-         controls
-         muted
-         playsinline
-         poster="docs/demos/poster.svg"
-         width="100%">
-    <a href="docs/demos/showcase.html">
-      <img src="docs/demos/poster.svg" alt="engram — 24-second showcase (click to open the live HTML player)" width="100%">
-    </a>
-  </video>
+  <a href="docs/demos/showcase.html">
+    <img src="docs/demos/poster.svg" alt="engram — product showcase (click for the live demo)" width="100%">
+  </a>
 </p>
 
 <p align="center">
