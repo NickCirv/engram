@@ -1,77 +1,25 @@
-# Aider Integration
+# Generate context for Aider
 
-engram generates a `.aider-context.md` snapshot from your knowledge graph.
-Aider reads it as static context at session start — no plugins or special config required.
-
-## Setup
-
-**1. Generate context file**
+Engram can write a static context snapshot for a coding session. This path does not require the HTTP server or an interception hook.
 
 ```bash
-engram gen-aider -p .
+engram init /absolute/path/to/project --no-hook
+engram gen-aider -p /absolute/path/to/project
 ```
 
-This writes `.aider-context.md` to your project root with five sections:
-Architecture (god nodes), Hot Files, Known Issues, Decisions, and Key Patterns.
-
-**2. Add to `.aider.conf.yml`**
+The generator writes `.aider-context.md` in the project. Review the file before loading it as read-only context in Aider. The previous guide used this Aider configuration shape; verify it against your installed client:
 
 ```yaml
 read:
   - .aider-context.md
 ```
 
-Aider loads this file before every chat session. Commit `.aider.conf.yml` to the repo.
+Generated sections draw on graph architecture, hot files, known issues, decisions, and patterns. A snapshot is only as current as its source graph. Re-index after source changes, then regenerate. `engram gen-aider --watch -p /absolute/path/to/project` is a long-running refresh mode.
 
-**3. Keep it fresh**
+The HTTP service exists in this revision, but `/query` requires authentication. Do not reuse the earlier guide's unauthenticated curl append command or treat a static snapshot as a live retrieval API.
 
-```bash
-# One-shot refresh after re-indexing
-engram gen-aider -p .
+## Evidence and verification
 
-# Auto-refresh on graph changes (watch mode)
-engram gen-aider --watch -p .
-```
+This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
 
-Watch mode stays alive and regenerates whenever engram detects graph changes.
-
-## Typical workflow
-
-```bash
-# Index your project (first time or after large changes)
-engram init .
-engram index .
-
-# Generate context
-engram gen-aider -p .
-
-# Start Aider — it picks up .aider-context.md automatically
-aider
-```
-
-## What gets included
-
-| Section | Source | Limit |
-|---------|--------|-------|
-| Architecture | God nodes (highest connectivity) | Top 10 |
-| Hot Files | Pattern nodes with `type: hot_file` | Top 10 |
-| Known Issues | Mistake nodes, ranked by query frequency | Top 5 |
-| Decisions | Decision nodes from last 30 days | All |
-| Key Patterns | Pattern nodes with confidence >= 0.8 | All |
-
-## HTTP bridge (future)
-
-Once engram ships its HTTP server, you can fetch context dynamically in
-pre-session scripts:
-
-```bash
-curl "localhost:7337/query?q=auth+flow" >> .aider-context.md
-```
-
-This will let you prime Aider with task-specific context before starting a session.
-
-## Positioning
-
-Aider builds per-file repo maps from AST analysis. engram adds the
-persistent layer: architectural decisions, known failure modes, and
-recurring patterns that survive across sessions. They complement each other.
+- [src/cli.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/cli.ts)

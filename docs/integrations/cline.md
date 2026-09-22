@@ -1,86 +1,32 @@
-# Cline Integration
+# Engram with Cline
 
-Cline is the largest open-source AI coding agent in VS Code (61K+ stars, 5M+
-installs as of May 2026). It's powerful, but its full-file rewrite model is
-token-heavy: editing 10 lines in a 500-line file sends all 500 lines back.
-That cost compounds fast on real codebases — and the Cline community has been
-asking about token strategy in [discussion #1539](https://github.com/cline/cline/discussions/1539)
-for a long time.
-
-engram fixes that without you changing how you use Cline. The MCP server
-intercepts file reads at the agent boundary and replaces them with structural
-summaries. Cline keeps doing what Cline does. The token bill drops.
-
-## Prerequisites
+The stable boundary in this repository is an executable and an absolute project path. Client-specific UI labels and configuration formats were not tested in this review.
 
 ```bash
-npm install -g engramx
-cd ~/your-project
-engram init .
+engram init /absolute/path/to/project --no-hook
+engram query "a known symbol" -p /absolute/path/to/project --budget 2000
 ```
 
-That's it on engram's side. No extra configuration.
+## MCP process settings
 
-## Add engram to Cline as an MCP server
+| Setting | Value |
+| --- | --- |
+| Command | Absolute path to `engram-serve`, or `node` |
+| Arguments | Project path; with Node, prepend the absolute path to `dist/serve.js` |
+| Transport | Stdio |
+| Working directory | The project being indexed |
 
-Cline reads MCP server configuration from your VS Code settings. Open the
-Cline panel, click the gear icon, then "MCP Servers" → "Edit MCP Settings".
-Add:
+The server declares `query_graph`, `god_nodes`, `graph_stats`, `shortest_path`, `benchmark`, and `list_mistakes`. Register the process using your client's documented MCP configuration. Do not paste a shell command into a configuration field that expects an executable and array.
 
-```json
-{
-  "mcpServers": {
-    "engram": {
-      "command": "engram-serve",
-      "args": ["/absolute/path/to/your-project"]
-    }
-  }
-}
-```
+Confirm that the client can list the six tools before enabling automatic tool approval. Keep approval decisions in the client configuration.
 
-Replace the path with your actual project root. Cline will now have access
-to the same six MCP tools Claude Code does:
+## Diagnose a missing result
 
-- `query_graph` — natural-language graph queries
-- `god_nodes` — most-connected entities in the codebase
-- `graph_stats` — high-level codebase summary
-- `shortest_path` — find connection between two concepts
-- `benchmark` — measure token reduction on this repo
-- `list_mistakes` — past failure modes engram has seen here
+Check that the editor can locate the executable, that the project path matches the initialized graph, and that `engram stats -p /absolute/path/to/project` reports the expected project. A successful CLI query does not verify the client's MCP handshake. Inspect both separately.
 
-## What changes in your sessions
+## Evidence and verification
 
-Cline's agent will start using `query_graph` before reading large files.
-Where it would have read all 500 lines of `auth/middleware.ts`, it'll first
-ask the graph "how does auth work in this project," get a 200-token
-structural answer, and only fall back to the full file if the structural
-view isn't enough.
+This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
 
-In practice, on a real codebase the average Cline session sends roughly 80%
-fewer tokens for context retrieval. Your raw API bill drops the same amount.
-Edit-and-fix cycles get faster because the model sees less noise.
-
-## Tracking it
-
-```bash
-engram cost -p ~/your-project
-```
-
-After 24 hours of normal Cline usage, the table fills in. After a week,
-you can run `engram cost --digest` to write a Markdown report you can
-paste into a chat or pin to a Slack channel.
-
-## A note on file-write operations
-
-engram's interception is read-only. Cline's full-file write behavior is
-unchanged — engram doesn't try to slim down what Cline writes back, only
-what it reads in. Output-side optimization is a separate concern (see
-projects like Kilocode RTK for that angle).
-
-## Combine with: Claude Code, Cursor, Continue, Aider
-
-If you alternate between Cline and another agent on the same repo, engram's
-graph is shared. The same `.engram/graph.db` powers all your tools — index
-once, save tokens everywhere.
-
-See [the integration index](./README.md) for setup in each.
+- [src/cli.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/cli.ts)
+- [src/serve.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/serve.ts)

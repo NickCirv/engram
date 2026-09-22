@@ -1,64 +1,23 @@
-# Continue.dev Integration
+# Engram with Continue
 
-Inject engram's knowledge graph directly into Continue.dev chat via the `@engram` context provider.
-
-## Prerequisites
-
-- engram v0.5+ initialized in your project (`engram init /path/to/project`)
-- Continue.dev extension installed in VS Code or JetBrains
-- Node.js 18+
-
-## Installation
+The included adapter implements a query context provider. It calls the CLI first and uses the first workspace directory as the project root.
 
 ```bash
-npm install engramx-continue
+engram init /absolute/path/to/project --no-hook
+engram query "authentication" -p /absolute/path/to/project --budget 2000
 ```
 
-## Configuration
+The adapter invokes `engram query QUESTION -p WORKSPACE --budget 2000` with a five-second process timeout. Empty queries yield no context. The CLI must be available on the editor process PATH; installation alone does not register a custom provider with Continue.
 
-Add the provider to `~/.continue/config.json`:
+## Compatibility limit
 
-```json
-{
-  "contextProviders": [
-    {
-      "name": "engramx-continue"
-    }
-  ]
-}
-```
+The fallback requests `http://127.0.0.1:7337/query` with a three-second timeout but sends no bearer token. The current HTTP service protects that route, so the fallback is not a working authenticated replacement without an adapter change. Use the CLI path and surface failures during evaluation. Continue custom-provider registration was not tested against a current client release.
 
-Restart Continue after saving the config.
+See the [adapter guide](../../adapters/continue/README.md) for its source boundary.
 
-## Usage
+## Evidence and verification
 
-In any Continue chat input, type `@engram` followed by your question:
+This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
 
-```
-@engram how does the query pipeline work?
-@engram what are the known issues with the AST miner?
-@engram what architectural decisions were made for the graph schema?
-```
-
-The provider runs `engram query "<your text>" -p <workspace> --budget 2000` and injects the result as context before your message is sent to the LLM.
-
-## How It Works
-
-1. **CLI first** — calls `engram query` as a subprocess (5s timeout)
-2. **HTTP fallback** — tries `http://127.0.0.1:7337/query` if CLI fails (3s timeout, for Sprint 2 remote mode)
-3. **Graceful degradation** — returns empty context if both fail; no errors surface
-
-## Troubleshooting
-
-**`@engram` returns no context**
-- Confirm `engram` is on your PATH: `which engram`
-- Confirm the graph is initialized: `engram stats -p /path/to/project`
-- Check that `.engram/graph.db` exists in your workspace root
-
-**`graph.db not found` error from CLI**
-- Run `engram init /path/to/project` to create the initial graph
-- Then mine your codebase: `engram mine /path/to/project` (or just open files — the hook auto-mines)
-
-**Stale context**
-- Re-index manually: `engram mine /path/to/project`
-- Or enable the file watcher: `engram watch /path/to/project`
+- [adapters/continue/src/index.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/adapters/continue/src/index.ts)
+- [src/cli.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/cli.ts)

@@ -1,192 +1,65 @@
-# Integration Guide
+# Integrating Engram
 
-How to wire engram into a real AI coding workflow across one or more machines.
+Choose the smallest interface that supplies the context your application needs. The CLI and generators operate on a project graph; the MCP server exposes tool calls; the HTTP service supports the dashboard and authenticated requests.
 
----
+| Interface | Entry point | Integration boundary |
+| --- | --- | --- |
+| CLI | `engram query "question" -p /path/to/project --budget 2000` | Capture stdout, inspect exit status, bound process runtime |
+| MCP | `engram-serve /path/to/project` | Stdio JSON-RPC; six tool definitions |
+| HTTP | `engram server --http -p /path/to/project --port 7337` | Loopback service with Host/Origin checks and authentication |
+| Static context | `engram gen-aider -p /path/to/project` | Review and refresh generated files |
+| Library | exports in `src/index.ts` | Build the package and follow the exported TypeScript signatures |
 
-## The Three Ways to Call engram
+Initialize with `engram init /path/to/project --no-hook` when evaluating retrieval without installing a hook. The graph persists under `.engram`; concurrent writer protection does not make backups unnecessary.
 
-engram exposes three interfaces. Pick whichever matches your agent stack.
+## MCP contract
 
-### 1. Direct CLI (simplest)
+The server defines `query_graph`, `god_nodes`, `graph_stats`, `shortest_path`, `benchmark`, and `list_mistakes`. The project path is the server process's first positional argument. Configure your client's executable path and argument array; avoid shell interpolation. Keep process logging off the JSON-RPC stdout channel.
 
-```bash
-engram init ~/myrepo
-engram query "how does auth work" -p ~/myrepo
-engram gods -p ~/myrepo
-engram stats -p ~/myrepo
+## HTTP contract
+
+`GET /health` is public. Graph queries use **GET `/query`**, with `q` and `budget` query parameters. `/stats`, `/providers`, dashboard `/api/*` routes, SSE/context streams, and `POST /learn` are protected. The server accepts bearer authentication or its dashboard cookie; JSON mutations require an appropriate JSON content type.
+
+`ENGRAM_API_TOKEN` must contain at least 32 characters; otherwise the service generates a token file at `~/.engram/http-server.token` with restrictive permissions. Keep tokens out of logs and committed client configuration. A 401 from an adapter is an authentication failure, not an empty graph.
+
+## Integrating another tool
+
+Invoke the CLI with an executable and argument array, capture stdout/stderr separately, set a timeout, and check the exit status before interpreting output. A successful graph lookup does not establish that a downstream editor consumed it correctly.
+
+The package's public `src/index.ts` exports `query`, `godNodes`, `stats`, `mistakes`, `GraphStore` and other declared APIs. The old HTML imported `getFileContext` and `getStore` from the package root, but those helpers are not exported there in this revision. Use the public exports and their actual signatures; do not copy that historical import example.
+
+```javascript
+import { query, stats } from './dist/index.js';
+
+const project = '/absolute/path/to/project';
+console.log(await stats(project));
+const result = await query(project, 'authentication', {
+  depth: 2,
+  tokenBudget: 2000,
+});
+console.log(result.text);
 ```
 
-Good for: manual use, shell scripts, CI pipelines.
+Run this source-inspected example from the built package checkout after indexing the project. For another package consuming a published artifact, verify its export map and installed version separately.
 
-### 2. MCP Server (for MCP-aware clients)
+The historical `subHooks` configuration was labeled a future design; this guide does not treat it as a supported interface. Use the implemented provider contract for additional context, documented in [providers and plugins](plugins/README.md). A memory, review or compression tool should retain source provenance and distinguish Engram summaries from raw file contents.
 
-engram ships a JSON-RPC stdio MCP server with 6 tools. Point Claude Code, Windsurf, or any MCP client at it:
+## Hook coexistence
 
-```json
-{
-  "mcpServers": {
-    "engram": {
-      "command": "engram-serve",
-      "args": ["/path/to/your/project"]
-    }
-  }
-}
-```
+The dispatcher now includes Grep and additional lifecycle events, so the older recommendation that Grep hooks cannot overlap is obsolete. Test each installed hook and their combined configuration, including passthrough, denial, exceptions and compaction. Do not presume that separate context injections compose cleanly. The [Sentinel guide](SENTINEL.md) documents the current event families and guard defaults.
 
-Tools: `query_graph`, `god_nodes`, `graph_stats`, `shortest_path`, `benchmark`, `list_mistakes` (v0.2).
+## Data and quality boundaries
 
-One MCP server instance per project — the project path is baked into `args`. If you work across many projects, option 3 is cheaper.
+Query results carry `text`, `estimatedTokens`, and `nodesFound` in the library interface. Estimated tokens measure context size, not answer quality or invoice savings. Built-in and configured providers may add external context or execute processes. Test each integration with a known symbol, inspect the original file, and verify missing-index and authentication errors separately.
 
-### 3. Shell Wrapper (for cross-project, T1-cost access)
+## Evidence and verification
 
-If you want one command that works across every project without registering a separate MCP server per repo, use the reference wrapper at [`scripts/mcp-engram`](../scripts/mcp-engram):
+This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
 
-```bash
-# Install the wrapper
-cp scripts/mcp-engram ~/bin/mcp-engram
-chmod +x ~/bin/mcp-engram
+- [src/index.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/index.ts)
+- [src/serve.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/serve.ts)
+- [src/cli.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/cli.ts)
+- [src/providers/mcp-config.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/providers/mcp-config.ts)
 
-# Use it from anywhere
-mcp-engram query "how does auth work" -p ~/myrepo
-mcp-engram stats -p ~/other-repo
-mcp-engram gods -p ~/third-repo
-```
-
-The wrapper is portable — it prefers the globally-installed `engram` binary (`npm install -g engramx`) and falls back to a local source checkout if you're hacking on engram itself.
-
-**Why this matters:** in a Bash-based agent loop (Claude Code, aider, custom pipelines), a shell command costs ~100-500 tokens per call. Starting a JSON-RPC MCP server for every project you touch is more context overhead. The wrapper lets one command handle N projects via `-p <path>`.
-
----
-
-## Multi-Machine Setup
-
-If your dev workflow spans a laptop and a remote box (server, dev container, homelab), install engram on both:
-
-```bash
-# On each machine
-npm install -g engramx
-cp scripts/mcp-engram ~/bin/mcp-engram  # optional
-chmod +x ~/bin/mcp-engram               # optional
-```
-
-The graph lives in `.engram/graph.db` inside each project. If your project directory is shared (NFS, rsync, vault mount, bind mount), the graph is automatically visible on both machines — `engram query` on the remote reads the same graph the laptop wrote.
-
-**Caveat:** SQLite doesn't love concurrent writers across machines. Pick one machine as the mining host (usually wherever `git commit` runs) and let the other machine read-only query the graph. engram's git hooks install on whichever machine you run `engram hooks install` on.
-
----
-
-## Auto-Generated AI Instructions
-
-After `engram init`, run `engram gen` to write a structured summary into your AI config file:
-
-```bash
-engram gen --target claude     # CLAUDE.md
-engram gen --target cursor     # .cursorrules
-engram gen --target agents     # AGENTS.md
-```
-
-The generated section is delimited by `<!-- engram:start -->` / `<!-- engram:end -->` markers, so you can keep your own hand-written guidance above or below the auto-gen block and engram will only replace the delimited region on re-runs.
-
-This is the cheapest integration point: the structural summary loads into your AI's preload context on every session start, so even if the agent never calls engram directly, it benefits from the graph.
-
-### Task-Aware Views (v0.2)
-
-`engram gen --task <name>` writes a different slice of the graph depending on what you're about to do:
-
-```bash
-engram gen --task bug-fix     # leads with 🔥 hot files + ⚠️ past mistakes
-engram gen --task feature     # leads with god nodes + decisions + deps
-engram gen --task refactor    # leads with god nodes + dependency graph + patterns
-engram gen --task general     # balanced (default)
-```
-
-Under the hood this is a data table (`VIEWS` in `src/autogen.ts`) — each row specifies which sections to include and at what limits. Adding a custom view is adding a row, not editing code.
-
-## Indexing Claude Code Skills (v0.2)
-
-If you use Claude Code with its `~/.claude/skills/` directory, you can index those skills directly into your project's graph so queries return both the relevant code *and* the skill to apply:
-
-```bash
-engram init ~/myrepo --with-skills           # default: ~/.claude/skills/
-engram init ~/myrepo --with-skills ~/other-skills  # custom path
-```
-
-Skills become `concept` nodes with `metadata.subkind = "skill"`. Trigger phrases extracted from each `SKILL.md` description become separate `concept` keyword nodes, linked via the `triggered_by` edge relation. A query hitting a keyword node naturally walks the edge to the skill during BFS traversal — no new query code needed.
-
-**Opt-in, default OFF.** Users without a skills directory see zero behavior change.
-
-## Mistake Memory (v0.2)
-
-The session miner extracts mistakes from `CLAUDE.md` / `.cursorrules` / `.engram/sessions/` files (look for patterns like `bug: <description>` or `fix: <description>`). v0.2 promotes these to the TOP of query output in a `⚠️ PAST MISTAKES` warning block whenever a query matches.
-
-```bash
-engram mistakes                       # list all known mistakes
-engram mistakes --limit 10
-engram mistakes --since 30            # only mistakes verified in the last 30 days
-engram learn "bug: fs.readFile in event loop stalled prod"   # manually log one
-```
-
-Via MCP, Claude Code can call the `list_mistakes` tool to get the same data.
-
-**What the session miner does NOT match:** prose. The regex requires explicit colon-delimited markers (`bug: X`, `fix: X`, `pattern: X`). This keeps the false-positive rate at zero on prose documentation — we verified this against the engram README as a pinned regression test.
-
----
-
-## Git Hooks (Keep the Graph Fresh)
-
-```bash
-engram hooks install -p ~/myrepo
-```
-
-Installs `post-commit` and `post-checkout` hooks that re-run the AST miner in <50ms after every commit or branch switch. Zero tokens, no LLM.
-
-```bash
-engram hooks status       # Check which hooks are installed
-engram hooks uninstall    # Remove
-```
-
----
-
-## Integrating with a Rules File
-
-If you run a rules-based agent stack (e.g. Claude Code with global rules), add engram as a pre-dispatch step:
-
-> **Before reading code files:** check whether `.engram/graph.db` exists in the project. If yes, run `mcp-engram query "<keywords>" -p <path>` first. The graph returns a ~300 token structural summary instead of forcing a multi-file read (~3,000+ tokens).
-
-This single rule flips engram from "tool you remember to use" into "tool that saves tokens on every code-navigation task."
-
----
-
-## Verifying the Integration
-
-```bash
-# Is engram installed and on PATH?
-which engram && engram --help | head -5
-
-# Is the wrapper resolving correctly?
-mcp-engram --which
-
-# Do we have graphs on disk?
-find ~ -name ".engram" -type d 2>/dev/null
-
-# Pick a project and show stats
-mcp-engram stats -p ~/myrepo
-```
-
-If `Last mined` is fresh (<24h) and node/edge counts look reasonable for the codebase size, you're integrated.
-
----
-
-## Common Gotchas
-
-| Problem | Fix |
-|---------|-----|
-| `engram not found` after install | Make sure your global npm bin is on PATH: `npm config get prefix`, then add `<prefix>/bin` to `$PATH`. |
-| Wrapper points to wrong binary on remote machine | Run `mcp-engram --which` to see what it resolved to. Update `scripts/mcp-engram` fallback path if needed. |
-| `engram init` reports 0 files | The directory contains no supported source files. engram skips `node_modules`, `dist`, `.git`, and binary files. Verify with `find <path> -type f -name "*.ts"`. |
-| Graph stays stale | Install git hooks (`engram hooks install -p <path>`) or re-run `engram init` in CI. |
-| Cross-machine write conflicts | Only one machine should run `engram init` or have git hooks. Others should query only. |
-| `Another engram init is running (lock: ...)` | v0.2 lockfile guard. If no other process is actually running, `rm .engram/init.lock` to clear the stale lock. |
-| `cannot safely update CLAUDE.md: Found N start / M end marker(s)` | Your CLAUDE.md has unbalanced engram markers (usually from a manual edit). Fix them by hand and re-run. |
-| Skills-miner misses triggers in my `SKILL.md` | Check the description field. Triggers must be either (a) quoted strings (any Unicode quote), or (b) `Use when X` patterns. Sentence-boundary parsing survives periods inside identifiers like `Node.js`. |
+- [HTTP routes](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/server/http.ts)
+- [Authentication](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/server/auth.ts)

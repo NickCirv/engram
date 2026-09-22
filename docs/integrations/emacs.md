@@ -1,129 +1,32 @@
-# Emacs Integration
+# Engram with Emacs
 
-engram works with Emacs AI packages that support MCP. The most common —
-**gptel** via the `gptel-mcp` extension — can register engram as an
-additional tool source.
-
-## Prerequisites
+The stable boundary in this repository is an executable and an absolute project path. Client-specific UI labels and configuration formats were not tested in this review.
 
 ```bash
-npm install -g engramx
-cd ~/your-project
-engram init .
+engram init /absolute/path/to/project --no-hook
+engram query "a known symbol" -p /absolute/path/to/project --budget 2000
 ```
 
-## Setup — gptel + gptel-mcp
+## MCP process settings
 
-**1. Install packages**
+| Setting | Value |
+| --- | --- |
+| Command | Absolute path to `engram-serve`, or `node` |
+| Arguments | Project path; with Node, prepend the absolute path to `dist/serve.js` |
+| Transport | Stdio |
+| Working directory | The project being indexed |
 
-```elisp
-;; straight.el
-(use-package gptel)
-(use-package gptel-mcp
-  :straight (gptel-mcp :type git :host github :repo "lizqwerscott/gptel-mcp.el"))
-```
+The server declares `query_graph`, `god_nodes`, `graph_stats`, `shortest_path`, `benchmark`, and `list_mistakes`. Register the process using your client's documented MCP configuration. Do not paste a shell command into a configuration field that expects an executable and array.
 
-For `use-package` with `:ensure t`, both packages are on MELPA.
+Engram does not ship an Emacs package. A shell command or process call provides a minimal integration; a separate MCP-capable client is needed for tool discovery.
 
-**2. Configure the MCP server**
+## Diagnose a missing result
 
-Add to your `~/.emacs.d/init.el` (or `init.el` of your choice):
+Check that the editor can locate the executable, that the project path matches the initialized graph, and that `engram stats -p /absolute/path/to/project` reports the expected project. A successful CLI query does not verify the client's MCP handshake. Inspect both separately.
 
-```elisp
-(setq gptel-mcp-servers
-      '(("engram"
-         :command "engram-serve"
-         :args ())))
-```
+## Evidence and verification
 
-**3. Start the engram MCP server inside Emacs**
+This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
 
-```elisp
-M-x gptel-mcp-start-server RET engram RET
-```
-
-Or start all configured servers on Emacs startup:
-
-```elisp
-(add-hook 'after-init-hook #'gptel-mcp-start-all-servers)
-```
-
-**4. Use it**
-
-Open a gptel buffer (`M-x gptel`) and ask a structural question:
-
-> "Use the engram tools to show me the god nodes in this project."
-
-gptel will route the tool calls through the MCP connection and surface
-the results inline.
-
-## Alternative — ellama
-
-[ellama](https://github.com/s-kostyaev/ellama) is a local-first LLM
-client for Emacs that also supports tool use. MCP support is less
-built-in than gptel-mcp's, so the preferred path is:
-
-1. Run engram's HTTP server: `engram server --port 7337`
-2. Use `ellama-make-tool` to register `http://127.0.0.1:7337/query` as
-   a tool the LLM can call.
-
-See the ellama README for `ellama-make-tool` examples.
-
-## Available MCP tools
-
-| Tool | What it returns |
-|------|-----------------|
-| `query_graph` | Natural-language graph query → structural summary |
-| `god_nodes` | Top-connected entities (core architecture) |
-| `graph_stats` | Node count, edge count, confidence distribution |
-| `shortest_path` | Call path between two symbols |
-| `benchmark` | Measured token savings vs raw file reads |
-| `list_mistakes` | Known landmines mined from git history |
-
-## Keeping the graph fresh
-
-engram's MCP server reads from `.engram/graph.db`. Re-index after big
-changes:
-
-```bash
-engram init . --incremental
-```
-
-Or run the watcher in a shell buffer:
-
-```elisp
-M-x shell RET
-cd ~/your-project
-engram watch -p .
-```
-
-## Tips
-
-**Set project root via directory-local variables**
-
-In a `.dir-locals.el` at your project root:
-
-```elisp
-((nil . ((gptel-mcp-server-env . (("ENGRAM_PROJECT" . "~/your-project"))))))
-```
-
-This way, gptel picks up the right project even when buffers are in
-subdirectories.
-
-**Combine with a static context file**
-
-Generate `.aider-context.md` (or a markdown snippet of your own) and
-include it in your default gptel system prompt. Gives the LLM a cheap
-overview without spending tokens on a tool call every turn:
-
-```bash
-engram gen-aider -p .
-```
-
-```elisp
-(setq gptel-directives
-      '((default . "You are an assistant. Project context:\n\n"
-         . (lambda () (with-temp-buffer
-                        (insert-file-contents ".aider-context.md")
-                        (buffer-string))))))
-```
+- [src/cli.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/cli.ts)
+- [src/serve.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/serve.ts)

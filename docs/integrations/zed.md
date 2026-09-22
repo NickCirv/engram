@@ -1,56 +1,19 @@
-# engram — Zed Context Server
+# Engram Zed adapter
 
-Exposes engram's knowledge graph as a Zed slash command via the context server protocol (JSON-RPC over stdio).
+The included adapter is an experimental JSON-RPC bridge with `context/list` and `context/fetch` handlers. Its source does not establish compatibility with a current Zed extension API.
 
-## Prerequisites
+`context/list` describes Engram context. `context/fetch` accepts a query and project, then executes `engram query QUESTION -p PROJECT --budget 2000` with an eight-second timeout. Index the project and check the CLI independently before attempting client integration.
 
-- engram installed globally: `npm install -g engramx`
-- Project indexed: `engram init` run in your project root
-
-## Setup
-
-Add to your Zed `settings.json`:
-
-```json
-{
-  "context_servers": {
-    "engram": {
-      "command": {
-        "path": "engram",
-        "args": ["context-server"]
-      }
-    }
-  }
-}
+```bash
+engram init /absolute/path/to/project --no-hook
+engram query "authentication" -p /absolute/path/to/project --budget 2000
 ```
 
-Open `~/.config/zed/settings.json` (macOS) or `~/.local/config/zed/settings.json` (Linux) and merge the block above.
+Treat the adapter as implementation material for a version-specific integration. Verify the client's protocol, process launch, error handling, and cancellation support before describing it as an installed extension. No marketplace publication or live Zed session was verified.
 
-## Usage
+## Evidence and verification
 
-In Zed's agent panel, type `/engram` followed by your query:
+This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
 
-```
-/engram auth flow
-/engram database schema decisions
-/engram known issues GraphStore
-```
-
-engram queries the local knowledge graph and injects matching context — architecture nodes, past decisions, mistake warnings — directly into the AI's prompt.
-
-## How It Works
-
-1. Zed sends `context/list` on startup — engram advertises the `engram` slash command.
-2. When you invoke `/engram <query>`, Zed sends `context/fetch` with `{ query, project }`.
-3. The server runs `engram query <query> -p <project> --budget 2000` as a subprocess.
-4. The result (nodes, edges, mistake warnings) is returned as text and injected into context.
-
-## Optional: Per-Project Config
-
-Pass a specific project path via the `project` param. By default the server uses `process.cwd()` at the time Zed launches it.
-
-## Troubleshooting
-
-- **"engram query failed"** — run `engram init` in your project root, then `engram` (mines the codebase).
-- **No results** — try a broader query, or run `engram stats -p .` to check node count.
-- **Command not found** — ensure `engram` is on your `PATH` (`which engram`).
+- [adapters/zed/index.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/adapters/zed/index.ts)
+- [src/cli.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/cli.ts)

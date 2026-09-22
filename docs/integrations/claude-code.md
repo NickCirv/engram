@@ -1,61 +1,22 @@
-# Claude Code Integration
+# Engram with Claude Code
 
-engram integrates with Claude Code via PreToolUse/PostToolUse hooks that
-intercept Read/Edit/Write calls and inject structural context automatically.
-
-## Prerequisites
+Use MCP for explicit queries, or opt into a hook that supplies structural context during file access. Evaluate them separately so that you can identify which integration changed an agent response.
 
 ```bash
-# Index your project
-engram init .
-
-# Install hooks into Claude Code settings
-engram install-hook
+engram init /absolute/path/to/project --no-hook
+engram install-hook --dry-run -p /absolute/path/to/project
 ```
 
-`install-hook` writes to `.claude/settings.json` (project scope) or
-`~/.claude/settings.json` (user scope, pass `--scope user`).
+The hook installer supports `--scope local`, `project`, or `user` (default `local`). Review the dry-run target and changes before running without `--dry-run`. Use `uninstall-hook` for removal and `hook-stats` or `hook-preview` to inspect behavior. Read interception can change the information supplied to the model; validate edits against full source.
 
-## What happens at runtime
+For MCP, register the executable `engram-serve` with an argument array containing the absolute project path. Six tools are declared, including `query_graph` and `list_mistakes`. The bundled marketplace plugin includes the same process registration and three skills; its discovery and installation commands depend on the installed Claude Code version.
 
-Every `Read` call is intercepted. Instead of passing the full file to Claude,
-engram returns a structural summary: node list, key relationships, and
-confidence scores. Full file content is still available on demand — just
-re-read with explicit `offset`/`limit` params.
+`engram init` without `--no-hook` also enables a Sentinel hook by default. Do not assume an initialization command is read-only. Optional providers and update checks may use the network.
 
-The hook exits with `deny + reason` to inject context inline, which means
-zero latency overhead for Claude Code (synchronous hook path).
+## Evidence and verification
 
-## HUD
+This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
 
-The status line shows live hit rate and estimated token savings:
-
-```
-engram ◆ 47 hits · ~12K tokens saved
-```
-
-Configure the label in `.engram/providers.json`.
-
-## Dashboard
-
-```bash
-engram dashboard
-```
-
-Opens a live terminal view showing recent intercepts, node coverage, and
-per-file hit rates.
-
-## Provider configuration
-
-`.engram/providers.json` controls which context providers are active and
-their budget limits:
-
-```json
-{
-  "structure": { "enabled": true, "budget": 800 },
-  "mistakes":  { "enabled": true, "budget": 200 },
-  "decisions": { "enabled": true, "budget": 200 }
-}
-```
-
-Run `engram stats -p .` for a summary of current graph state.
+- [src/cli.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/cli.ts)
+- [src/serve.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/serve.ts)
+- [plugins/anthropic-marketplace/engram/.mcp.json](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/plugins/anthropic-marketplace/engram/.mcp.json)

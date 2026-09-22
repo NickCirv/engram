@@ -1,73 +1,45 @@
-# Installing engram (guide for AI agents like Cline)
+# Install Engram from a pinned checkout
 
-engram is a local code-graph context layer for AI coding agents. It indexes a
-repository into a local SQLite knowledge graph and exposes it over MCP (stdio),
-so the agent can ask about code structure, call sites, and git-mined mistakes
-instead of re-reading whole files. **Apache-2.0, local-only, zero cloud, no API
-key, no account.**
-
-## 1. Install the CLI
+Engram builds a persistent SQLite graph for a local codebase. Node.js 20 or later is required by the package manifest. Use a disposable project to evaluate indexing and context output before connecting an agent.
 
 ```bash
-npm install -g engramx
+npm install
+npm run build
+node dist/cli.js init /absolute/path/to/project --no-hook
+node dist/cli.js stats -p /absolute/path/to/project
+node dist/cli.js query "authentication" -p /absolute/path/to/project --budget 2000
 ```
 
-(Or skip the global install and run it on demand with `npx` — see the MCP
-config below, which uses `npx`.)
+Run these commands from a checkout of the revision cited below. `npm install` can run dependency lifecycle scripts; review the dependency set first. Native dependencies and grammar bundling may require local build support. The build creates the declared CLI artifacts. Package publication and a clean-machine install were not checked.
 
-## 2. Index the project
+## Decide which integration to enable
 
-```bash
-cd /absolute/path/to/the/project
-engram init .
-```
+- Query-only: use the CLI, or launch `node /absolute/path/to/engram/dist/serve.js /absolute/path/to/project` as an MCP stdio process.
+- Generated context: use `gen`, `gen-mdc`, `gen-aider`, or `gen-ccs`; inspect the resulting file diff.
+- Read interception: preview `install-hook --dry-run -p /absolute/path/to/project` before selecting the desired configuration scope.
 
-This builds `.engram/graph.db` from the repo (AST extraction + git history). It
-runs entirely locally and takes a few seconds on a typical repo.
+`init` installs a Sentinel hook by default; `--no-hook` disables that initialization step. Indexing writes `.engram/graph.db` and associated local state. Never treat a graph summary as a replacement for reading the implementation before editing it.
 
-## 3. Register engram as an MCP server
+## Continue with the appropriate guide
 
-Add this to the MCP settings (in Cline: **MCP Servers → Configure**, i.e.
-`cline_mcp_settings.json`):
+- [User manual](docs/USER-MANUAL.md): skills indexing, generated instructions, verification, troubleshooting and removal.
+- [Sentinel](docs/SENTINEL.md): current event families, read gates and mistake-guard behavior.
+- [Editor integrations](docs/integrations/README.md): per-client process contracts and known gaps.
+- [Providers](docs/plugins/README.md): reviewed JavaScript and MCP extension configuration.
+- [Command reference](docs/REFERENCE.md): the available command families.
 
-```json
-{
-  "mcpServers": {
-    "engram": {
-      "command": "npx",
-      "args": ["-y", "-p", "engramx", "engram-serve", "/absolute/path/to/the/project"]
-    }
-  }
-}
-```
+The manifest identifies the npm package as `engramx`, but this review did not verify package availability or published artifacts. The pinned source build above is the reproducible starting point. Avoid copying output counts, timings or passing-test totals from older installation pages.
 
-Replace `/absolute/path/to/the/project` with the absolute path to the repo you
-indexed in step 2.
+## Network and recovery
 
-## 4. Verify
+Core graph operations are local. Update checks contact the npm registry unless disabled with `ENGRAM_NO_UPDATE_CHECK=1` or CI detection. Optional providers can launch processes or make network requests. Review provider configuration before enabling it.
 
-```bash
-engram doctor -p /absolute/path/to/the/project
-```
+Use `doctor` to inspect setup, `db status` before migration, and make a filesystem backup before destructive database operations. `db rollback --to 0 --yes` is destructive; it is not a routine troubleshooting step.
 
-It should report that the graph is present and the AST provider is reachable.
+## Evidence and verification
 
-## MCP tools you get
+This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
 
-- `query_graph` — natural-language search of the code graph
-- `god_nodes` — the most-connected entities (core abstractions)
-- `graph_stats` — node / edge counts and confidence breakdown
-- `shortest_path` — trace the connection between two symbols
-- `benchmark` — the **structural** context-token reduction on this repo (a
-  reduction in tokens entering context, **not** a dollar/bill saving — your real
-  cost is dominated by prompt caching)
-
-## Notes
-
-- **Requirements:** Node ≥ 20. For the grep call-site feature, `ripgrep` (`rg`)
-  on `PATH` (optional — engram falls back gracefully without it).
-- **Keeping the graph fresh:** re-run `engram init .` after large changes, or
-  `engram reindex <file>` for one file, or `engram install-hook` to update it
-  automatically as files change.
-- **Privacy:** nothing leaves the machine — engram never makes a network call
-  and stores everything in local SQLite under `.engram/`.
+- [package.json](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/package.json)
+- [src/cli.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/cli.ts)
+- [src/serve.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/serve.ts)

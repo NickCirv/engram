@@ -1,43 +1,28 @@
-# engram for VS Code & Cursor
+# Engram editor commands
 
-Local-first context spine that 10x's your AI coding sessions. Works in VS Code, Cursor, and every VS Code fork.
+This extension is a thin terminal wrapper around the Engram CLI. Its manifest declares VS Code `^1.85.0`; runtime compatibility and marketplace distribution were not tested.
 
-## What this extension does
+| Command | Terminal invocation |
+| --- | --- |
+| Initialize | `engram init "WORKSPACE"` |
+| Generate Cursor rules | `engram gen-mdc -p "WORKSPACE"` |
+| Generate agent context | `engram gen -p "WORKSPACE"` |
+| Cost report | `engram cost -p "WORKSPACE"` |
+| Doctor | `engram doctor` |
+| Dashboard | `engram dashboard "WORKSPACE"` — incompatible with the inspected CLI, which declares `ui` |
 
-This extension is a **thin wrapper around the engramx CLI**. It surfaces the most useful engram commands inside the editor's command palette so you don't have to drop into a terminal. The CLI does all the actual work — that means updates to the CLI (`npm install -g engramx@latest`) immediately apply to the extension without a re-publish.
+The first workspace folder is used. Initialization does not pass `--no-hook`, so it inherits the CLI's default hook installation. The extension sends command text to a terminal; treat `engram.cliPath` and workspace names as trusted shell input.
 
-## Prerequisites
+## Settings and development
 
-```bash
-npm install -g engramx
-```
+`engram.cliPath` defaults to `engram`. `engram.regenerateOnSave` defaults to `false`; enabling it sends `gen-mdc` on document saves. Settings are read during activation, so reload after changing them if needed.
 
-That's it. The extension calls `engram` as a subprocess.
+The extension's `compile` script runs `tsc -p ./` and its entrypoint is `out/extension.js`. Build and test it in an extension development host before installing. The dashboard mismatch requires a code fix; use the main CLI's `engram ui -p /absolute/path/to/project` directly in the meantime.
 
-## Commands
+## Evidence and verification
 
-Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and type `Engram:`:
+This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
 
-| Command | What it does |
-|---|---|
-| Engram: Initialize knowledge graph | First-run scan, builds `.engram/graph.db` |
-| Engram: Generate Cursor rules | Writes `.cursor/rules/engram-context.mdc` |
-| Engram: Generate AGENTS.md + CLAUDE.md | Universal agent-instructions files |
-| Engram: Show token-savings telemetry | Per-project token-saved table |
-| Engram: Open live dashboard | Real-time terminal dashboard |
-| Engram: Run health check | `engram doctor` summary |
-
-## Settings
-
-| Setting | Default | What it does |
-|---|---|---|
-| `engram.cliPath` | `engram` | Path to the engram CLI. Override if not on PATH. |
-| `engram.regenerateOnSave` | `false` | Auto-regenerate Cursor rules when files are saved. |
-
-## Why use it
-
-If you're already using Cursor or VS Code with an AI agent (Cline, Continue, GitHub Copilot, Claude in a terminal), engram replaces whole-file reads with a compact structural summary from a local graph — a **per-file context-token reduction** (typically 50–90%, ~89% on engram's own large-file code; structural, varies by repo). It's a reduction in tokens *entering the model's context*, **not** a guaranteed bill saving — prompt caching dominates the dollar cost. The graph is local SQLite. Nothing leaves your machine.
-
-## License
-
-Apache-2.0. Source: https://github.com/NickCirv/engram
+- [extensions/vscode/package.json](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/extensions/vscode/package.json)
+- [extensions/vscode/src/extension.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/extensions/vscode/src/extension.ts)
+- [src/cli.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/cli.ts)

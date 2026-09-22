@@ -1,47 +1,18 @@
-# CCS Integration
+# Codebase Context Specification files
 
-engram integrates with the [Codebase Context Specification](https://github.com/Agentic-Insights/codebase-context-spec) — a standard for human + AI-readable project documentation stored in `.context/index.md`.
-
-## What CCS Is
-
-CCS defines a standard location (`.context/index.md`) for project documentation. Sections typically include Architecture, Decisions, Conventions, and Known Issues. Any AI tool can read this file to understand a project without digging through source code.
-
-## Import: Load CCS into engram
-
-If your project already has a `.context/index.md`, import it into the knowledge graph:
+Engram imports and exports project documentation at `.context/index.md`. The graph and the human-authored document serve different purposes; review changes before replacing an existing context file.
 
 ```bash
-engram init --from-ccs
+engram init /absolute/path/to/project --from-ccs --no-hook
+engram gen-ccs -p /absolute/path/to/project
 ```
 
-This parses each section and maps bullet points to graph nodes:
+Import maps contextual sections to graph concepts, patterns, decisions, and mistakes. Export assembles graph-backed sections for architecture patterns, decisions, known issues, and key concepts. This is a selected view of stored knowledge, not a reversible round-trip preserving every original sentence or layout.
 
-| Section heading | Node kind |
-|-----------------|-----------|
-| Architecture, Design, Conventions, Patterns | `pattern` |
-| Decisions | `decision` |
-| Issues, Problems, Known Issues | `mistake` |
-| Everything else | `concept` |
+`gen-ccs` is a one-shot command in this revision; there is no `--watch` option. Preserve authored material before generation, inspect the resulting diff, and rerun after relevant graph updates.
 
-All imported nodes get `confidenceScore: 0.9` — human-authored context is treated as high-signal.
+## Evidence and verification
 
-## Export: Generate CCS from engram
+This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
 
-Export the knowledge graph as a CCS-format `.context/index.md`:
-
-```bash
-engram gen-ccs
-```
-
-This writes four sections:
-
-- **Architecture Patterns** — pattern nodes with confidence >= 0.8, sorted by query frequency
-- **Decisions** — all decision nodes, newest first
-- **Known Issues** — mistake nodes sorted by how often they surface in queries
-- **Key Concepts** — high-traffic concept nodes (queryCount > 0)
-
-## Positioning
-
-engram is the **dynamic layer** for CCS. Static `.context/index.md` files capture what you know at a point in time. engram makes that knowledge live — it grows as you code, surfaces the right nodes during AI queries, and tracks which decisions and patterns actually matter (via queryCount).
-
-Static docs become a living knowledge graph.
+- [src/cli.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/cli.ts)

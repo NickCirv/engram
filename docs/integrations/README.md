@@ -1,76 +1,31 @@
-# engram integrations
+# Editor and agent integrations
 
-engram integrates with every major AI coding tool — usually via the Model
-Context Protocol (MCP), sometimes via a static rules file, sometimes via a
-native hook. Pick the path that matches your IDE.
+Start with an indexed project and one integration. Multiple automatic context paths can duplicate material or alter an agent's reads in ways that are difficult to diagnose.
 
-## By IDE
-
-| IDE / Editor | Integration doc | Mechanism |
-|--------------|-----------------|-----------|
-| Claude Code | [claude-code.md](./claude-code.md) | Hook-based interception (native, automatic) |
-| Cursor | [cursor-mcp.md](./cursor-mcp.md) *(active)* + MDC file *(passive)* | MCP server + `.cursor/rules/*.mdc` |
-| Continue.dev | [continue.md](./continue.md) | `@engram` context provider |
-| Cline | [cline.md](./cline.md) | MCP server — `engram-serve` registered in Cline's MCP settings |
-| Zed | [zed.md](./zed.md) | Context server (JSON-RPC) — `/engram` slash command |
-| Aider | [aider.md](./aider.md) | `.aider-context.md` static snapshot |
-| Windsurf (Codeium) | MCP server — register `engram-serve` | See [cursor-mcp.md](./cursor-mcp.md); Windsurf supports MCP natively with the same config. Also: `engram gen-windsurfrules` for a `.windsurfrules` snapshot. |
-| Neovim | [neovim.md](./neovim.md) | MCP via codecompanion.nvim or avante.nvim |
-| Emacs | [emacs.md](./emacs.md) | MCP via gptel-mcp |
-
-## By mechanism
-
-### Active (MCP server)
-
-The agent decides when to call engram. Best for structural queries that
-vary per question — *"what calls X?"*, *"trace the path from A to B"*.
-Register the `engram-serve` binary:
-
-```json
-{
-  "mcpServers": {
-    "engram": { "command": "engram-serve", "args": [] }
-  }
-}
-```
-
-Tools exposed: `query_graph`, `god_nodes`, `graph_stats`,
-`shortest_path`, `benchmark`, `list_mistakes`.
-
-### Passive (static snapshot)
-
-engram writes a markdown file your IDE auto-loads. Best for cheap
-always-on context — architecture, decisions, landmines.
-
-| Command | File | Consumer |
-|---------|------|----------|
-| `engram gen-mdc` | `.cursor/rules/engram-context.mdc` | Cursor |
-| `engram gen-windsurfrules` | `.windsurfrules` | Windsurf |
-| `engram gen-aider` | `.aider-context.md` | Aider |
-| `engram gen-ccs` | `.context/index.md` | CCS-compatible tools |
-
-All static generators accept `--watch` to regenerate automatically on
-graph changes.
-
-### Hook-based (interception)
-
-Claude Code only. engram intercepts `Read`/`Edit`/`Write` tool calls and
-injects a structural summary inline. Install with:
+| Guide | Connection model |
+| --- | --- |
+| [Claude Code](claude-code.md) | Optional hooks and MCP |
+| [Cursor](cursor-mcp.md) | MCP or generated rules |
+| [Cline](cline.md) | MCP process registration |
+| [Continue](continue.md) | Included context-provider adapter |
+| [Zed](zed.md) | Experimental JSON-RPC adapter |
+| [Aider](aider.md) | Generated `.aider-context.md` |
+| [CCS](ccs.md) | Import/export `.context/index.md` |
+| [Neovim](neovim.md) | CLI or a separately configured MCP-capable plugin |
+| [Emacs](emacs.md) | CLI or a separately configured MCP-capable client |
 
 ```bash
-engram install-hook
+engram init /absolute/path/to/project --no-hook
+engram query "a known symbol" -p /absolute/path/to/project
 ```
 
-This is the path that delivers the measured 88.1% session-level token
-savings (see [EngramBench v0.2](../../bench/README.md)).
+Resolve the CLI executable explicitly in editor environments, which often have a different PATH from your terminal. Client configuration locations and extension APIs vary by version; the guides document the Engram process contract rather than asserting current marketplace support.
 
-## Composition
+`gen-mdc`, `gen-aider`, and `gen-windsurfrules` expose watch mode. `gen-ccs` does not expose `--watch` in this revision. Regenerate after re-indexing and review diffs before committing.
 
-These paths compose. A typical production setup:
+## Evidence and verification
 
-- **Claude Code:** hooks for automatic Read interception
-- **Any other IDE:** MCP server for ad-hoc queries + a static snapshot for
-  always-on architecture context
+This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
 
-engram's graph is a single source of truth — all paths read from the same
-`.engram/graph.db`. You don't need to re-index per IDE.
+- [src/cli.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/cli.ts)
+- [src/serve.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/serve.ts)

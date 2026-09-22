@@ -1,84 +1,27 @@
-# EngramBench v0.1
+# Engram benchmark harnesses
 
-> A reproducible benchmark for structural code memory. Four setups, ten tasks, one number per cell.
+The repository contains several evaluation paths. Their outputs must be interpreted according to what the code actually measures.
 
-## Why this exists
+| Script | Purpose and evidence boundary |
+| --- | --- |
+| `npm run bench` | `bench/runner.ts` reads fixture `expected_tokens` and simulates comparisons; it does not run four live agents |
+| `npm run bench:recall` | Runs the declared recall-coverage harness |
+| `npm run stress` | Runs the declared stress-test harness |
+| `npm run demo` | Runs the separate rg/interception demonstration |
 
-Every tool in the "AI coding memory" space makes a savings claim. None of them
-publish a benchmark you can run yourself. EngramBench is engram's down-payment
-on that: a harness, a task set, a scoring rule, and a reference report.
+The main runner parses a restricted YAML fixture shape, derives baseline and Engram token figures from the fixtures, and writes a dated JSON report. A simulated savings percentage is not a measured reduction in customer bills or an accuracy result. Historical result files remain historical artifacts.
 
-You should not trust engram's "82% token reduction" claim just because engram
-says so. You should run this benchmark against your own codebase — or against
-the reference project — and see the number for yourself. If it holds, cite it.
-If it doesn't, file an issue.
+## Reproduce responsibly
 
-## What it measures
+Read the selected harness, fixture set, and output paths first. Record the repository commit, runtime, graph state, task inputs, and whether any values are simulated. Execute in a disposable checkout because harnesses can write reports or local graph state. No harness was run for this documentation review.
 
-For each benchmark task, we measure **total prompt tokens consumed** to reach
-a correct answer, under four setups:
+For a live comparison, collect paired tasks with equivalent inputs and tools, retain provider usage records, score task correctness independently, and report failures as well as successes. Do not compare fixture estimates with live invoice totals.
 
-| Setup | Description |
-|-------|-------------|
-| **baseline** | Bare Claude Code, no memory tool. The agent uses Read/Grep/Glob directly. |
-| **cursor-memory** | Simulates Cursor's prose memory approach. (v0.2 will replace this with a live Cursor run.) |
-| **anthropic-memorymd** | Uses Anthropic's native MEMORY.md (prose block). |
-| **engram** | engram v0.3.1+ with PreToolUse hooks enabled. |
+## Evidence and verification
 
-Lower is better. The primary metric is **relative reduction vs. baseline**.
-Secondary metrics: Read hit rate, false-injection rate, time-to-answer.
+This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
 
-## The tasks
-
-v0.1 ships 10 structural tasks — the kind of question an agent actually asks
-before editing code. Each task has a canonical correct answer and a scoring
-rubric. See `tasks/` for the full definitions.
-
-1. **task-01-find-caller** — "What calls `validateToken`?" Graph traversal.
-2. **task-02-parent-class** — "What does `SessionStore` extend?" Inheritance edge lookup.
-3. **task-03-file-for-class** — "Which file defines `AuthService`?" Label → file resolution.
-4. **task-04-import-graph** — "What modules import `src/auth.ts`?" Incoming import edges.
-5. **task-05-exported-api** — "What does `src/cli.ts` export?" File → export nodes.
-6. **task-06-landmine-check** — "Have we fixed a bug in `src/query.ts` recently?" Mistake node lookup.
-7. **task-07-architecture-sketch** — "Summarize the architecture of this repo in ≤200 tokens." Top-connected-nodes query.
-8. **task-08-refactor-scope** — "If I rename `queryGraph`, what files break?" 2-hop reverse dependency.
-9. **task-09-hot-files** — "What files change most often?" Git log integration.
-10. **task-10-cross-file-flow** — "Trace the path from `handleRead` to the graph query." Path-finding.
-
-Each task is defined as a YAML file under `tasks/` with:
-
-```yaml
-id: task-01-find-caller
-description: ...
-reference_answer: ...
-scoring_rubric: ...
-expected_tokens:
-  baseline: 4500
-  engram: 800
-```
-
-## Running the benchmark
-
-```bash
-# Reference project: engram itself (self-host)
-cd bench
-./run.sh --setup engram --task all
-
-# Custom project
-./run.sh --project ~/my-repo --setup engram --task task-01-find-caller
-```
-
-**STATUS:** v0.1 is scaffolding only. The runner (`run.sh`) is a stub; the
-reference answers come from manual Claude Code runs I've done on engram's own
-codebase. v0.2 will automate the runner, add a cursor-memory setup, and ship
-the first public leaderboard.
-
-## The ground rule
-
-Every number in this benchmark must be **reproducible by a stranger on a
-different machine**. If you can't run it and get within 10% of the published
-number, it's a bug — file it.
-
-## License
-
-Apache 2.0, same as engram.
+- [package.json](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/package.json)
+- [bench/runner.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/bench/runner.ts)
+- [bench/recall-coverage.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/bench/recall-coverage.ts)
+- [bench/stress-test.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/bench/stress-test.ts)

@@ -1,111 +1,32 @@
-# Cursor — MCP mode
+# Engram with Cursor
 
-engram supports **two** Cursor integration paths. Most users want both.
-
-| Mode | Trigger | What you get |
-|------|---------|--------------|
-| **MDC file** (passive) | Every Cursor chat session | Static `.cursor/rules/engram-context.mdc` with architecture + landmines + patterns |
-| **MCP server** (active) | When the agent chooses | Live graph queries via `query_graph`, `god_nodes`, `shortest_path`, etc. |
-
-This page covers the MCP path. For the MDC generator see
-[cursor.md](./cursor.md) or run `engram gen-mdc --watch`.
-
-## Why use both
-
-The MDC file is a snapshot — always in context, always fresh-ish (if you
-run `--watch`), but limited to ~200 bullets. The MCP server is on-demand
-— the agent can issue arbitrary structural queries when a question
-requires more than the snapshot contains.
-
-Think of it as: **MDC = your project's short README, MCP = its search
-interface.**
-
-## Prerequisites
+The stable boundary in this repository is an executable and an absolute project path. Client-specific UI labels and configuration formats were not tested in this review.
 
 ```bash
-npm install -g engramx
-cd ~/your-project
-engram init .
+engram init /absolute/path/to/project --no-hook
+engram query "a known symbol" -p /absolute/path/to/project --budget 2000
 ```
 
-## Configure Cursor
+## MCP process settings
 
-**1. Open Cursor settings**
+| Setting | Value |
+| --- | --- |
+| Command | Absolute path to `engram-serve`, or `node` |
+| Arguments | Project path; with Node, prepend the absolute path to `dist/serve.js` |
+| Transport | Stdio |
+| Working directory | The project being indexed |
 
-`Cursor Settings` → `MCP` → `+ Add new MCP server`
+The server declares `query_graph`, `god_nodes`, `graph_stats`, `shortest_path`, `benchmark`, and `list_mistakes`. Register the process using your client's documented MCP configuration. Do not paste a shell command into a configuration field that expects an executable and array.
 
-**2. Register engram**
+Alternatively, `engram gen-mdc -p /absolute/path/to/project` writes Cursor-oriented rules; `--watch` keeps that generator running. Review generated changes before use.
 
-```json
-{
-  "mcpServers": {
-    "engram": {
-      "command": "engram-serve",
-      "args": []
-    }
-  }
-}
-```
+## Diagnose a missing result
 
-Paste this into the MCP config editor and save. Cursor will restart the
-MCP connection automatically.
+Check that the editor can locate the executable, that the project path matches the initialized graph, and that `engram stats -p /absolute/path/to/project` reports the expected project. A successful CLI query does not verify the client's MCP handshake. Inspect both separately.
 
-**3. Verify**
+## Evidence and verification
 
-Open a chat and ask:
+This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
 
-> "Use engram to list the god nodes in this project."
-
-Cursor should show a tool-use indicator and return the top-connected
-entities from your graph.
-
-## Available tools
-
-| Tool | Example agent query |
-|------|---------------------|
-| `query_graph` | *"Use engram to find everything related to auth."* |
-| `god_nodes` | *"What are the core entities in this codebase?"* |
-| `graph_stats` | *"How big is the knowledge graph?"* |
-| `shortest_path` | *"Trace the call path from handleRead to queryGraph."* |
-| `benchmark` | *"Measure engram's token savings on this repo."* |
-| `list_mistakes` | *"What bugs have been fixed in auth recently?"* |
-
-## Combining with .cursorrules / MDC
-
-The MDC file loads passively. When Cursor needs more — say, the user asks
-about a file that isn't in the top-10 god nodes — the agent can call
-`query_graph` through MCP to pull relevant structural context on demand.
-
-This is the Context Spine pattern: cheap passive context + targeted
-live queries. engram's 88.1% measured token savings comes from letting
-the agent decide when to spend tokens vs when to rely on the snapshot.
-
-## Troubleshooting
-
-**Cursor shows "MCP server failed to start"**
-
-Run from the same terminal Cursor was launched from:
-
-```bash
-engram-serve
-```
-
-If it prints `{"jsonrpc":"2.0",...}` or waits silently, the server works.
-Common fixes:
-- Install globally: `npm install -g engramx`
-- On macOS GUI launch, set the full path: `"command": "/opt/homebrew/bin/engram-serve"`
-
-**Tools appear but calls error with "no graph"**
-
-Cursor runs MCP servers with `cwd = HOME`, not the project directory.
-Pass `-p` explicitly or `cd` inside the server wrapper:
-
-```json
-{
-  "command": "sh",
-  "args": ["-c", "cd \"$PWD\" && engram-serve"]
-}
-```
-
-Or, simpler: use the HTTP API (port 7337) and tell Cursor your project
-root at query time.
+- [src/cli.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/cli.ts)
+- [src/serve.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/src/serve.ts)
