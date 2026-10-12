@@ -6,7 +6,7 @@ This adapter retrieves Engram context for a Continue query. It is source for an 
 
 The provider uses the first workspace root and executes `engram query QUESTION -p ROOT --budget 2000` with `execFile`, a five-second timeout, and separate arguments. Empty queries return an empty context list. Ensure the CLI is built, available on the editor's PATH, and that the workspace has been indexed.
 
-The fallback HTTP request uses loopback port 7337 and a three-second timeout. It currently supplies no authentication header, while Engram's HTTP `/query` route requires authentication. A failed fallback must not be interpreted as proof that no context exists.
+The fallback HTTP request uses loopback port 7337 and a three-second timeout. It resolves the server token the same way the server documents for external callers (the `ENGRAM_API_TOKEN` environment variable, then `~/.engram/http-server.token`) and sends it as `Authorization: Bearer`. Engram's HTTP `/query` route is fail-closed, so without a resolvable token the request receives 401 and the provider returns no items. A failed fallback must not be interpreted as proof that no context exists.
 
 ## Integration checklist
 
@@ -19,6 +19,6 @@ The current Continue API and client loading procedure were not executed or exter
 
 ## Evidence and verification
 
-This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
+This guide describes the source below. The HTTP fallback's auth path is executed against a fixture server in `tests/adapters/continue-http-auth.test.ts`; external Continue client compatibility remains unverified.
 
-- [adapters/continue/src/index.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/adapters/continue/src/index.ts)
+- [adapters/continue/src/index.ts](../../adapters/continue/src/index.ts) (earlier inspected revision: [pinned blob](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/adapters/continue/src/index.ts))
