@@ -476,7 +476,7 @@ These paths were mapped but their contents were not acquired in this research pa
 
 ## Additional integration review
 
-The active installation, integration, editor, provider, benchmark, demonstration and comparison guides were rewritten. The Continue adapter's HTTP fallback omits authentication; the VS Code dashboard command invokes `dashboard` while the engine declares `ui`. The benchmark runner derives comparisons from fixture `expected_tokens`. These are source findings, not executed failures. See the rewritten guides for pinned implementation citations. Historical media scene copy remains explicitly deferred pending a coordinated asset revision.
+The active installation, integration, editor, provider, benchmark, demonstration and comparison guides were rewritten. The Continue adapter's HTTP fallback omitted authentication (since corrected; see `tests/adapters/continue-http-auth.test.ts`). The original review also reported the VS Code `dashboard` invocation as incompatible with an engine that declares `ui`; re-execution shows the engine declares both `dashboard|hud` and `ui`, so that finding was an inspection error (pinned by `tests/extensions/vscode-cli-contract.test.ts`). The benchmark runner derives comparisons from fixture `expected_tokens`. These were source findings, not executed failures. See the rewritten guides for pinned implementation citations. Historical media scene copy remains explicitly deferred pending a coordinated asset revision.
 
 ## Expanded HTML review
 
@@ -493,7 +493,7 @@ The acquisition now includes 332 of 332 eligible text files. Six HTML documentat
 
 Additional knowledge retained: skills indexing, generated-instruction targets, MEMORY.md synchronization, Git hook behavior/limitations, troubleshooting, scoped uninstall, supported library exports, hook coexistence, current lifecycle events, read gates and guard defaults. Old `getStore`/`getFileContext` package-root imports, `gen --memory-md`, fixed savings figures and universal no-network claims were not carried forward.
 
-The Git-hook template calls `init --quiet`, which is absent from the inspected parser, and its fallback global package path uses `engram` rather than `engramx`. The mistake-guard implementation defaults to permissive, contrary to stale comments; `0` disables it and `2` selects strict mode. These findings are static, not executed failures.
+The Git-hook template called `init --quiet`, which was absent from the inspected parser, and its fallback global package path used `engram` rather than `engramx`; both were corrected and are regression-tested in `tests/hooks.test.ts`. The mistake-guard implementation defaults to permissive, contrary to stale comments; `0` disables it and `2` selects strict mode. These findings were static, not executed failures.
 
 ### Newly captured HTML evidence
 

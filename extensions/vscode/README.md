@@ -9,7 +9,7 @@ This extension is a thin terminal wrapper around the Engram CLI. Its manifest de
 | Generate agent context | `engram gen -p "WORKSPACE"` |
 | Cost report | `engram cost -p "WORKSPACE"` |
 | Doctor | `engram doctor` |
-| Dashboard | `engram dashboard "WORKSPACE"` — incompatible with the inspected CLI, which declares `ui` |
+| Dashboard | `engram dashboard "WORKSPACE"` (the CLI declares `dashboard`, alias `hud`, for the terminal HUD; the separate `engram ui` command opens the web dashboard) |
 
 The first workspace folder is used. Initialization does not pass `--no-hook`, so it inherits the CLI's default hook installation. The extension sends command text to a terminal; treat `engram.cliPath` and workspace names as trusted shell input.
 
@@ -17,11 +17,11 @@ The first workspace folder is used. Initialization does not pass `--no-hook`, so
 
 `engram.cliPath` defaults to `engram`. `engram.regenerateOnSave` defaults to `false`; enabling it sends `gen-mdc` on document saves. Settings are read during activation, so reload after changing them if needed.
 
-The extension's `compile` script runs `tsc -p ./` and its entrypoint is `out/extension.js`. Build and test it in an extension development host before installing. The dashboard mismatch requires a code fix; use the main CLI's `engram ui -p /absolute/path/to/project` directly in the meantime.
+The extension's `compile` script runs `tsc -p ./` and its entrypoint is `out/extension.js`. Build and test it in an extension development host before installing. An earlier revision of this guide reported the dashboard invocation as incompatible with a CLI that declares only `ui`; executing the built CLI shows `dashboard` is declared (`node dist/cli.js dashboard --help` exits 0), and `tests/extensions/vscode-cli-contract.test.ts` now pins every extension invocation to a declared CLI command.
 
 ## Evidence and verification
 
-This guide describes the pinned source below. Commands and client integrations were inspected, not executed; external client compatibility remains unverified.
+This guide describes the pinned source below. The dashboard invocation was executed against the built CLI; other commands and client integrations were inspected, not executed, and external client compatibility remains unverified.
 
 - [extensions/vscode/package.json](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/extensions/vscode/package.json)
 - [extensions/vscode/src/extension.ts](https://github.com/NickCirv/engram/blob/9fa2a4b74ca8e66560d74d1255c16c43157d32bd/extensions/vscode/src/extension.ts)
