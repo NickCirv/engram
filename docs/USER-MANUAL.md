@@ -53,7 +53,7 @@ Read the [Sentinel guide](SENTINEL.md) for interception, guard modes, coexistenc
 
 `engram hooks install PROJECT`, `hooks status PROJECT`, and `hooks uninstall PROJECT` manage marked sections in post-commit and post-checkout hooks. They are separate from agent hooks. The source appends to existing hooks and removes its marked sections on uninstall.
 
-**Automatic rebuilding needs a code correction in this revision.** The generated hook invokes `init . --quiet`, but the inspected `init` parser does not declare `--quiet`. The fallback executable path also refers to a global `/engram/` directory although the package is named `engramx`. Hook discovery assumes `.git/hooks` and does not establish linked-worktree or custom `core.hooksPath` support. Prefer a reviewed manual refresh or watcher until these paths are corrected and tested. Do not install the hooks expecting guaranteed freshness.
+**Automatic rebuilding was corrected in this revision.** The generated hook now invokes `init .` with output fully silenced (the earlier `--quiet` flag was not declared by the `init` parser and aborted the re-index), and the global fallback path now targets the `engramx` package directory. Both regressions are pinned by `tests/hooks.test.ts`. Hook discovery still assumes `.git/hooks` and does not establish linked-worktree or custom `core.hooksPath` support; in those layouts prefer a manual refresh or the watcher, and verify installation with `engram hooks status`.
 
 ## Verify and troubleshoot
 

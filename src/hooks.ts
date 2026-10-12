@@ -14,11 +14,11 @@ ${HOOK_START}
 # Auto-rebuild engram graph after commit (AST only, no LLM needed)
 ENGRAM_BIN=$(command -v engram 2>/dev/null)
 if [ -z "$ENGRAM_BIN" ]; then
-  ENGRAM_BIN=$(npm root -g 2>/dev/null)/engram/dist/cli.js
+  ENGRAM_BIN=$(npm root -g 2>/dev/null)/engramx/dist/cli.js
 fi
 
 if [ -d ".engram" ] && [ -f "$ENGRAM_BIN" ]; then
-  node "$ENGRAM_BIN" init . --quiet 2>/dev/null &
+  node "$ENGRAM_BIN" init . >/dev/null 2>&1 &
 fi
 ${HOOK_END}
 `;
@@ -36,12 +36,12 @@ fi
 
 ENGRAM_BIN=$(command -v engram 2>/dev/null)
 if [ -z "$ENGRAM_BIN" ]; then
-  ENGRAM_BIN=$(npm root -g 2>/dev/null)/engram/dist/cli.js
+  ENGRAM_BIN=$(npm root -g 2>/dev/null)/engramx/dist/cli.js
 fi
 
 if [ -d ".engram" ] && [ -f "$ENGRAM_BIN" ]; then
   echo "[engram] Branch switched — rebuilding graph..."
-  node "$ENGRAM_BIN" init . --quiet 2>/dev/null &
+  node "$ENGRAM_BIN" init . >/dev/null 2>&1 &
 fi
 ${HOOK_END}
 `;
