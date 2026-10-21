@@ -6,40 +6,84 @@ A local structural code graph and context toolkit for AI coding agents. Engram i
 
 Use it to find relevant code before reading full files, inspect relationships and carry recorded mistakes into a later session. Read the source returned by a query before making a behavioral claim: graph retrieval is an aid to investigation.
 
-
-
-
-
-
 <a id="try-in-30-seconds-no-install"></a>
-
 <a id="install-in-30-seconds"></a>
-
 <a id="1-cli-recommended-starting-point--works-in-every-supported-ide"></a>
-
 <a id="install"></a>
-
 <a id="install--configuration"></a>
 
-## Quickstart
+## Try it in 30 seconds, no install
 
-The inspected package is `engramx` 4.5.0 and requires **Node >=20**. This source-build example is **source-inspected, not executed**; it does not assume a currently published package or extension version.
+`engramx` is published on npm, so `npx` runs it without installing anything globally and
+without cloning this repository. Requires **Node >=20**.
+
+```bash
+export ENGRAM_NO_UPDATE_CHECK=1
+npx --yes engramx@4.5.0 init . --no-hook
+npx --yes engramx@4.5.0 query "auth" --budget 2000
+npx --yes engramx@4.5.0 stats
+```
+
+Run that inside a git repository you can inspect. `init` writes the graph to `.engram/graph.db`
+and prints what it extracted. The `--no-hook` flag matters: a default `init` also installs a
+Sentinel hook into your agent configuration, and you should see the graph before you wire
+anything into your editor.
+
+Executed against a two-file demo repository on 2026-10-21 with `engramx@4.5.0`, `query "auth"`
+printed:
+
+```
+Found 5 nodes (~99 tokens)
+
+NODE authenticate() [function] src=src/auth.js L1
+NODE auth.js [file] src=src/auth.js L1
+NODE verifyToken() [function] src=src/auth.js L5
+NODE server.js [file] src=src/server.js L1
+NODE handle() [function] src=src/server.js L2
+EDGE server.js --calls--> authenticate() [INFERRED 0.7]
+EDGE server.js --imports--> auth.js
+EDGE server.js --contains--> handle()
+EDGE server.js --exports--> handle()
+```
+
+Those counts are from that demo repository, not a benchmark. Yours will differ.
+
+**Matching is lexical over entity names and paths, not semantic.** On the same demo,
+`query "auth"` and `query "authenticate"` both returned 5 nodes while `query "authentication"`
+returned `No matching nodes found.` If a query comes back empty, try a shorter stem or a symbol
+name that appears in the code rather than a concept word.
+
+`stats` reports the graph size and is candid about when retrieval is not worth it. On a two-file
+repository it printed `vs full: 1.1x LARGER, engram passes through`, because there is nothing to
+summarise. The tool is built for codebases where reading the relevant files costs more than
+reading the graph.
+
+For a terminal recording of the mistake-capture flow, see
+[the v4 cast on asciinema](https://asciinema.org/a/GjjvPXVyArnivAog).
+
+### Install it properly
+
+```bash
+npm install -g engramx@4.5.0
+engram --version
+```
+
+### Build from source instead
+
+Use this if you want to read the code you are running, or work from a branch.
 
 ```bash
 git clone https://github.com/NickCirv/engram.git
 cd engram
-git checkout 9fa2a4b74ca8e66560d74d1255c16c43157d32bd
 npm install --ignore-scripts
 npm run build
-export ENGRAM_NO_UPDATE_CHECK=1
-node dist/cli.js init ../your-project --no-hook
-node dist/cli.js query "authentication" --project ../your-project --budget 2000
-node dist/cli.js stats --project ../your-project
+ENGRAM_NO_UPDATE_CHECK=1 node dist/cli.js --version
 ```
 
-Replace `../your-project` with a codebase you can inspect. Indexing writes the project's `.engram/` graph. The `--no-hook` flag matters: the default CLI `init` also installs a Sentinel hook. Start with the graph, examine the output, then decide which integration to enable. The build includes grammar bundling; inspect package scripts and dependencies before installation.
-
-The query returns matching graph entities and an estimated token count, or a no-matching-nodes message. Counts depend on the indexed project; no benchmark output is fabricated here.
+Executed on 2026-10-21 at commit `df445d3`, the current `main`: the build bundles 6 tree-sitter
+grammars into `dist/grammars/` and `node dist/cli.js --version` reports `4.5.0`. Inspect the
+package scripts before installing; `--ignore-scripts` is deliberate above, and the build step is
+what produces `dist/`, which is not committed.
 
 
 
